@@ -1,0 +1,7 @@
+{
+  "name": "Vietnam Travel Companion",
+  "description": "Tu asistente esencial para viajar a Vietnam: conversor de divisas VND offline, traductor rápido de vietnamita con audio, mapas descargables con puntos de interés y planificador de itinerario personalizable.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
