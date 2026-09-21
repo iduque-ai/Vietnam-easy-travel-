@@ -10,7 +10,8 @@ import {
   CalendarDays,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import { ExchangeRatesData, ActiveTabType } from '../types';
 
@@ -58,6 +59,13 @@ const NAV_ITEMS: {
     shortLabel: 'Itinerario',
     description: 'Planes detallados por día, horarios y recomendaciones',
     icon: CalendarDays,
+  },
+  {
+    id: 'freetour',
+    label: 'Free Tour con IA',
+    shortLabel: 'Free Tour IA',
+    description: 'Tu audioguía turístico con Gemini en cualquier lugar',
+    icon: Sparkles,
   },
 ];
 

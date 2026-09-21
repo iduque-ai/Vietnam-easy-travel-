@@ -1,4 +1,4 @@
-export type ActiveTabType = 'converter' | 'translator' | 'maps' | 'itinerary';
+export type ActiveTabType = 'converter' | 'translator' | 'maps' | 'itinerary' | 'freetour';
 
 export type CurrencyCode = 'EUR' | 'USD' | 'GBP' | 'AUD' | 'CAD' | 'JPY' | 'CHF' | 'MXN' | 'SGD' | 'THB';
 
@@ -39,7 +39,7 @@ export interface PointOfInterest {
   regionId: string;
   nameVi: string;
   nameEs: string;
-  category: 'Monumento' | 'Gastronomía' | 'Naturaleza' | 'Mercado' | 'Cultura' | 'Transporte';
+  category: 'Monumento' | 'Gastronomía' | 'Naturaleza' | 'Mercado' | 'Cultura' | 'Transporte' | 'Fotografía';
   lat: number;
   lng: number;
   city: string;
@@ -52,6 +52,9 @@ export interface PointOfInterest {
   scamAlert?: string;
   howToGet: string;
   grabFriendly: boolean;
+  isIconic?: boolean;
+  isHiddenGem?: boolean;
+  badgeLabel?: string;
 }
 
 export interface RegionMapPack {
@@ -112,4 +115,47 @@ export interface AllergyCardData {
   createdAt: number;
   personName?: string;
 }
+
+export interface FreeTourStop {
+  number: number;
+  title: string;
+  whatToLookAt: string;
+  story: string;
+  insiderTip: string;
+}
+
+export interface FreeTourData {
+  placeName: string;
+  cityName: string;
+  vietnameseName?: string;
+  tagline: string;
+  audioGuideScript: string;
+  durationMinutes: number;
+  stops: FreeTourStop[];
+  photoSpot: {
+    location: string;
+    bestLight: string;
+    instruction: string;
+  };
+  culturalEtiquette: {
+    dressCode: string;
+    whatNotToDo: string;
+    scamWarning?: string;
+  };
+  streetFoodReward: {
+    dishNameVi: string;
+    dishNameEs: string;
+    whereToFind: string;
+    priceEstimate: string;
+  };
+  suggestedQuestions: string[];
+}
+
+export interface TourChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: number;
+}
+
 

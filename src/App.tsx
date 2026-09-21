@@ -9,7 +9,8 @@ import { CurrencyConverter } from './components/CurrencyConverter';
 import { VietnameseTranslator } from './components/VietnameseTranslator';
 import { DownloadableMaps } from './components/DownloadableMaps';
 import { ItineraryPlanner } from './components/ItineraryPlanner';
-import { ExchangeRatesData, ActiveTabType } from './types';
+import { FreeTourGuide } from './components/FreeTourGuide';
+import { ExchangeRatesData, ActiveTabType, PointOfInterest } from './types';
 import { getSavedRates, saveRates, isRatesStale } from './utils/storage';
 import { Compass, Wifi, WifiOff, Clock, ShieldCheck, HelpCircle } from 'lucide-react';
 
@@ -20,6 +21,21 @@ export default function App() {
   const [ratesData, setRatesData] = useState<ExchangeRatesData>(getSavedRates);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [offlineToast, setOfflineToast] = useState<string | null>(null);
+  const [isMapsQuotaExceeded, setIsMapsQuotaExceeded] = useState<boolean>(false);
+  const [freeTourTargetPoi, setFreeTourTargetPoi] = useState<PointOfInterest | null>(null);
+
+  const handleStartFreeTour = useCallback((poi?: PointOfInterest | null) => {
+    if (poi) {
+      setFreeTourTargetPoi(poi);
+    }
+    setActiveTab('freetour');
+  }, []);
+
+  useEffect(() => {
+    const handleQuota = () => setIsMapsQuotaExceeded(true);
+    window.addEventListener('gmp-quota-exceeded', handleQuota);
+    return () => window.removeEventListener('gmp-quota-exceeded', handleQuota);
+  }, []);
 
   // Check URL parameters/hash on load (e.g. #conversation or ?mode=conversation)
   useEffect(() => {
@@ -129,6 +145,24 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-stone-100 text-stone-800 flex flex-col font-sans overflow-x-hidden w-full max-w-full">
+      {/* Quota Exceeded Sticky Banner */}
+      {isMapsQuotaExceeded && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
+          <span>
+            Google Maps Platform quota reached. If you are the app owner, visit{' '}
+            <a
+              href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-semibold text-amber-950 hover:text-amber-800"
+            >
+              maps developer site
+            </a>{' '}
+            for instructions to update your account.
+          </span>
+        </div>
+      )}
+
       {/* Top Header with Navigation & Rates Ticker */}
       <Header
         activeTab={activeTab}
@@ -172,6 +206,7 @@ export default function App() {
             ratesData={ratesData}
             isOnline={isOnline}
             onNavigateToItinerary={() => setActiveTab('itinerary')}
+            onStartFreeTour={handleStartFreeTour}
           />
         )}
 
@@ -180,6 +215,15 @@ export default function App() {
             ratesData={ratesData}
             isOnline={isOnline}
             onNavigateToMaps={() => setActiveTab('maps')}
+            onStartFreeTour={handleStartFreeTour}
+          />
+        )}
+
+        {activeTab === 'freetour' && (
+          <FreeTourGuide
+            initialPoi={freeTourTargetPoi}
+            onClearInitialPoi={() => setFreeTourTargetPoi(null)}
+            isOnline={isOnline}
           />
         )}
       </main>

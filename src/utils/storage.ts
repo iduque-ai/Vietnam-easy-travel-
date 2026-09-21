@@ -1,4 +1,4 @@
-import { ExchangeRatesData, ItineraryPlan, ItineraryStop, AllergyCardData } from '../types';
+import { ExchangeRatesData, ItineraryPlan, ItineraryStop, AllergyCardData, FreeTourData } from '../types';
 import { DEFAULT_ITINERARIES } from '../data/defaultItineraries';
 import { POINTS_OF_INTEREST } from '../data/pois';
 
@@ -386,4 +386,55 @@ export function deleteSavedAllergyCard(cardId: string): AllergyCardData[] {
   saveAllergyCards(updated);
   return updated;
 }
+
+const SAVED_TOURS_KEY = 'vietnam_travel_saved_free_tours_v1';
+
+export function getSavedFreeTours(): FreeTourData[] {
+  try {
+    const raw = localStorage.getItem(SAVED_TOURS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Failed reading saved free tours from localStorage:', e);
+  }
+  return [];
+}
+
+export function saveFreeTour(tour: FreeTourData): FreeTourData[] {
+  const current = getSavedFreeTours();
+  const existingIdx = current.findIndex(
+    (t) => t.placeName.toLowerCase() === tour.placeName.toLowerCase()
+  );
+  let updated: FreeTourData[];
+  if (existingIdx >= 0) {
+    updated = [...current];
+    updated[existingIdx] = tour;
+  } else {
+    updated = [tour, ...current];
+  }
+  try {
+    localStorage.setItem(SAVED_TOURS_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed saving free tour to localStorage:', e);
+  }
+  return updated;
+}
+
+export function deleteSavedFreeTour(placeName: string): FreeTourData[] {
+  const current = getSavedFreeTours();
+  const updated = current.filter(
+    (t) => t.placeName.toLowerCase() !== placeName.toLowerCase()
+  );
+  try {
+    localStorage.setItem(SAVED_TOURS_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed deleting free tour from localStorage:', e);
+  }
+  return updated;
+}
+
 
