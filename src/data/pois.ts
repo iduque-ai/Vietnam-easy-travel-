@@ -11,7 +11,7 @@ export const REGION_PACKS: RegionMapPack[] = [
     centerLat: 21.0285,
     centerLng: 105.8542,
     zoom: 13,
-    poiIds: ['poi-hn-1', 'poi-hn-2', 'poi-hn-3', 'poi-hn-4', 'poi-hn-5', 'poi-hn-6', 'poi-hn-7', 'poi-hl-1', 'poi-nb-1', 'poi-nb-2', 'poi-nb-3', 'poi-sp-1'],
+    poiIds: ['poi-hn-1', 'poi-hn-2', 'poi-hn-3', 'poi-hn-4', 'poi-hn-5', 'poi-hl-1', 'poi-nb-1', 'poi-sp-1'],
     highlights: ['Lago Hoàn Kiếm de noche', 'Calle del Tren (Phố Đường Tàu)', 'Crucero en Bahía de Ha Long', 'Barca en Trang An (Ninh Binh)']
   },
   {
@@ -24,7 +24,7 @@ export const REGION_PACKS: RegionMapPack[] = [
     centerLat: 15.8801,
     centerLng: 108.3380,
     zoom: 14,
-    poiIds: ['poi-ha-1', 'poi-ha-2', 'poi-ha-3', 'poi-dn-1', 'poi-dn-2', 'poi-dn-3', 'poi-hue-1', 'poi-hue-2', 'poi-hue-3'],
+    poiIds: ['poi-ha-1', 'poi-ha-2', 'poi-dn-1', 'poi-dn-2', 'poi-dn-3', 'poi-hue-1', 'poi-hue-2'],
     highlights: ['Paseo nocturno en barca con farolillo en Hoi An', 'Espectáculo de fuego en Puente Dragón (Sáb-Dom 21:00)', 'Tumbas imperiales de Hue']
   },
   {
@@ -50,8 +50,8 @@ export const REGION_PACKS: RegionMapPack[] = [
     centerLat: 17.5852,
     centerLng: 106.2829,
     zoom: 10,
-    poiIds: ['poi-pn-1', 'poi-pq-1'],
-    highlights: ['Cueva Paraíso (Thiên Đường)', 'Atardecer en Sunset Sanato Phú Quốc', 'Playa de Bãi Sao']
+    poiIds: ['poi-pn-1', 'poi-pq-1', 'poi-dl-1'],
+    highlights: ['Cueva Paraíso (Thiên Đường)', 'Atardecer en Sunset Sanato Phú Quốc', 'Cascada Datanla en Đà Lạt']
   }
 ];
 
@@ -74,9 +74,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     travelerTips: 'Los fines de semana a partir de las 19:00 toda la carretera alrededor del lago se convierte en zona peatonal llena de músicos callejeros y juegos populares tradicionales.',
     scamAlert: 'Cuidado con los limpiabotas que se acercan insistiendo en pegar o limpiar tus zapatillas sin que lo pidas y luego exigen 300.000₫. Di un firme "Không" y aléjate.',
     howToGet: 'Ubicado en pleno centro de Hanoi, accesible a pie desde cualquier punto del Old Quarter.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Imprescindible'
+    grabFriendly: true
   },
   {
     id: 'poi-hn-2',
@@ -95,16 +93,14 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     travelerTips: 'Para cruzar la calle llena de motos, camina despacio y a paso constante sin frenar de golpe; las motos te esquivarán intuitivamente.',
     scamAlert: 'Vendedoras con balancines de frutas de bambú te ofrecen colocarte el balancín en el hombro para hacerte una foto y luego te exigen comprar piñas a precios desorbitados.',
     howToGet: 'Centro neurálgico del turismo en Hanoi.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Casco Histórico'
+    grabFriendly: true
   },
   {
     id: 'poi-hn-3',
     regionId: 'reg-hanoi-north',
     nameVi: 'Phố Đường Tàu Hà Nội',
     nameEs: 'Calle del Tren de Hanoi (Train Street)',
-    category: 'Fotografía',
+    category: 'Fotografía' as any,
     city: 'Hà Nội',
     lat: 21.0289,
     lng: 105.8427,
@@ -116,9 +112,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     travelerTips: 'A veces la policía cierra el acceso por seguridad; si contactas con el dueño de una cafetería local (ej. Railway Cafe), saldrán a buscarte para acompañarte al interior.',
     scamAlert: 'Respeta estrictamente las señales del personal de la cafetería cuando se acerque el tren y no intentes selfies temerarios en la vía.',
     howToGet: 'Entre las calles Trần Phú y Phùng Hưng en Ba Đình/Hoàn Kiếm.',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Joya Fotográfica'
+    grabFriendly: true
   },
   {
     id: 'poi-hn-4',
@@ -136,9 +130,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'Construido en el año 1070 y dedicado a Confucio, albergó la primera universidad de Vietnam. Sus patios tranquilos, el Pozo de la Claridad Celestial y las tortugas de piedra con estelas de doctores son una maravilla zen.',
     travelerTips: 'Es el reverso que aparece ilustrado en el billete verde de 100.000 ₫. Puedes sacarte una foto comparando el billete con el pabellón real Khuê Văn Các.',
     howToGet: 'A 10 minutos en Grab desde el Lago Hoan Kiem (aprox. 30.000₫ en GrabCar).',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Historia Milenaria'
+    grabFriendly: true
   },
   {
     id: 'poi-hn-5',
@@ -157,49 +149,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     travelerTips: 'Código de vestimenta muy estricto: hombros y rodillas cubiertos sin excepción. No se permiten cámaras ni teléfonos en el interior de la cámara.',
     scamAlert: 'Cuidado con falsos guías en el exterior que dicen que el mausoleo está cerrado para llevarte a tiendas de recuerdos.',
     howToGet: 'Plaza Ba Đình, accesible en Grab o taxi con taxímetro.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Monumento Nacional'
-  },
-  {
-    id: 'poi-hn-6',
-    regionId: 'reg-hanoi-north',
-    nameVi: 'Cafe Giảng (Cà Phê Trứng Gốc 1946)',
-    nameEs: 'Cafe Giảng: Cuna Original del Café con Huevo',
-    category: 'Gastronomía',
-    city: 'Hà Nội',
-    lat: 21.0337,
-    lng: 105.8532,
-    rating: 4.8,
-    ticketVnd: 35000,
-    openingHours: '07:00 - 22:30',
-    bestTime: 'Mañana temprano para disfrutar en el patio interior de la planta alta',
-    description: 'El lugar donde el camarero Nguyễn Văn Giảng inventó el famoso Cà phê trứng en 1946 batiendo yema de huevo con leche condensada como sustituto de la leche fresca durante la escasez de la guerra.',
-    travelerTips: 'Pídelo caliente ("nóng"): la taza se sirve dentro de un cuenco con agua caliente para mantener el batido cremoso a la temperatura perfecta.',
-    howToGet: 'Callejón estrecho en 39 Nguyễn Hữu Huân, Hoàn Kiếm.',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Joya Gastronómica'
-  },
-  {
-    id: 'poi-hn-7',
-    regionId: 'reg-hanoi-north',
-    nameVi: 'Chùa Trấn Quốc (Hồ Tây)',
-    nameEs: 'Pagoda Trấn Quốc y Lago del Oeste',
-    category: 'Cultura',
-    city: 'Hà Nội',
-    lat: 21.0478,
-    lng: 105.8368,
-    rating: 4.7,
-    ticketVnd: 0,
-    openingHours: '08:00 - 16:30',
-    bestTime: 'Atardecer (17:00) con el sol ocultándose tras las aguas del lago',
-    description: 'La pagoda budista más antigua de Hanoi, con casi 1.500 años de historia, situada en un pequeño islote conectado por una calzada. Su estupa roja de 11 niveles es un icono de paz espiritual.',
-    travelerTips: 'El árbol Bodhi que crece en el patio fue un regalo del presidente indio en 1959, esqueje del árbol sagrado donde Buda alcanzó la iluminación.',
-    howToGet: 'Paseo Thanh Niên entre el Lago Trúc Bạch y el Lago Tây (10 min en Grab desde el Old Quarter).',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Atardecer Zen'
+    grabFriendly: true
   },
 
   // --- BAHÍA DE HA LONG & NORTE ---
@@ -220,9 +170,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     travelerTips: 'Recomendamos cruceros que naveguen por la bahía vecina de Lan Hạ (isla Cat Ba); es igual de espectacular pero tiene muchos menos barcos y masificación.',
     scamAlert: 'Desconfía de tours en Ha Long vendidos por menos de $30 USD en la calle; suelen ser barcos viejos y cobran suplementos abusivos por kayaks o bebidas.',
     howToGet: 'Autopista directa en furgoneta Limousine desde Hanoi (aprox. 2.5 horas).',
-    grabFriendly: false,
-    isIconic: true,
-    badgeLabel: '⭐ Maravilla Mundial'
+    grabFriendly: false
   },
   {
     id: 'poi-nb-1',
@@ -241,49 +189,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     travelerTips: 'Elige la Ruta 3 en barca para pasar por la cueva más larga (Hang Đột, 1.000 metros). Deja una propina de 50.000₫ a la remera por su esfuerzo titánico.',
     scamAlert: 'En el mirador de Hang Múa cercano, algunos aparcamientos fraudulentos te hacen parar antes del parking oficial cobrándote de más.',
     howToGet: 'Tren o autobús desde Hanoi (1.5 horas). Alquila moto o bicicleta para moverte por Tam Cốc.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ UNESCO Kárstico'
-  },
-  {
-    id: 'poi-nb-2',
-    regionId: 'reg-hanoi-north',
-    nameVi: 'Hang Múa & Đỉnh Ngoạ Long',
-    nameEs: 'Mirador de Hang Múa y Dragón de Piedra',
-    category: 'Fotografía',
-    city: 'Ninh Bình',
-    lat: 20.2317,
-    lng: 105.9189,
-    rating: 4.8,
-    ticketVnd: 100000,
-    openingHours: '06:00 - 19:00',
-    bestTime: 'Amanecer (06:30) o atardecer (17:30) para ver la bruma sobre los arrozales de Tam Cốc',
-    description: 'Tras subir casi 500 escalones esculpidos en la roca viva de la montaña kárstica, se llega a la cima coronada por una escultura de dragón milenario con la vista 360° más sobrecogedora de Ninh Bình.',
-    travelerTips: 'Lleva agua y calzado deportivo adecuado; los escalones finales son de piedra afilada e irregular. Al atardecer la luz dorada es inigualable.',
-    howToGet: 'A 10 minutos en bicicleta o moto desde Tam Cốc.',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Mirador Secreto'
-  },
-  {
-    id: 'poi-nb-3',
-    regionId: 'reg-hanoi-north',
-    nameVi: 'Chùa Bích Động',
-    nameEs: 'Pagoda Bích Động y Puente de Nenúfares',
-    category: 'Cultura',
-    city: 'Ninh Bình',
-    lat: 20.2185,
-    lng: 105.9171,
-    rating: 4.7,
-    ticketVnd: 0,
-    openingHours: '07:00 - 18:00',
-    bestTime: '08:00 de la mañana en mayo-junio cuando florecen los lotos',
-    description: 'La "Segunda Cueva más Bella de Vietnam". Una antigua pagoda budista de tres niveles incrustada en la ladera de la montaña kárstica, antecedida por un puente de piedra sobre un estanque de nenúfares.',
-    travelerTips: 'La entrada a la pagoda es gratuita; sube a través de la cueva oscura (Chùa Trung) para llegar a la pagoda superior (Chùa Thượng) con vistas al valle.',
-    howToGet: 'A 3 km al oeste del embarcadero de Tam Cốc, ideal para llegar pedaleando entre campos de arroz.',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Joya Escondida'
+    grabFriendly: true
   },
   {
     id: 'poi-sp-1',
@@ -301,9 +207,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'Las terrazas de arroz más impresionantes del Sudeste Asiático habitadas por etnias minoritarias Hmong y Dao Rojo, coronadas por el techo de Indochina (Fansipan, 3.143m).',
     travelerTips: 'Haz trekking con una guía local Hmong hacia las aldeas de Y Linh Ho y Ta Van en lugar de las zonas hiper-turísticas como Cat Cat.',
     howToGet: 'Tren nocturno con literas desde Hanoi a Lao Cai, o autobús exprés en cama reclinable (Cabin Bus).',
-    grabFriendly: false,
-    isIconic: true,
-    badgeLabel: '⭐ Techo de Indochina'
+    grabFriendly: false
   },
 
   // --- CENTRO: HOI AN, DA NANG, HUE ---
@@ -324,9 +228,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     travelerTips: 'El Puente Japonés ilustra el billete azul de 20.000 ₫. Puedes alquilar un paseo en barca de madera con suelta de farolillo de papel por unos 150.000₫.',
     scamAlert: 'Sastrerías exprés que prometen trajes a medida en 4 horas: comprueba bien las costuras y acabados antes de pagar el saldo final.',
     howToGet: 'A 45 minutos del aeropuerto de Da Nang en GrabCar (aprox. 300.000 - 350.000₫).',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Imprescindible'
+    grabFriendly: true
   },
   {
     id: 'poi-ha-2',
@@ -344,29 +246,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'Puestos llenos de helados enrollados, bánh tráng nướng (la llamada "pizza vietnamita" sobre papel de arroz a la brasa), brochetas y tiendas de artesanía de seda.',
     travelerTips: 'Regatea amablemente: el precio habitual de un farolillo mediano de seda suele rondar los 40.000 - 80.000₫.',
     howToGet: 'Cruzando el puente peatonal hacia la orilla de An Hội.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Farolillos de Noche'
-  },
-  {
-    id: 'poi-ha-3',
-    regionId: 'reg-central',
-    nameVi: 'Làng Rau Trà Quế',
-    nameEs: 'Aldea de Huertos Orgánicos Trà Quế',
-    category: 'Cultura',
-    city: 'Hội An',
-    lat: 15.9038,
-    lng: 108.3371,
-    rating: 4.8,
-    ticketVnd: 35000,
-    openingHours: '07:00 - 18:00',
-    bestTime: '08:00 de la mañana o 16:00 cuando los campesinos riegan con regaderas gemelas de bambú',
-    description: 'Aldea agrícola centenaria donde se cultivan las hierbas aromáticas que dan sabor a los famosos fideos Cao Lầu. Todo el cultivo es ecológico fertilizado con algas recogidas del río.',
-    travelerTips: 'Alquila una bicicleta en Hoi An y pedalea 15 minutos entre canales y campos verdes. Puedes participar en una clase de cocina local con masaje de pies en hierbas.',
-    howToGet: 'A 3 km al norte del casco antiguo de Hoi An camino a la playa de An Bang.',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Joya Rural'
+    grabFriendly: true
   },
   {
     id: 'poi-dn-1',
@@ -384,9 +264,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'Impresionante puente de 666 metros de longitud con forma de dragón dorado gigante. Los fines de semana a las 21:00 en punto escupe fuego real y chorros de agua.',
     travelerTips: 'Ponte a barlovento de la cabeza del dragón; si te sitúas justo debajo terminarás empapado cuando lance el agua.',
     howToGet: 'Paseo fluvial en el centro de Da Nang.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Show de Fuego'
+    grabFriendly: true
   },
   {
     id: 'poi-dn-2',
@@ -404,9 +282,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'Conjunto de 5 colinas kársticas que representan los 5 elementos de la filosofía oriental (Metal, Madera, Agua, Fuego y Tierra). En su interior albergan templos budistas y la impresionante cueva Huyền Không con haces de luz natural.',
     travelerTips: 'Lleva calzado con buen agarre porque los escalones de piedra de mármol pulido son muy resbaladizos.',
     howToGet: 'A mitad de camino entre Da Nang y Hoi An, parada ideal en trayecto.',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Cuevas Sagradas'
+    grabFriendly: true
   },
   {
     id: 'poi-dn-3',
@@ -424,9 +300,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'El viral puente peatonal curvo sostenido por dos colosales manos de piedra cubiertas de musgo a más de 1.400 metros de altitud sobre las montañas de Da Nang.',
     travelerTips: 'Consulta el clima antes de subir; si hay niebla espesa apenas verás las manos a 5 metros.',
     howToGet: 'A 45 minutos en coche o Grab desde Da Nang.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Viral Mundial'
+    grabFriendly: true
   },
   {
     id: 'poi-hue-1',
@@ -444,49 +318,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'La sede del poder de los 13 emperadores de la Dinastía Nguyễn rodeada por un foso con flores de loto y murallas defensivas de inspiración Vauban. La Ciudad Púrpura Prohibida albergaba el harén imperial.',
     travelerTips: 'El recinto es gigantesco (más de 500 hectáreas). Puedes alquilar carritos eléctricos en la entrada si viajas con personas mayores.',
     howToGet: 'En la ribera norte del río Perfume (Sông Hương).',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Dinastía Imperial'
-  },
-  {
-    id: 'poi-hue-2',
-    regionId: 'reg-central',
-    nameVi: 'Lăng Khải Định (Ứng Lăng)',
-    nameEs: 'Tumba Imperial de Khải Định',
-    category: 'Monumento',
-    city: 'Huế',
-    lat: 16.3986,
-    lng: 107.5905,
-    rating: 4.9,
-    ticketVnd: 150000,
-    openingHours: '07:30 - 17:30',
-    bestTime: 'Por la mañana con luz natural entrando por los ventanales',
-    description: 'La tumba imperial más asombrosa y atípica de Vietnam. Construida entre 1920 y 1931, fusiona gótico europeo con arte oriental. El interior del palacio Khải Thành está recubierto con millones de fragmentos de porcelana y cristal policromado formando dragones y paisajes tridimensionales.',
-    travelerTips: 'El techo del palacio luce el famoso fresco "Nueve Dragones entre Nubes" pintado con los pies y manos por el maestro artista Phan Văn Tánh.',
-    howToGet: 'A 9 km al sur de Hue, accesible en Grab o excursión en moto.',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Mosaicos de Porcelana'
-  },
-  {
-    id: 'poi-hue-3',
-    regionId: 'reg-central',
-    nameVi: 'Chùa Thiên Mụ',
-    nameEs: 'Pagoda Thiên Mụ (Dama Celestial)',
-    category: 'Cultura',
-    city: 'Huế',
-    lat: 16.4528,
-    lng: 107.5453,
-    rating: 4.7,
-    ticketVnd: 0,
-    openingHours: '07:00 - 18:00',
-    bestTime: 'Al atardecer llegando en barca tradicional de dragón por el Río Perfume',
-    description: 'Símbolo histórico indiscutible de Hue fundado en 1601. Su icónica torre octogonal Phước Duyên de 7 pisos se alza sobre una colina con vistas panorámicas al río. Alberga el legendario coche Austin azul del monje Thích Quảng Đức.',
-    travelerTips: 'El acceso es gratuito. Prueba en los puestos frente a la pagoda el postre local "Chè hẻm" o cuajado de tofu con jengibre caliente (Tào phớ).',
-    howToGet: 'A 5 km del centro de Hue remontando el río Perfume en barca o en bici.',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Símbolo Histórico'
+    grabFriendly: true
   },
 
   // --- SUR: CIUDAD HO CHI MINH (SAIGÓN) & MEKONG ---
@@ -506,9 +338,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'El museo más visitado de Vietnam. Una sobrecogedora y rigurosa exposición fotográfica y documental sobre las consecuencias de la guerra de Vietnam y el impacto del Agente Naranja.',
     travelerTips: 'La galería de fotoperiodismo "Requiem" en la planta superior es una obra maestra del periodismo bélico mundial. Visita emocionalmente intensa.',
     howToGet: 'Distrito 3 de Saigón, a 5 minutos en Grab desde Ben Thanh.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Memoria Histórica'
+    grabFriendly: true
   },
   {
     id: 'poi-sg-2',
@@ -527,9 +357,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     travelerTips: 'En las paradas de ropa y souvenirs, el primer precio que te darán suele estar triplicado. Contraoferta con una sonrisa al 40-50% del valor inicial.',
     scamAlert: 'Vigila bolsos y mochilas en los pasillos estrechos ante posibles carteristas en horas punta.',
     howToGet: 'Plaza Quách Thị Trang, Distrito 1.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Mercado Legendario'
+    grabFriendly: true
   },
   {
     id: 'poi-sg-3',
@@ -547,49 +375,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'Hermoso edificio de arquitectura colonial francesa diseñado a finales del siglo XIX con una magnífica bóveda de hierro forjado y mapas cartográficos originales pintados en las paredes.',
     travelerTips: 'Puedes comprar sellos vietnamitas conmemorativos y postales a precios oficiales muy económicos.',
     howToGet: 'Justo enfrente de la Catedral Basílica de Notre-Dame de Saigón.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Arquitectura Eiffel'
-  },
-  {
-    id: 'poi-sg-4',
-    regionId: 'reg-saigon-south',
-    nameVi: 'The Cafe Apartments (42 Nguyễn Huệ)',
-    nameEs: 'The Cafe Apartments (Edificio de Cafeterías Vintage)',
-    category: 'Gastronomía',
-    city: 'Hồ Chí Minh',
-    lat: 10.7745,
-    lng: 106.7028,
-    rating: 4.8,
-    ticketVnd: 0,
-    openingHours: '08:00 - 22:30',
-    bestTime: 'Tarde-noche con las luces de los balcones y vistas a la calle peatonal',
-    description: 'Antiguo bloque de viviendas de oficiales de los años 60 reconvertido en un fascinante panal vertical de 9 plantas con decenas de cafeterías de diseño independiente, boutiques de moda y salones de té.',
-    travelerTips: 'El ascensor cobra 3.000₫ por subida, pero si subes a la planta 8 o 9 y luego bajas a pie explorando los pasillos es una experiencia única.',
-    howToGet: 'En pleno bulevar peatonal Nguyễn Huệ, Distrito 1.',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Joya Urbana'
-  },
-  {
-    id: 'poi-sg-5',
-    regionId: 'reg-saigon-south',
-    nameVi: 'Chùa Ngọc Hoàng (Phước Hải Tự)',
-    nameEs: 'Pagoda del Emperador de Jade',
-    category: 'Cultura',
-    city: 'Hồ Chí Minh',
-    lat: 10.7918,
-    lng: 106.6983,
-    rating: 4.7,
-    ticketVnd: 0,
-    openingHours: '07:00 - 17:30',
-    bestTime: 'Temprano por la mañana cuando el incienso en espiral llena las salas de misticismo',
-    description: 'Construida por la comunidad cantonesa en 1909, esta pagoda taoísta-budista rebosa de esculturas de madera que representan el infierno y el cielo, un estanque con tortugas sagradas y humo místico de incienso.',
-    travelerTips: 'Fue visitada por Barack Obama en su viaje a Vietnam en 2016. Respeta el silencio y la devoción de los fieles rezando ante las deidades.',
-    howToGet: 'Calle Mai Thị Lựu, Distrito 1, a 10 min en Grab.',
-    grabFriendly: true,
-    isHiddenGem: true,
-    badgeLabel: '💎 Templo Místico'
+    grabFriendly: true
   },
   {
     id: 'poi-cuchi-1',
@@ -607,9 +393,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'Red subterránea de más de 250 km de túneles construida por el Viet Cong durante la guerra. Incluye búnkeres de mando, cocinas sin humo (Hoàng Cầm) y hospitales bajo tierra.',
     travelerTips: 'Recomendamos el sector de Bến Dược (más alejado pero más auténtico y menos masificado que Bến Đình). No recomendado si padeces claustrofobia severa.',
     howToGet: 'Tour organizado de medio día en minivan o lancha rápida por el río Saigón.',
-    grabFriendly: false,
-    isIconic: true,
-    badgeLabel: '⭐ Historia Subterránea'
+    grabFriendly: false
   },
   {
     id: 'poi-mekong-1',
@@ -627,9 +411,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'El mayor mercado flotante de frutas y verduras del Delta del Mekong. Los barcos exhiben en un largo poste de bambú (cây bẹo) la fruta que venden (piñas, sandías, mangos).',
     travelerTips: 'Tómate un tazón humeante de Hủ Tiếu y un café helado servido directamente desde una canoa flotante mientras contemplas el trasiego fluvial.',
     howToGet: 'Alquila una barca en el muelle de Ninh Kiều en Cần Thơ a las 05:30 am.',
-    grabFriendly: false,
-    isHiddenGem: true,
-    badgeLabel: '💎 Madrugada Fluvial'
+    grabFriendly: false
   },
 
   // --- NATURALEZA Y PLAYAS ---
@@ -649,9 +431,7 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'Una de las cavernas secas más majestuosas del mundo con 31 km de longitud. La pasarela de madera de 1 km permite admirar catedrales subterráneas con estalagmitas colosales.',
     travelerTips: 'La temperatura interior ronda los 20-22°C todo el año, un alivio refrescante frente al calor exterior.',
     howToGet: 'Vuelo o tren hasta Đồng Hới, luego traslado en autobús a Phong Nha.',
-    grabFriendly: false,
-    isHiddenGem: true,
-    badgeLabel: '💎 Catedral Kárstica'
+    grabFriendly: false
   },
   {
     id: 'poi-pq-1',
@@ -669,8 +449,6 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     description: 'La isla más grande de Vietnam en el Golfo de Tailandia. Bãi Sao destaca por su arena blanca finísima como harina y aguas turquesas rodeadas de cocoteros.',
     travelerTips: 'Visita el mercado nocturno de Phú Quốc para cenar marisco fresco cocinado al momento y erizos de mar a la brasa con cebollino.',
     howToGet: 'Vuelo directo desde Hanoi o Saigón a PQC.',
-    grabFriendly: true,
-    isIconic: true,
-    badgeLabel: '⭐ Paraíso Tropical'
+    grabFriendly: true
   }
 ];

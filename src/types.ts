@@ -39,7 +39,7 @@ export interface PointOfInterest {
   regionId: string;
   nameVi: string;
   nameEs: string;
-  category: 'Monumento' | 'Gastronomía' | 'Naturaleza' | 'Mercado' | 'Cultura' | 'Transporte' | 'Fotografía';
+  category: 'Monumento' | 'Gastronomía' | 'Naturaleza' | 'Mercado' | 'Cultura' | 'Transporte';
   lat: number;
   lng: number;
   city: string;
@@ -52,9 +52,6 @@ export interface PointOfInterest {
   scamAlert?: string;
   howToGet: string;
   grabFriendly: boolean;
-  isIconic?: boolean;
-  isHiddenGem?: boolean;
-  badgeLabel?: string;
 }
 
 export interface RegionMapPack {

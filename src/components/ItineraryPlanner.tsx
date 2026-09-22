@@ -21,8 +21,6 @@ import {
   X,
   Search,
   Check,
-  Star,
-  Gem,
   CalendarDays,
   FileText,
   AlertCircle,
@@ -81,12 +79,6 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
   const [isPlanModalOpen, setIsPlanModalOpen] = useState<boolean>(false);
   const [editingPlanData, setEditingPlanData] = useState<Partial<ItineraryPlan> | null>(null);
 
-  // New Plan POI selection state
-  const [newPlanSelectedPoiIds, setNewPlanSelectedPoiIds] = useState<string[]>([]);
-  const [newPlanPoiSearchQuery, setNewPlanPoiSearchQuery] = useState<string>('');
-  const [newPlanFilterType, setNewPlanFilterType] = useState<'all' | 'iconic' | 'hidden_gem'>('all');
-  const [newPlanCityFilter, setNewPlanCityFilter] = useState<string>('all');
-
   const [isDayModalOpen, setIsDayModalOpen] = useState<boolean>(false);
   const [editingDayData, setEditingDayData] = useState<{ day?: ItineraryDay; isNew?: boolean } | null>(null);
 
@@ -95,7 +87,6 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
   const [stopModalTargetDayId, setStopModalTargetDayId] = useState<string | null>(null);
   const [poiSearchQuery, setPoiSearchQuery] = useState<string>('');
   const [selectedPoiCategory, setSelectedPoiCategory] = useState<string>('todas');
-  const [stopModalPoiFilterType, setStopModalPoiFilterType] = useState<'all' | 'iconic' | 'hidden_gem'>('all');
   const [selectedPoiForStop, setSelectedPoiForStop] = useState<PointOfInterest | null>(null);
   const [stopFormTimeSlot, setStopFormTimeSlot] = useState<string>('Mañana 09:30');
   const [stopFormCustomName, setStopFormCustomName] = useState<string>('');
@@ -518,127 +509,6 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
     showNotification(editingDayData.isNew ? 'Día añadido al itinerario.' : 'Día actualizado.');
   };
 
-  // Geographic ordering for logical North to South flow
-  const CITY_GEOGRAPHIC_ORDER: Record<string, number> = {
-    'Hà Nội': 1,
-    'Quảng Ninh / Cát Bà': 2,
-    'Ninh Bình': 3,
-    'Sa Pa': 4,
-    'Quảng Bình': 5,
-    'Huế': 6,
-    'Đà Nẵng': 7,
-    'Hội An': 8,
-    'Hồ Chí Minh': 9,
-    'Hồ Chí Minh (Periferia)': 10,
-    'Cần Thơ': 11,
-    'Phú Quốc': 12,
-  };
-
-  // Helper to generate days and stops from selected POIs
-  const generateDaysFromSelectedPois = (
-    poiIds: string[],
-    startDateStr: string
-  ): { days: ItineraryDay[]; destinations: string[] } => {
-    const selectedPois = poiIds
-      .map((id) => POINTS_OF_INTEREST.find((p) => p.id === id))
-      .filter((p): p is PointOfInterest => Boolean(p));
-
-    if (selectedPois.length === 0) {
-      return {
-        destinations: ['Hà Nội'],
-        days: [
-          {
-            id: 'day-1',
-            dayNumber: 1,
-            date: startDateStr,
-            destinationCity: 'Hà Nội',
-            title: 'Llegada y bienvenida a Vietnam',
-            notes: 'Acomodarse en el hotel, cambiar dinero en el centro y probar café vietnamita.',
-            stops: [],
-          },
-        ],
-      };
-    }
-
-    // Sort POIs geographically
-    const sortedPois = [...selectedPois].sort((a, b) => {
-      const orderA = CITY_GEOGRAPHIC_ORDER[a.city] || 99;
-      const orderB = CITY_GEOGRAPHIC_ORDER[b.city] || 99;
-      if (orderA !== orderB) return orderA - orderB;
-      return a.nameEs.localeCompare(b.nameEs);
-    });
-
-    // Group by city
-    const cityGroups: { city: string; pois: PointOfInterest[] }[] = [];
-    sortedPois.forEach((poi) => {
-      const lastGroup = cityGroups[cityGroups.length - 1];
-      if (lastGroup && lastGroup.city === poi.city) {
-        lastGroup.pois.push(poi);
-      } else {
-        cityGroups.push({ city: poi.city, pois: [poi] });
-      }
-    });
-
-    const timeSlots = [
-      'Mañana 09:00',
-      'Mediodía 12:30',
-      'Tarde 15:30',
-      'Atardecer 17:30',
-      'Noche 20:00',
-    ];
-    const days: ItineraryDay[] = [];
-    const uniqueDestinations: string[] = [];
-
-    let currentDayNumber = 1;
-    const startTimestamp = startDateStr ? new Date(startDateStr).getTime() : null;
-
-    cityGroups.forEach((group) => {
-      if (!uniqueDestinations.includes(group.city)) {
-        uniqueDestinations.push(group.city);
-      }
-
-      // Max 3 stops per day for a comfortable, realistic pace
-      const chunkSize = 3;
-      for (let i = 0; i < group.pois.length; i += chunkSize) {
-        const dayPois = group.pois.slice(i, i + chunkSize);
-
-        let dayDateStr = '';
-        if (startTimestamp && !isNaN(startTimestamp)) {
-          const d = new Date(startTimestamp + (currentDayNumber - 1) * 86400000);
-          dayDateStr = d.toISOString().split('T')[0];
-        }
-
-        const dayTitle =
-          dayPois.length === 1
-            ? `${group.city}: ${dayPois[0].nameEs.split('(')[0].trim()}`
-            : `${group.city}: ${dayPois.map((p) => p.nameEs.split('(')[0].trim()).slice(0, 2).join(' & ')}`;
-
-        const stops: ItineraryStop[] = dayPois.map((poi, idx) => ({
-          id: `stop-${Date.now()}-${currentDayNumber}-${idx + 1}`,
-          poiId: poi.id,
-          timeSlot: timeSlots[idx] || 'Horario libre',
-          ticketVnd: poi.ticketVnd || 0,
-          notes: poi.travelerTips || poi.description,
-          isVisited: false,
-        }));
-
-        days.push({
-          id: `day-${currentDayNumber}-${Date.now()}`,
-          dayNumber: currentDayNumber,
-          date: dayDateStr,
-          destinationCity: group.city,
-          title: dayTitle,
-          notes: `Ruta recomendada con ${dayPois.length} sitios en ${group.city}. Desplazamiento sugerido a pie o en Grab.`,
-          stops,
-        });
-
-        currentDayNumber++;
-      }
-    });
-
-    return { days, destinations: uniqueDestinations };
-  };
-
   // Save Plan Metadata
   const handleSavePlanMetadata = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -648,7 +518,7 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
     const startDate = (formData.get('startDate') as string) || '';
     const endDate = (formData.get('endDate') as string) || '';
     const destinationsRaw = (formData.get('destinations') as string) || '';
-    const destinationsInput = destinationsRaw
+    const destinations = destinationsRaw
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
@@ -660,7 +530,7 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
         description,
         startDate,
         endDate,
-        destinations: destinationsInput.length > 0 ? destinationsInput : activePlan!.destinations,
+        destinations: destinations.length > 0 ? destinations : activePlan!.destinations,
         updatedAt: Date.now(),
       };
       const updatedPlans = plans.map((p) => (p.id === updatedPlan.id ? updatedPlan : p));
@@ -668,58 +538,36 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
       showNotification('Plan actualizado.');
     } else {
       const newPlanId = 'plan-' + Date.now();
-
-      // Generate days and destinations from selected POIs if any were picked
-      const { days: generatedDays, destinations: autoDestinations } = generateDaysFromSelectedPois(
-        newPlanSelectedPoiIds,
-        startDate
-      );
-
-      const finalDestinations =
-        destinationsInput.length > 0
-          ? destinationsInput
-          : autoDestinations.length > 0
-          ? autoDestinations
-          : ['Hà Nội', 'Vịnh Hạ Long', 'Hội An'];
-
       const newPlan: ItineraryPlan = {
         id: newPlanId,
         title,
-        description:
-          description ||
-          (newPlanSelectedPoiIds.length > 0
-            ? `Itinerario personalizado con ${newPlanSelectedPoiIds.length} lugares imprescindibles y joyas secretas en Vietnam.`
-            : 'Itinerario de viaje por Vietnam.'),
+        description,
         startDate,
         endDate,
-        destinations: finalDestinations,
+        destinations: destinations.length > 0 ? destinations : ['Hà Nội', 'Hạ Long', 'Hội An'],
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        days: generatedDays,
+        days: [
+          {
+            id: 'day-1',
+            dayNumber: 1,
+            date: startDate,
+            destinationCity: destinations[0] || 'Hà Nội',
+            title: 'Llegada y bienvenida',
+            notes: 'Acomodarse en el hotel, cambiar dinero en el centro y probar café vietnamita.',
+            stops: [],
+          },
+        ],
       };
-
       const updatedPlans = [...plans, newPlan];
       updatePlansState(updatedPlans);
       setActivePlanId(newPlanId);
       saveActivePlanId(newPlanId);
-
-      // Expand all new days so traveler sees all stops immediately
-      const newExpansions: Record<string, boolean> = {};
-      generatedDays.forEach((d) => {
-        newExpansions[d.id] = true;
-      });
-      setExpandedDayIds(newExpansions);
-
-      showNotification(
-        newPlanSelectedPoiIds.length > 0
-          ? `¡Itinerario creado con ${newPlanSelectedPoiIds.length} paradas organizadas!`
-          : '¡Nuevo itinerario creado!'
-      );
+      showNotification('¡Nuevo itinerario creado!');
     }
 
     setIsPlanModalOpen(false);
     setEditingPlanData(null);
-    setNewPlanSelectedPoiIds([]);
   };
 
   // Load Curated Template
@@ -964,74 +812,16 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
   const filteredModalPois = useMemo(() => {
     return POINTS_OF_INTEREST.filter((poi) => {
       const matchCat = selectedPoiCategory === 'todas' || poi.category === selectedPoiCategory;
-      const matchType =
-        stopModalPoiFilterType === 'all' ||
-        (stopModalPoiFilterType === 'iconic' && poi.isIconic) ||
-        (stopModalPoiFilterType === 'hidden_gem' && poi.isHiddenGem);
-
       const q = poiSearchQuery.toLowerCase().trim();
       const matchQuery =
         !q ||
         poi.nameEs.toLowerCase().includes(q) ||
         poi.nameVi.toLowerCase().includes(q) ||
         poi.city.toLowerCase().includes(q) ||
-        poi.description.toLowerCase().includes(q) ||
-        (poi.badgeLabel && poi.badgeLabel.toLowerCase().includes(q));
-      return matchCat && matchType && matchQuery;
+        poi.description.toLowerCase().includes(q);
+      return matchCat && matchQuery;
     });
-  }, [poiSearchQuery, selectedPoiCategory, stopModalPoiFilterType]);
-
-  // Unique cities list for filters
-  const allPoiCities = useMemo(() => {
-    const cities = Array.from(new Set(POINTS_OF_INTEREST.map((p) => p.city)));
-    return cities;
-  }, []);
-
-  // Filtered POIs for New Plan creation selector
-  const filteredNewPlanPois = useMemo(() => {
-    return POINTS_OF_INTEREST.filter((poi) => {
-      // Type filter
-      if (newPlanFilterType === 'iconic' && !poi.isIconic) return false;
-      if (newPlanFilterType === 'hidden_gem' && !poi.isHiddenGem) return false;
-
-      // City filter
-      if (newPlanCityFilter !== 'all' && poi.city !== newPlanCityFilter) return false;
-
-      // Search query
-      const q = newPlanPoiSearchQuery.toLowerCase().trim();
-      if (!q) return true;
-
-      return (
-        poi.nameEs.toLowerCase().includes(q) ||
-        poi.nameVi.toLowerCase().includes(q) ||
-        poi.city.toLowerCase().includes(q) ||
-        poi.category.toLowerCase().includes(q) ||
-        poi.description.toLowerCase().includes(q) ||
-        poi.travelerTips.toLowerCase().includes(q) ||
-        (poi.badgeLabel && poi.badgeLabel.toLowerCase().includes(q))
-      );
-    });
-  }, [newPlanFilterType, newPlanCityFilter, newPlanPoiSearchQuery]);
-
-  const toggleNewPlanPoi = (poiId: string) => {
-    setNewPlanSelectedPoiIds((prev) =>
-      prev.includes(poiId) ? prev.filter((id) => id !== poiId) : [...prev, poiId]
-    );
-  };
-
-  const handleSelectTopIconic = () => {
-    const iconicIds = POINTS_OF_INTEREST.filter((p) => p.isIconic).slice(0, 6).map((p) => p.id);
-    setNewPlanSelectedPoiIds((prev) => Array.from(new Set([...prev, ...iconicIds])));
-  };
-
-  const handleSelectTopHiddenGems = () => {
-    const gemIds = POINTS_OF_INTEREST.filter((p) => p.isHiddenGem).slice(0, 6).map((p) => p.id);
-    setNewPlanSelectedPoiIds((prev) => Array.from(new Set([...prev, ...gemIds])));
-  };
-
-  const handleClearNewPlanPois = () => {
-    setNewPlanSelectedPoiIds([]);
-  };
+  }, [poiSearchQuery, selectedPoiCategory]);
 
   // Overall calculations for current plan
   const planStats = useMemo(() => {
@@ -1168,10 +958,6 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
             id="btn-create-new-plan"
             onClick={() => {
               setEditingPlanData(null);
-              setNewPlanSelectedPoiIds([]);
-              setNewPlanPoiSearchQuery('');
-              setNewPlanFilterType('all');
-              setNewPlanCityFilter('all');
               setIsPlanModalOpen(true);
             }}
             className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
@@ -1743,52 +1529,13 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
                   1. Puntos de Interés de los Mapas Descargables:
                 </label>
 
-                {/* Type filters (Todos, Icónicos, Joyas Escondidas) */}
-                <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setStopModalPoiFilterType('all')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      stopModalPoiFilterType === 'all'
-                        ? 'bg-stone-900 text-white shadow-xs'
-                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                    }`}
-                  >
-                    Todos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStopModalPoiFilterType('iconic')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition cursor-pointer ${
-                      stopModalPoiFilterType === 'iconic'
-                        ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
-                        : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
-                    }`}
-                  >
-                    <Star className="w-3 h-3 fill-amber-500" />
-                    <span>⭐ Más Icónicos</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStopModalPoiFilterType('hidden_gem')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition cursor-pointer ${
-                      stopModalPoiFilterType === 'hidden_gem'
-                        ? 'bg-emerald-600 text-white font-bold shadow-xs'
-                        : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
-                    }`}
-                  >
-                    <Gem className="w-3 h-3" />
-                    <span>💎 Joyas Escondidas</span>
-                  </button>
-                </div>
-
                 {/* Filter and Search */}
                 <div className="flex flex-col sm:flex-row gap-2 mb-3">
                   <div className="relative flex-1">
                     <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
-                      placeholder="Buscar por nombre, templo, cueva, ciudad (Hanói, Hội An...)"
+                      placeholder="Buscar por nombre, templo, ciudad (Hanói, Hội An, Saigón...)"
                       value={poiSearchQuery}
                       onChange={(e) => setPoiSearchQuery(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -1806,7 +1553,6 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
                     <option value="Naturaleza">Naturaleza & Playas</option>
                     <option value="Mercado">Mercados</option>
                     <option value="Cultura">Cultura</option>
-                    <option value="Fotografía">Fotografía</option>
                   </select>
                 </div>
 
@@ -1832,21 +1578,9 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
                         }`}
                       >
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-stone-100 text-stone-700">
-                              {poi.city} • {poi.category}
-                            </span>
-                            {poi.isIconic && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300/60">
-                                ⭐ Icónico
-                              </span>
-                            )}
-                            {poi.isHiddenGem && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300/60">
-                                💎 Joya
-                              </span>
-                            )}
-                          </div>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-stone-100 text-stone-700">
+                            {poi.city} • {poi.category}
+                          </span>
                           <div className="font-bold text-xs text-stone-900 truncate mt-1">
                             {poi.nameEs}
                           </div>
@@ -2407,429 +2141,104 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
 
       {/* ================= MODAL: CREATE / EDIT PLAN ================= */}
       {isPlanModalOpen && (
-        <div className="fixed inset-0 z-50 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-          <div
-            className={`bg-white rounded-2xl w-full shadow-2xl border border-stone-200 overflow-hidden flex flex-col ${
-              editingPlanData?.id ? 'max-w-lg' : 'max-w-4xl max-h-[92vh]'
-            }`}
-          >
-            <form onSubmit={handleSavePlanMetadata} className="flex flex-col flex-1 min-h-0">
-              {/* Modal Header */}
-              <div className="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50 shrink-0">
-                <div>
-                  <h3 className="font-bold text-base sm:text-lg text-stone-900">
-                    {editingPlanData?.id ? 'Editar Información del Itinerario' : 'Crear Nuevo Itinerario'}
-                  </h3>
-                  {!editingPlanData?.id && (
-                    <p className="text-xs text-stone-500 mt-0.5">
-                      Configura las fechas y añade sitios icónicos o joyas escondidas para armar tu ruta.
-                    </p>
-                  )}
-                </div>
+        <div className="fixed inset-0 z-50 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-stone-200 overflow-hidden">
+            <form onSubmit={handleSavePlanMetadata}>
+              <div className="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50">
+                <h3 className="font-bold text-base sm:text-lg text-stone-900">
+                  {editingPlanData?.id ? 'Editar Información del Itinerario' : 'Crear Nuevo Itinerario'}
+                </h3>
                 <button
                   type="button"
                   onClick={() => setIsPlanModalOpen(false)}
-                  className="p-2 text-stone-400 hover:text-stone-700 rounded-lg transition cursor-pointer"
+                  className="p-2 text-stone-400 hover:text-stone-700 rounded-lg transition"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Modal Scrollable Content */}
-              <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 min-h-0">
-                {/* Basic Details Section */}
-                <div className="space-y-3.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-stone-600">
-                      1. Datos Principales del Viaje
-                    </span>
-                    <span className="text-[11px] text-stone-400">Paso 1 de 2</span>
-                  </div>
+              <div className="p-4 sm:p-5 space-y-3.5">
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Nombre del Itinerario:
+                  </label>
+                  <input
+                    type="text"
+                    name="title"
+                    defaultValue={editingPlanData?.title || 'Mi Aventura en Vietnam 2026'}
+                    required
+                    placeholder="Ej: Ruta Vietnam 15 días: Gastronomía & Templos"
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
 
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Descripción / Propósito:
+                  </label>
+                  <textarea
+                    rows={2}
+                    name="description"
+                    defaultValue={editingPlanData?.description || ''}
+                    placeholder="Ej: Viaje por libre en tren y moto visitando los lugares imprescindibles del norte y centro..."
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold text-stone-700 block mb-1">
-                      Nombre del Itinerario:
+                      Fecha Inicio:
                     </label>
                     <input
-                      type="text"
-                      name="title"
-                      defaultValue={editingPlanData?.title || 'Mi Aventura en Vietnam 2026'}
-                      required
-                      placeholder="Ej: Ruta Vietnam 15 días: Templos, Bahías & Gastronomía"
-                      className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-bold text-stone-700 block mb-1">
-                        Fecha Inicio (Opcional):
-                      </label>
-                      <input
-                        type="date"
-                        name="startDate"
-                        defaultValue={editingPlanData?.startDate || ''}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-stone-700 block mb-1">
-                        Fecha Fin (Opcional):
-                      </label>
-                      <input
-                        type="date"
-                        name="endDate"
-                        defaultValue={editingPlanData?.endDate || ''}
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-stone-700 block mb-1">
-                      Descripción / Propósito:
-                    </label>
-                    <textarea
-                      rows={2}
-                      name="description"
-                      defaultValue={editingPlanData?.description || ''}
-                      placeholder="Ej: Viaje por libre visitando los lugares imprescindibles del norte, centro y sur de Vietnam..."
+                      type="date"
+                      name="startDate"
+                      defaultValue={editingPlanData?.startDate || ''}
                       className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
                     />
                   </div>
 
-                  {editingPlanData?.id && (
-                    <div>
-                      <label className="text-xs font-bold text-stone-700 block mb-1">
-                        Destinos clave (separados por coma):
-                      </label>
-                      <input
-                        type="text"
-                        name="destinations"
-                        defaultValue={
-                          editingPlanData?.destinations?.join(', ') ||
-                          'Hà Nội, Vịnh Hạ Long, Ninh Bình, Hội An, TP. Hồ Chí Minh'
-                        }
-                        placeholder="Hà Nội, Hạ Long, Hội An..."
-                        className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      />
-                    </div>
-                  )}
+                  <div>
+                    <label className="text-xs font-bold text-stone-700 block mb-1">
+                      Fecha Fin:
+                    </label>
+                    <input
+                      type="date"
+                      name="endDate"
+                      defaultValue={editingPlanData?.endDate || ''}
+                      className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
                 </div>
 
-                {/* New Plan: Interactive POI Selector (Iconic, Hidden Gems, Search) */}
-                {!editingPlanData?.id && (
-                  <div className="pt-4 border-t border-stone-200 space-y-4">
-                    {/* Header of POI selector */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold uppercase tracking-wider text-stone-800">
-                            2. Selector de Sitios para el Itinerario
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
-                            {newPlanSelectedPoiIds.length} seleccionados
-                          </span>
-                        </div>
-                        <p className="text-xs text-stone-500 mt-0.5">
-                          Selecciona sitios clave; se crearán automáticamente los días y paradas organizados de norte a sur.
-                        </p>
-                      </div>
-
-                      {/* Quick select buttons */}
-                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={handleSelectTopIconic}
-                          className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
-                          title="Añadir los 6 sitios más icónicos de Vietnam"
-                        >
-                          <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                          <span>+6 Más Icónicos</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSelectTopHiddenGems}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
-                          title="Añadir 6 joyas escondidas recomendadas"
-                        >
-                          <Gem className="w-3 h-3 text-emerald-600" />
-                          <span>+6 Joyas Escondidas</span>
-                        </button>
-                        {newPlanSelectedPoiIds.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={handleClearNewPlanPois}
-                            className="px-2 py-1 rounded-lg text-stone-500 hover:text-rose-600 hover:bg-rose-50 text-[11px] font-medium transition cursor-pointer"
-                          >
-                            Vaciar
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Filter and Search Toolbar */}
-                    <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 space-y-2.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        {/* Type Tabs: Todos, Icónicos, Joyas Escondidas */}
-                        <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-stone-200">
-                          <button
-                            type="button"
-                            onClick={() => setNewPlanFilterType('all')}
-                            className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                              newPlanFilterType === 'all'
-                                ? 'bg-stone-900 text-white shadow-xs'
-                                : 'text-stone-600 hover:text-stone-900'
-                            }`}
-                          >
-                            Todos ({POINTS_OF_INTEREST.length})
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setNewPlanFilterType('iconic')}
-                            className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                              newPlanFilterType === 'iconic'
-                                ? 'bg-amber-500 text-stone-950 shadow-xs'
-                                : 'text-amber-800 hover:text-amber-950'
-                            }`}
-                          >
-                            <Star className="w-3.5 h-3.5 fill-amber-500" />
-                            <span>⭐ Más Icónicos ({POINTS_OF_INTEREST.filter((p) => p.isIconic).length})</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setNewPlanFilterType('hidden_gem')}
-                            className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                              newPlanFilterType === 'hidden_gem'
-                                ? 'bg-emerald-600 text-white shadow-xs'
-                                : 'text-emerald-800 hover:text-emerald-950'
-                            }`}
-                          >
-                            <Gem className="w-3.5 h-3.5" />
-                            <span>💎 Joyas Escondidas ({POINTS_OF_INTEREST.filter((p) => p.isHiddenGem).length})</span>
-                          </button>
-                        </div>
-
-                        {/* City Filter */}
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-bold text-stone-500">Ciudad:</span>
-                          <select
-                            value={newPlanCityFilter}
-                            onChange={(e) => setNewPlanCityFilter(e.target.value)}
-                            className="bg-white border border-stone-200 rounded-xl px-2.5 py-1 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
-                          >
-                            <option value="all">Todas las ciudades ({allPoiCities.length})</option>
-                            {allPoiCities.map((city) => (
-                              <option key={city} value={city}>
-                                {city}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Search input with live clear button */}
-                      <div className="relative">
-                        <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
-                        <input
-                          type="text"
-                          placeholder="Buscar por nombre (Lago Hoan Kiem, Train Street, Cueva Paraíso...), ciudad o temática..."
-                          value={newPlanPoiSearchQuery}
-                          onChange={(e) => setNewPlanPoiSearchQuery(e.target.value)}
-                          className="w-full pl-9 pr-9 py-2 bg-white border border-stone-200 rounded-xl text-xs sm:text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-stone-400"
-                        />
-                        {newPlanPoiSearchQuery && (
-                          <button
-                            type="button"
-                            onClick={() => setNewPlanPoiSearchQuery('')}
-                            className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-700 transition"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Selected POIs Tray (if any selected) */}
-                    {newPlanSelectedPoiIds.length > 0 && (
-                      <div className="bg-amber-50/60 rounded-xl p-3 border border-amber-200/80 space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-amber-950 flex items-center gap-1.5">
-                            <CheckCircle2 className="w-4 h-4 text-amber-600" />
-                            {newPlanSelectedPoiIds.length} sitios seleccionados para este itinerario:
-                          </span>
-                          <span className="text-[11px] text-amber-800 font-medium">
-                            Aprox. {Math.ceil(newPlanSelectedPoiIds.length / 3)} días de viaje
-                          </span>
-                        </div>
-
-                        {/* Chips container */}
-                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                          {newPlanSelectedPoiIds.map((id) => {
-                            const poi = POINTS_OF_INTEREST.find((p) => p.id === id);
-                            if (!poi) return null;
-                            return (
-                              <span
-                                key={id}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-amber-300 text-xs font-bold text-amber-950 shadow-2xs"
-                              >
-                                {poi.isIconic ? '⭐' : poi.isHiddenGem ? '💎' : '📍'}
-                                <span className="truncate max-w-[150px]">{poi.nameEs}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleNewPlanPoi(id)}
-                                  className="text-amber-700 hover:text-rose-600 transition p-0.5"
-                                  title="Quitar de la selección"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* POI Cards Grid */}
-                    <div>
-                      <div className="flex items-center justify-between text-xs text-stone-500 mb-2">
-                        <span>
-                          Mostrando {filteredNewPlanPois.length} sitios disponibles
-                          {newPlanPoiSearchQuery && ` para "${newPlanPoiSearchQuery}"`}
-                        </span>
-                        <span className="text-[11px]">Haz clic en una tarjeta para seleccionarla</span>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-72 sm:max-h-80 overflow-y-auto p-1 border border-stone-200 rounded-2xl bg-stone-50/50">
-                        {filteredNewPlanPois.length === 0 ? (
-                          <div className="col-span-full py-8 text-center text-stone-500 text-xs">
-                            No se encontraron sitios con los filtros aplicados. Prueba a borrar la búsqueda o cambiar de ciudad.
-                          </div>
-                        ) : (
-                          filteredNewPlanPois.map((poi) => {
-                            const isSelected = newPlanSelectedPoiIds.includes(poi.id);
-                            return (
-                              <div
-                                key={poi.id}
-                                onClick={() => toggleNewPlanPoi(poi.id)}
-                                className={`p-3 rounded-xl border text-left cursor-pointer transition flex items-start justify-between gap-3 ${
-                                  isSelected
-                                    ? 'bg-amber-50/90 border-amber-500 ring-2 ring-amber-400/50 shadow-xs'
-                                    : 'bg-white border-stone-200 hover:border-amber-300 hover:bg-stone-50/40'
-                                }`}
-                              >
-                                <div className="min-w-0 flex-1">
-                                  {/* Badges row */}
-                                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-stone-100 text-stone-700">
-                                      {poi.city}
-                                    </span>
-                                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
-                                      {poi.category}
-                                    </span>
-                                    {poi.isIconic && (
-                                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300/60 flex items-center gap-0.5">
-                                        <Star className="w-2.5 h-2.5 fill-amber-500" />
-                                        <span>⭐ Más Icónico</span>
-                                      </span>
-                                    )}
-                                    {poi.isHiddenGem && (
-                                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300/60 flex items-center gap-0.5">
-                                        <Gem className="w-2.5 h-2.5 text-emerald-700" />
-                                        <span>💎 Joya Escondida</span>
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {/* Title & Vietnamese name */}
-                                  <div className="font-bold text-xs sm:text-sm text-stone-900 leading-tight">
-                                    {poi.nameEs}
-                                  </div>
-                                  <div className="text-[11px] text-amber-900/80 font-medium truncate mt-0.5">
-                                    {poi.nameVi}
-                                  </div>
-
-                                  {/* Description / tips snippet */}
-                                  <p className="text-[11px] text-stone-500 line-clamp-2 mt-1 leading-snug">
-                                    {poi.travelerTips || poi.description}
-                                  </p>
-
-                                  {/* Price & Rating footer */}
-                                  <div className="flex items-center gap-3 mt-2 text-[10px] font-mono text-stone-600">
-                                    <span className="font-bold text-stone-800">
-                                      {poi.ticketVnd > 0
-                                        ? `${(poi.ticketVnd / 1000).toLocaleString('es-ES')}k ₫ (~${(
-                                            poi.ticketVnd / eurToVnd
-                                          ).toFixed(1)}€)`
-                                        : 'Entrada Gratis'}
-                                    </span>
-                                    <span>★ {poi.rating.toFixed(1)}</span>
-                                  </div>
-                                </div>
-
-                                {/* Checkbox / Toggle indicator */}
-                                <div className="shrink-0 pt-0.5">
-                                  <div
-                                    className={`w-6 h-6 rounded-full flex items-center justify-center transition ${
-                                      isSelected
-                                        ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
-                                        : 'border border-stone-300 text-stone-400 hover:border-amber-400 hover:text-amber-600'
-                                    }`}
-                                  >
-                                    {isSelected ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <Plus className="w-3.5 h-3.5" />}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Destinos clave (separados por coma):
+                  </label>
+                  <input
+                    type="text"
+                    name="destinations"
+                    defaultValue={editingPlanData?.destinations?.join(', ') || 'Hà Nội, Vịnh Hạ Long, Ninh Bình, Hội An, TP. Hồ Chí Minh'}
+                    placeholder="Hà Nội, Hạ Long, Hội An..."
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
               </div>
 
-              {/* Modal Footer Actions */}
-              <div className="p-4 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-stone-50 shrink-0">
-                <div className="text-xs text-stone-600 font-medium text-center sm:text-left">
-                  {!editingPlanData?.id && (
-                    <span>
-                      {newPlanSelectedPoiIds.length > 0 ? (
-                        <span className="text-stone-900 font-bold">
-                          {newPlanSelectedPoiIds.length} paradas seleccionadas para generar tu itinerario.
-                        </span>
-                      ) : (
-                        <span>Puedes crear un itinerario vacío o elegir sitios ahora.</span>
-                      )}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setIsPlanModalOpen(false)}
-                    className="flex-1 sm:flex-none px-4 py-2 rounded-xl text-stone-600 hover:bg-stone-200 text-xs font-medium transition cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs transition cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
-                  >
-                    {editingPlanData?.id ? (
-                      'Guardar Cambios'
-                    ) : newPlanSelectedPoiIds.length > 0 ? (
-                      <>
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Crear Itinerario ({newPlanSelectedPoiIds.length} sitios)</span>
-                      </>
-                    ) : (
-                      'Crear Itinerario Vacío'
-                    )}
-                  </button>
-                </div>
+              <div className="p-4 border-t border-stone-200 flex items-center justify-end gap-2 bg-stone-50">
+                <button
+                  type="button"
+                  onClick={() => setIsPlanModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-stone-600 hover:bg-stone-200 text-xs font-medium transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs transition cursor-pointer"
+                >
+                  {editingPlanData?.id ? 'Guardar Cambios' : 'Crear Itinerario'}
+                </button>
               </div>
             </form>
           </div>
