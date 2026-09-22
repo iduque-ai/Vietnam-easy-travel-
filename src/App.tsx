@@ -12,6 +12,7 @@ import { ItineraryPlanner } from './components/ItineraryPlanner';
 import { FreeTourGuide } from './components/FreeTourGuide';
 import { ExchangeRatesData, ActiveTabType, PointOfInterest } from './types';
 import { getSavedRates, saveRates, isRatesStale } from './utils/storage';
+import { useItineraryState } from './utils/useItineraryState';
 import { Compass, Wifi, WifiOff, Clock, ShieldCheck, HelpCircle } from 'lucide-react';
 
 export default function App() {
@@ -23,6 +24,51 @@ export default function App() {
   const [offlineToast, setOfflineToast] = useState<string | null>(null);
   const [isMapsQuotaExceeded, setIsMapsQuotaExceeded] = useState<boolean>(false);
   const [freeTourTargetPoi, setFreeTourTargetPoi] = useState<PointOfInterest | null>(null);
+
+  // Centralized shared itinerary state for Maps & Planner
+  const itineraryState = useItineraryState();
+  const [targetMapRegionId, setTargetMapRegionId] = useState<string>('reg-hanoi-north');
+
+  const handleNavigateToMaps = useCallback(
+    (dayId?: string) => {
+      if (dayId) {
+        itineraryState.setSelectedDayId(dayId);
+        const activePlan = itineraryState.activePlan;
+        if (activePlan) {
+          const day = activePlan.days.find((d) => d.id === dayId);
+          if (day) {
+            const city = day.destinationCity.toLowerCase();
+            if (
+              city.includes('huế') ||
+              city.includes('hội an') ||
+              city.includes('đà nẵng') ||
+              city.includes('phong nha')
+            ) {
+              setTargetMapRegionId('reg-central');
+            } else if (
+              city.includes('hồ chí minh') ||
+              city.includes('saigon') ||
+              city.includes('mekong') ||
+              city.includes('cần thơ')
+            ) {
+              setTargetMapRegionId('reg-saigon-south');
+            } else if (
+              city.includes('hạ long') ||
+              city.includes('vịnh') ||
+              city.includes('ba bể') ||
+              city.includes('cát bà')
+            ) {
+              setTargetMapRegionId('reg-nature');
+            } else {
+              setTargetMapRegionId('reg-hanoi-north');
+            }
+          }
+        }
+      }
+      setActiveTab('maps');
+    },
+    [itineraryState]
+  );
 
   const handleStartFreeTour = useCallback((poi?: PointOfInterest | null) => {
     if (poi) {
@@ -207,6 +253,8 @@ export default function App() {
             isOnline={isOnline}
             onNavigateToItinerary={() => setActiveTab('itinerary')}
             onStartFreeTour={handleStartFreeTour}
+            itineraryState={itineraryState}
+            initialRegionId={targetMapRegionId}
           />
         )}
 
@@ -214,8 +262,9 @@ export default function App() {
           <ItineraryPlanner
             ratesData={ratesData}
             isOnline={isOnline}
-            onNavigateToMaps={() => setActiveTab('maps')}
+            onNavigateToMaps={handleNavigateToMaps}
             onStartFreeTour={handleStartFreeTour}
+            itineraryState={itineraryState}
           />
         )}
 

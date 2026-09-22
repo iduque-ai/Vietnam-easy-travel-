@@ -45,12 +45,14 @@ import {
   speakVietnamese
 } from '../utils/storage';
 import { ItineraryDayMap } from './ItineraryDayMap';
+import { ItineraryState } from '../utils/useItineraryState';
 
 interface ItineraryPlannerProps {
   ratesData: ExchangeRatesData;
   isOnline: boolean;
-  onNavigateToMaps?: () => void;
+  onNavigateToMaps?: (dayId?: string) => void;
   onStartFreeTour?: (poi: PointOfInterest) => void;
+  itineraryState?: ItineraryState;
 }
 
 export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
@@ -58,9 +60,22 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
   isOnline,
   onNavigateToMaps,
   onStartFreeTour,
+  itineraryState,
 }) => {
-  const [plans, setPlans] = useState<ItineraryPlan[]>(getItineraryPlans);
-  const [activePlanId, setActivePlanId] = useState<string>(getActivePlanId);
+  const [internalPlans, setInternalPlans] = useState<ItineraryPlan[]>(getItineraryPlans);
+  const [internalActivePlanId, setInternalActivePlanId] = useState<string>(getActivePlanId);
+
+  const plans = itineraryState ? itineraryState.plans : internalPlans;
+  const activePlanId = itineraryState ? itineraryState.activePlanId : internalActivePlanId;
+
+  const setActivePlanId = (id: string) => {
+    if (itineraryState) {
+      itineraryState.setActivePlanId(id);
+    } else {
+      setInternalActivePlanId(id);
+      saveActivePlanId(id);
+    }
+  };
   const [expandedDayIds, setExpandedDayIds] = useState<Record<string, boolean>>({
     'day-1': true,
     'day-2': true,
@@ -133,13 +148,21 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
   };
 
   const handleSelectPlan = (id: string) => {
-    setActivePlanId(id);
-    saveActivePlanId(id);
+    if (itineraryState) {
+      itineraryState.setActivePlanId(id);
+    } else {
+      setInternalActivePlanId(id);
+      saveActivePlanId(id);
+    }
   };
 
   const updatePlansState = (updatedPlans: ItineraryPlan[]) => {
-    setPlans(updatedPlans);
-    saveItineraryPlans(updatedPlans);
+    if (itineraryState) {
+      itineraryState.updatePlans(updatedPlans);
+    } else {
+      setInternalPlans(updatedPlans);
+      saveItineraryPlans(updatedPlans);
+    }
   };
 
   const toggleDayExpanded = (dayId: string) => {
@@ -1001,6 +1024,16 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
                         📍 {dest}
                       </span>
                     ))}
+                    {onNavigateToMaps && (
+                      <button
+                        onClick={() => onNavigateToMaps()}
+                        className="px-2.5 py-1 rounded-md bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1 transition cursor-pointer shadow-xs"
+                        title="Abrir mapa unificado interactivo para seleccionar pines"
+                      >
+                        <MapPin className="w-3 h-3" />
+                        <span>Ver en Mapa Unificado</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1280,14 +1313,27 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
                             </span>
                           </div>
 
-                          <button
-                            id={`btn-add-stop-day-${day.dayNumber}`}
-                            onClick={() => handleOpenAddStopModal(day.id)}
-                            className="text-xs text-amber-800 hover:text-amber-950 font-bold flex items-center gap-1 transition cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>+ Añadir Lugar o Actividad</span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {onNavigateToMaps && (
+                              <button
+                                onClick={() => onNavigateToMaps(day.id)}
+                                className="text-xs text-stone-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 font-semibold flex items-center gap-1 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                                title={`Seleccionar pines en el mapa interactivo de ${day.destinationCity}`}
+                              >
+                                <MapPin className="w-3.5 h-3.5 text-amber-600" />
+                                <span>Elegir en Mapa</span>
+                              </button>
+                            )}
+
+                            <button
+                              id={`btn-add-stop-day-${day.dayNumber}`}
+                              onClick={() => handleOpenAddStopModal(day.id)}
+                              className="text-xs text-amber-800 hover:text-amber-950 font-bold flex items-center gap-1 transition cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>+ Añadir Lugar</span>
+                            </button>
+                          </div>
                         </div>
 
                         {day.stops.length === 0 ? (
@@ -1295,13 +1341,24 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
                             <p className="text-xs text-stone-500">
                               Aún no has añadido paradas o puntos de interés a este día.
                             </p>
-                            <button
-                              onClick={() => handleOpenAddStopModal(day.id)}
-                              className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs inline-flex items-center gap-1.5 transition cursor-pointer"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Elegir Puntos de Interés de los Mapas</span>
-                            </button>
+                            <div className="flex flex-wrap items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleOpenAddStopModal(day.id)}
+                                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs inline-flex items-center gap-1.5 transition cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Elegir de la Lista</span>
+                              </button>
+                              {onNavigateToMaps && (
+                                <button
+                                  onClick={() => onNavigateToMaps(day.id)}
+                                  className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs inline-flex items-center gap-1.5 transition cursor-pointer"
+                                >
+                                  <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>Seleccionar Pines en el Mapa</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ) : (
                           <div className="space-y-2.5">

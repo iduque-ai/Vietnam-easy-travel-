@@ -1,5 +1,36 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Download, Check, MapPin, Star, Clock, Ticket, AlertTriangle, Navigation, ExternalLink, Bookmark, BookmarkCheck, FileText, Share2, Compass, Eye, Filter, CalendarPlus, X, Sparkles, Layers, Crosshair, Locate, Map as MapIcon, Route, Globe } from 'lucide-react';
+import {
+  Download,
+  Check,
+  MapPin,
+  Star,
+  Clock,
+  Ticket,
+  AlertTriangle,
+  Navigation,
+  ExternalLink,
+  Bookmark,
+  BookmarkCheck,
+  FileText,
+  Share2,
+  Compass,
+  Eye,
+  Filter,
+  CalendarPlus,
+  X,
+  Sparkles,
+  Layers,
+  Crosshair,
+  Locate,
+  Map as MapIcon,
+  Route,
+  Globe,
+  Plus,
+  Calendar,
+  CheckCircle2,
+  ArrowRight,
+  ListFilter
+} from 'lucide-react';
 import {
   APIProvider,
   Map,
@@ -8,9 +39,17 @@ import {
   InfoWindow,
   useMap,
 } from '@vis.gl/react-google-maps';
-import { PointOfInterest, RegionMapPack, ExchangeRatesData, CurrencyCode, ItineraryPlan } from '../types';
+import { PointOfInterest, RegionMapPack, ExchangeRatesData } from '../types';
 import { REGION_PACKS, POINTS_OF_INTEREST } from '../data/pois';
-import { getDownloadedPackIds, saveDownloadedPackIds, getFavoritePoiIds, saveFavoritePoiIds, speakVietnamese, getItineraryPlans, addPoiToItineraryDay, getActivePlanId } from '../utils/storage';
+import {
+  getDownloadedPackIds,
+  saveDownloadedPackIds,
+  getFavoritePoiIds,
+  saveFavoritePoiIds,
+  speakVietnamese,
+} from '../utils/storage';
+import { ItineraryState } from '../utils/useItineraryState';
+import { MapItineraryPanel } from './MapItineraryPanel';
 
 const GOOGLE_MAPS_API_KEY =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) ||
@@ -43,6 +82,8 @@ interface DownloadableMapsProps {
   isOnline: boolean;
   onNavigateToItinerary?: () => void;
   onStartFreeTour?: (poi: PointOfInterest) => void;
+  itineraryState: ItineraryState;
+  initialRegionId?: string;
 }
 
 export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
@@ -50,19 +91,24 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
   isOnline,
   onNavigateToItinerary,
   onStartFreeTour,
+  itineraryState,
+  initialRegionId,
 }) => {
   const [downloadedPacks, setDownloadedPacks] = useState<string[]>(getDownloadedPackIds);
   const [favoritePois, setFavoritePois] = useState<string[]>(getFavoritePoiIds);
-  const [selectedRegionId, setSelectedRegionId] = useState<string>('reg-hanoi-north');
+  const [selectedRegionId, setSelectedRegionId] = useState<string>(
+    initialRegionId || 'reg-hanoi-north'
+  );
   const [selectedPoi, setSelectedPoi] = useState<PointOfInterest | null>(POINTS_OF_INTEREST[0]);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('todas');
+  const [mapPinsFilter, setMapPinsFilter] = useState<'all' | 'itinerary' | 'day'>('all');
   const [isDownloadingPack, setIsDownloadingPack] = useState<string | null>(null);
 
-  // Itinerary modal state
-  const [isAddToItineraryOpen, setIsAddToItineraryOpen] = useState<boolean>(false);
-  const [poiToAdd, setPoiToAdd] = useState<PointOfInterest | null>(null);
-  const [targetPlanId, setTargetPlanId] = useState<string>(getActivePlanId);
-  const [targetDayId, setTargetDayId] = useState<string>('');
+  // Layout view mode: unified split view vs pure map view
+  const [unifiedViewMode, setUnifiedViewMode] = useState<'split' | 'map-only'>('split');
+
+  // Quick add state
+  const [targetQuickDayId, setTargetQuickDayId] = useState<string>('');
   const [targetTimeSlot, setTargetTimeSlot] = useState<string>('Mañana 09:30');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -73,6 +119,24 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [locationToast, setLocationToast] = useState<string | null>(null);
+
+  const { activePlan, currentDay, selectedDayId, addPoiToDay, removeStopFromDay, getPoiInclusionStatus } = itineraryState;
+
+  // Sync region if prop changes
+  useEffect(() => {
+    if (initialRegionId) {
+      setSelectedRegionId(initialRegionId);
+    }
+  }, [initialRegionId]);
+
+  // Keep targetQuickDayId in sync with itineraryState.selectedDayId
+  useEffect(() => {
+    if (selectedDayId) {
+      setTargetQuickDayId(selectedDayId);
+    } else if (activePlan && activePlan.days.length > 0) {
+      setTargetQuickDayId(activePlan.days[0].id);
+    }
+  }, [selectedDayId, activePlan]);
 
   const handleLocateMe = () => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -105,47 +169,6 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
     setSelectedLocationTarget(null);
   };
 
-  const itineraryPlans = useMemo(() => {
-    return getItineraryPlans();
-  }, [isAddToItineraryOpen]);
-
-  const selectedPlan = useMemo(() => {
-    return itineraryPlans.find((p) => p.id === targetPlanId) || itineraryPlans[0];
-  }, [itineraryPlans, targetPlanId]);
-
-  const handleOpenAddToItinerary = (poi: PointOfInterest) => {
-    setPoiToAdd(poi);
-    const currentPlans = getItineraryPlans();
-    const currentActiveId = getActivePlanId();
-    const plan = currentPlans.find((p) => p.id === currentActiveId) || currentPlans[0];
-    if (plan) {
-      setTargetPlanId(plan.id);
-      const matchingDay = plan.days.find(
-        (d) =>
-          d.destinationCity.toLowerCase().includes(poi.city.toLowerCase()) ||
-          poi.city.toLowerCase().includes(d.destinationCity.toLowerCase())
-      );
-      setTargetDayId(matchingDay ? matchingDay.id : (plan.days[0]?.id || ''));
-    }
-    setIsAddToItineraryOpen(true);
-  };
-
-  const handleConfirmAddToItinerary = () => {
-    if (!poiToAdd || !targetPlanId || !targetDayId) return;
-    const success = addPoiToItineraryDay(
-      targetPlanId,
-      targetDayId,
-      poiToAdd.id,
-      targetTimeSlot,
-      poiToAdd.travelerTips
-    );
-    if (success) {
-      setIsAddToItineraryOpen(false);
-      setToastMessage(`¡"${poiToAdd.nameEs}" añadido al itinerario!`);
-      setTimeout(() => setToastMessage(null), 4000);
-    }
-  };
-
   const usdVndRate = ratesData.rates['VND'] || 25450;
   const eurRate = ratesData.rates['EUR'] || 0.92;
   const eurToVnd = usdVndRate / eurRate;
@@ -154,14 +177,28 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
     return REGION_PACKS.find((r) => r.id === selectedRegionId) || REGION_PACKS[0];
   }, [selectedRegionId]);
 
-  // Points in this region
+  // Points in this region filtered by category and mapPinsFilter
   const regionPois = useMemo(() => {
     return POINTS_OF_INTEREST.filter((poi) => {
       const inRegion = poi.regionId === selectedRegionId;
-      const matchesCategory = activeCategoryFilter === 'todas' || poi.category === activeCategoryFilter;
-      return inRegion && matchesCategory;
+      const matchesCategory =
+        activeCategoryFilter === 'todas' || poi.category === activeCategoryFilter;
+
+      if (!inRegion || !matchesCategory) return false;
+
+      if (mapPinsFilter === 'itinerary') {
+        const status = getPoiInclusionStatus(poi.id);
+        return status.inPlan;
+      }
+
+      if (mapPinsFilter === 'day') {
+        const status = getPoiInclusionStatus(poi.id);
+        return status.occurrences.some((o) => o.dayId === selectedDayId);
+      }
+
+      return true;
     });
-  }, [selectedRegionId, activeCategoryFilter]);
+  }, [selectedRegionId, activeCategoryFilter, mapPinsFilter, getPoiInclusionStatus, selectedDayId]);
 
   const isCurrentPackDownloaded = downloadedPacks.includes(selectedRegionId);
 
@@ -191,7 +228,48 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
     saveFavoritePoiIds(updated);
   };
 
-  // Generate offline downloadable text/print itinerary guide
+  // Direct 1-click add from Pin or InfoWindow
+  const handleQuickAddPoiToItinerary = (poi: PointOfInterest, targetDay?: string) => {
+    if (!activePlan) return;
+    const dayId = targetDay || targetQuickDayId || currentDay?.id || activePlan.days[0]?.id;
+    if (!dayId) return;
+
+    const res = addPoiToDay(
+      activePlan.id,
+      dayId,
+      poi.id,
+      targetTimeSlot || 'Mañana 09:30',
+      poi.travelerTips
+    );
+
+    if (res.success) {
+      const targetDayObj = activePlan.days.find((d) => d.id === dayId);
+      const dayName = targetDayObj
+        ? `Día ${targetDayObj.dayNumber} (${targetDayObj.destinationCity})`
+        : 'tu itinerario';
+      setToastMessage(`¡"${poi.nameEs}" añadido al ${dayName}!`);
+      setTimeout(() => setToastMessage(null), 3500);
+    }
+  };
+
+  // Direct 1-click remove from Pin or InfoWindow
+  const handleQuickRemovePoiFromItinerary = (poiId: string, dayId?: string) => {
+    if (!activePlan) return;
+    const status = getPoiInclusionStatus(poiId);
+    if (!status.inPlan || status.occurrences.length === 0) return;
+
+    const occ = dayId
+      ? status.occurrences.find((o) => o.dayId === dayId) || status.occurrences[0]
+      : status.occurrences[0];
+
+    const removed = removeStopFromDay(activePlan.id, occ.dayId, occ.stopId);
+    if (removed) {
+      setToastMessage(`Eliminado del Día ${occ.dayNumber} (${occ.dayCity})`);
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  };
+
+  // Generate offline downloadable text guide
   const handleDownloadOfflineGuide = (region: RegionMapPack) => {
     const poisInRegion = POINTS_OF_INTEREST.filter((p) => p.regionId === region.id);
     let content = `====================================================\n`;
@@ -206,7 +284,11 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
       content += `${index + 1}. ${poi.nameEs} (${poi.nameVi})\n`;
       content += `   • Ciudad: ${poi.city} | Categoría: ${poi.category}\n`;
       content += `   • Coordenadas GPS: ${poi.lat}, ${poi.lng}\n`;
-      content += `   • Entrada: ${poi.ticketVnd > 0 ? `${poi.ticketVnd.toLocaleString('es-ES')} ₫ (≈ ${(poi.ticketVnd / eurToVnd).toFixed(2)} €)` : 'Gratis'}\n`;
+      content += `   • Entrada: ${
+        poi.ticketVnd > 0
+          ? `${poi.ticketVnd.toLocaleString('es-ES')} ₫ (≈ ${(poi.ticketVnd / eurToVnd).toFixed(2)} €)`
+          : 'Gratis'
+      }\n`;
       content += `   • Horario: ${poi.openingHours}\n`;
       content += `   • Mejor momento: ${poi.bestTime}\n`;
       content += `   • Consejos: ${poi.travelerTips}\n`;
@@ -230,72 +312,96 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  // Selected POI inclusion state
+  const selectedPoiInclusion = selectedPoi ? getPoiInclusionStatus(selectedPoi.id) : null;
+
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto">
       {/* Region Selector & Offline Pack Status */}
-      <div className="bg-white rounded-2xl p-5 border border-stone-200 shadow-sm space-y-4">
+      <div className="bg-white rounded-2xl p-5 border border-stone-200 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                Vista Unificada: Mapa + Itinerario
+              </span>
+            </div>
+            <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2 mt-1">
               <Compass className="w-5 h-5 text-amber-600" />
-              <span>Mapas Descargables por Regiones de Vietnam</span>
+              <span>Mapas & Selección Directa de Paradas</span>
             </h2>
             <p className="text-xs text-stone-500 mt-0.5">
-              Guarda los mapas y lugares clave en tu dispositivo para navegar y consultar sin conexión a internet.
+              Haz clic en cualquier pin del mapa para sumarlo en un solo toque a tu itinerario activo.
             </p>
           </div>
 
-          {/* Download Current Pack Button */}
-          <div className="flex items-center gap-2 self-stretch sm:self-auto">
+          {/* Download & View Controls */}
+          <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
             <button
-              onClick={() => handleToggleDownloadPack(selectedRegionId)}
-              disabled={isDownloadingPack === selectedRegionId}
-              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-2 cursor-pointer ${
-                isCurrentPackDownloaded
-                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
-                  : 'bg-amber-500 hover:bg-amber-400 text-stone-950 shadow-sm'
+              onClick={() =>
+                setUnifiedViewMode(unifiedViewMode === 'split' ? 'map-only' : 'split')
+              }
+              className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border ${
+                unifiedViewMode === 'split'
+                  ? 'bg-amber-50 text-amber-950 border-amber-300 shadow-2xs'
+                  : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
               }`}
+              title="Alternar panel de itinerario en mapa"
             >
-              {isCurrentPackDownloaded ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span>Guardado Offline</span>
-                </>
-              ) : (
-                <>
-                  <Download className={`w-4 h-4 ${isDownloadingPack === selectedRegionId ? 'animate-bounce' : ''}`} />
-                  <span>{isDownloadingPack === selectedRegionId ? 'Descargando...' : `Descargar Pack (${currentRegion.sizeMb})`}</span>
-                </>
-              )}
+              <Calendar className="w-3.5 h-3.5 text-amber-600" />
+              <span>
+                {unifiedViewMode === 'split' ? 'Itinerario Acoplado' : 'Mostrar Itinerario'}
+              </span>
             </button>
 
             <button
-              onClick={() => handleDownloadOfflineGuide(currentRegion)}
-              className="p-2 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 transition cursor-pointer"
-              title="Descargar Ficha / Guía en texto para imprimir o llevar en notas"
+              onClick={() => handleToggleDownloadPack(selectedRegionId)}
+              disabled={isDownloadingPack !== null}
+              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${
+                isCurrentPackDownloaded
+                  ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 hover:bg-emerald-100'
+                  : 'bg-amber-500 hover:bg-amber-600 text-stone-950'
+              }`}
             >
-              <FileText className="w-4 h-4" />
+              {isDownloadingPack === selectedRegionId ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
+                  <span>Guardando...</span>
+                </>
+              ) : isCurrentPackDownloaded ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Descargado ({currentRegion.sizeMb})</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Guardar Offline ({currentRegion.sizeMb})</span>
+                </>
+              )}
             </button>
           </div>
         </div>
 
         {/* Region Pills */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           {REGION_PACKS.map((pack) => {
-            const isDownloaded = downloadedPacks.includes(pack.id);
             const isSelected = selectedRegionId === pack.id;
+            const isDownloaded = downloadedPacks.includes(pack.id);
             return (
               <button
                 key={pack.id}
                 onClick={() => {
                   setSelectedRegionId(pack.id);
+                  setSelectedLocationTarget(null);
                   const firstPoi = POINTS_OF_INTEREST.find((p) => p.regionId === pack.id);
                   if (firstPoi) setSelectedPoi(firstPoi);
                 }}
-                className={`p-3 rounded-xl text-left border transition cursor-pointer flex flex-col justify-between ${
+                className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
                   isSelected
-                    ? 'border-amber-500 bg-amber-50/60 shadow-xs'
-                    : 'border-stone-200 bg-stone-50/50 hover:bg-stone-100/70'
+                    ? 'border-amber-500 bg-amber-50/70 ring-1 ring-amber-500 shadow-2xs'
+                    : 'border-stone-200 bg-stone-50/60 hover:bg-white hover:border-stone-300'
                 }`}
               >
                 <div>
@@ -304,7 +410,10 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                       {pack.vietnameseName}
                     </span>
                     {isDownloaded && (
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" title="Guardado sin conexión" />
+                      <span
+                        className="w-2 h-2 rounded-full bg-emerald-500"
+                        title="Guardado sin conexión"
+                      />
                     )}
                   </div>
                   <div className="font-bold text-sm text-stone-900 mt-1 line-clamp-1">
@@ -320,9 +429,28 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
         </div>
       </div>
 
+      {/* Unified Itinerary Panel (Docked Above/Alongside Map) */}
+      {unifiedViewMode === 'split' && (
+        <MapItineraryPanel
+          itineraryState={itineraryState}
+          eurToVnd={eurToVnd}
+          onLocatePoi={(poi) => {
+            setSelectedPoi(poi);
+            setSelectedLocationTarget({ lat: poi.lat, lng: poi.lng });
+            setInfoWindowOpen(true);
+            if (poi.regionId !== selectedRegionId) {
+              setSelectedRegionId(poi.regionId);
+            }
+          }}
+          onNavigateToItinerary={onNavigateToItinerary}
+          onQuickAddPoi={(poi) => handleQuickAddPoiToItinerary(poi)}
+          availableRegionPois={regionPois}
+        />
+      )}
+
       {/* Main Map Viewer & POIs Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT / TOP: Interactive Vector Map Canvas & Highlights */}
+        {/* LEFT / TOP: Interactive Map Canvas & Highlights */}
         <div className="lg:col-span-7 space-y-4">
           {/* Interactive Google Map & Vector Map Container */}
           <div className="bg-stone-900 text-stone-100 rounded-2xl p-4 sm:p-5 border border-stone-800 shadow-md relative overflow-hidden space-y-3">
@@ -376,7 +504,9 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                   title="Centrar en mi ubicación GPS"
                 >
                   <Locate className={`w-3.5 h-3.5 text-sky-400 ${isLocating ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">{isLocating ? 'Buscando...' : 'Mi Ubicación'}</span>
+                  <span className="hidden sm:inline">
+                    {isLocating ? 'Buscando...' : 'Mi Ubicación'}
+                  </span>
                 </button>
 
                 <button
@@ -399,7 +529,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
 
             {/* Map Canvas: Google Maps OR Vector Map */}
             {mapDisplayMode === 'google' ? (
-              <div className="relative w-full h-[420px] rounded-xl overflow-hidden border border-stone-800 bg-stone-950 shadow-inner">
+              <div className="relative w-full h-[450px] rounded-xl overflow-hidden border border-stone-800 bg-stone-950 shadow-inner">
                 <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['marker']}>
                   <Map
                     mapId="DEMO_MAP_ID"
@@ -423,11 +553,30 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     {/* Markers for Points of Interest in current region */}
                     {regionPois.map((poi, idx) => {
                       const isSelected = selectedPoi?.id === poi.id;
+                      const inclusion = getPoiInclusionStatus(poi.id);
+                      const inCurrentDay = inclusion.occurrences.some(
+                        (o) => o.dayId === selectedDayId
+                      );
+
+                      // Determine pin background and badge based on itinerary inclusion
+                      let pinBg = '#ef4444'; // default red
+                      let glyphText = `${idx + 1}`;
+
+                      if (inCurrentDay) {
+                        pinBg = '#059669'; // Emerald: in current selected day
+                        glyphText = `✓`;
+                      } else if (inclusion.inPlan) {
+                        pinBg = '#d97706'; // Amber: in itinerary (other day)
+                        glyphText = `D${inclusion.occurrences[0].dayNumber}`;
+                      }
+
                       return (
                         <AdvancedMarker
                           key={poi.id}
                           position={{ lat: poi.lat, lng: poi.lng }}
-                          title={poi.nameEs}
+                          title={`${poi.nameEs} ${
+                            inclusion.inPlan ? `(En Itinerario Día ${inclusion.occurrences[0].dayNumber})` : ''
+                          }`}
                           onClick={() => {
                             setSelectedPoi(poi);
                             setSelectedLocationTarget({ lat: poi.lat, lng: poi.lng });
@@ -435,12 +584,14 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                           }}
                         >
                           <Pin
-                            background={isSelected ? '#d97706' : '#ef4444'}
+                            background={isSelected ? '#f59e0b' : pinBg}
                             borderColor="#ffffff"
                             glyphColor="#ffffff"
-                            scale={isSelected ? 1.3 : 1.0}
+                            scale={isSelected ? 1.35 : inclusion.inPlan ? 1.15 : 1.0}
                           >
-                            <span className="text-[10px] font-black text-white">{idx + 1}</span>
+                            <span className="text-[10px] font-black text-white font-mono">
+                              {glyphText}
+                            </span>
                           </Pin>
                         </AdvancedMarker>
                       );
@@ -456,34 +607,112 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                       </AdvancedMarker>
                     )}
 
-                    {/* InfoWindow for the selected POI */}
+                    {/* InfoWindow for the selected POI with direct Add-to-Itinerary actions */}
                     {infoWindowOpen && selectedPoi && (
                       <InfoWindow
                         position={{ lat: selectedPoi.lat, lng: selectedPoi.lng }}
                         onCloseClick={() => setInfoWindowOpen(false)}
                         pixelOffset={[0, -38]}
                       >
-                        <div className="p-1 min-w-[210px] max-w-[270px] text-stone-900 font-sans">
-                          <div className="flex items-center justify-between gap-1 mb-1">
+                        <div className="p-1 min-w-[240px] max-w-[290px] text-stone-900 font-sans space-y-2">
+                          <div className="flex items-center justify-between gap-1">
                             <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">
                               {selectedPoi.city} • {selectedPoi.category}
                             </span>
                             <span className="text-[10px] font-semibold text-emerald-700">
-                              {selectedPoi.ticketVnd > 0 ? `${(selectedPoi.ticketVnd / 1000).toLocaleString('es-ES')}k ₫` : 'Gratis'}
+                              {selectedPoi.ticketVnd > 0
+                                ? `${(selectedPoi.ticketVnd / 1000).toLocaleString('es-ES')}k ₫`
+                                : 'Gratis'}
                             </span>
                           </div>
-                          <h4 className="font-bold text-xs text-stone-900 line-clamp-1">{selectedPoi.nameEs}</h4>
-                          <div className="text-[11px] text-amber-800 font-medium line-clamp-1">{selectedPoi.nameVi}</div>
-                          <p className="text-[11px] text-stone-600 mt-1 line-clamp-2 leading-tight">{selectedPoi.description}</p>
 
-                          <div className="mt-2 pt-2 border-t border-stone-200 flex items-center justify-between gap-2 text-[11px]">
-                            <button
-                              onClick={() => handleOpenAddToItinerary(selectedPoi)}
-                              className="font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1 cursor-pointer"
-                            >
-                              <CalendarPlus className="w-3 h-3" />
-                              <span>Itinerario</span>
-                            </button>
+                          <div>
+                            <h4 className="font-bold text-xs text-stone-900 line-clamp-1">
+                              {selectedPoi.nameEs}
+                            </h4>
+                            <div className="text-[11px] text-amber-800 font-medium line-clamp-1">
+                              {selectedPoi.nameVi}
+                            </div>
+                          </div>
+
+                          <p className="text-[11px] text-stone-600 line-clamp-2 leading-tight">
+                            {selectedPoi.description}
+                          </p>
+
+                          {/* Direct Itinerary Selection Action on the Pin */}
+                          {(() => {
+                            const status = getPoiInclusionStatus(selectedPoi.id);
+                            const matchingOcc = status.occurrences.find(
+                              (o) => o.dayId === selectedDayId
+                            );
+
+                            if (status.inPlan) {
+                              return (
+                                <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-emerald-900 flex items-center gap-1 text-[11px]">
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                      <span>
+                                        Programado en Día {status.occurrences[0].dayNumber} ({status.occurrences[0].dayCity})
+                                      </span>
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between pt-1 border-t border-emerald-200/60">
+                                    <button
+                                      onClick={() => handleQuickRemovePoiFromItinerary(selectedPoi.id)}
+                                      className="text-[10px] text-rose-700 hover:text-rose-900 font-semibold underline cursor-pointer"
+                                    >
+                                      Quitar de este día
+                                    </button>
+                                    {activePlan && activePlan.days.length > 1 && (
+                                      <button
+                                        onClick={() => handleQuickAddPoiToItinerary(selectedPoi)}
+                                        className="text-[10px] text-amber-800 hover:text-amber-950 font-bold cursor-pointer"
+                                      >
+                                        + Sumar a otro día
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="space-y-1.5 pt-1 border-t border-stone-200">
+                                <button
+                                  onClick={() => handleQuickAddPoiToItinerary(selectedPoi)}
+                                  className="w-full py-1.5 px-2 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>
+                                    Añadir a Día {currentDay?.dayNumber || 1} ({currentDay?.destinationCity || 'Itinerario'})
+                                  </span>
+                                </button>
+
+                                {activePlan && activePlan.days.length > 1 && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[10px] text-stone-500 shrink-0">O en:</span>
+                                    <select
+                                      value={targetQuickDayId}
+                                      onChange={(e) => {
+                                        setTargetQuickDayId(e.target.value);
+                                        handleQuickAddPoiToItinerary(selectedPoi, e.target.value);
+                                      }}
+                                      className="text-[10px] bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 w-full text-stone-800 focus:outline-none cursor-pointer"
+                                    >
+                                      {activePlan.days.map((d) => (
+                                        <option key={d.id} value={d.id}>
+                                          Día {d.dayNumber}: {d.destinationCity}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          <div className="pt-1.5 border-t border-stone-100 flex items-center justify-between text-[11px]">
                             <a
                               href={`https://www.google.com/maps/dir/?api=1&destination=${selectedPoi.lat},${selectedPoi.lng}`}
                               target="_blank"
@@ -493,6 +722,12 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                               <Navigation className="w-3 h-3" />
                               <span>Ruta</span>
                             </a>
+                            <button
+                              onClick={() => speakVietnamese(selectedPoi.nameVi)}
+                              className="text-stone-500 hover:text-stone-900 font-medium flex items-center gap-1 cursor-pointer"
+                            >
+                              <span>Pronunciar</span>
+                            </button>
                           </div>
                         </div>
                       </InfoWindow>
@@ -503,14 +738,15 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                 {/* Floating map helper overlay */}
                 <div className="absolute bottom-2 left-2 bg-stone-900/90 backdrop-blur-xs px-2.5 py-1 rounded-md text-[10px] text-stone-300 border border-stone-800 shadow-sm pointer-events-none z-10 flex items-center gap-1.5">
                   <MapPin className="w-3 h-3 text-amber-400 shrink-0" />
-                  <span>Toca cualquier marcador numerado para ver detalles, tarifas y ruta</span>
+                  <span>
+                    Verde: En día activo • Ámbar: En itinerario • Rojo: Por explorar
+                  </span>
                 </div>
               </div>
             ) : (
-              /* Interactive SVG Vietnam Map Representation (Offline mode) */
-              <div className="relative w-full h-[420px] bg-stone-950/80 rounded-xl border border-stone-800 p-2 overflow-hidden flex items-center justify-center">
+              /* Stylized Vector Map representation for offline fallback */
+              <div className="relative w-full h-[450px] bg-stone-950/80 rounded-xl border border-stone-800 p-2 overflow-hidden flex items-center justify-center">
                 <svg viewBox="0 0 500 400" className="w-full h-full">
-                  {/* Coastal coastline backdrop representation */}
                   <path
                     d="M 120,40 Q 200,60 260,80 T 320,130 Q 340,180 320,240 T 260,320 Q 220,380 160,390"
                     fill="none"
@@ -519,25 +755,6 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     strokeLinecap="round"
                     opacity="0.4"
                   />
-
-                  {/* Ocean Waves */}
-                  <path
-                    d="M 380,100 Q 400,110 420,100 T 460,100"
-                    fill="none"
-                    stroke="#1e293b"
-                    strokeWidth="2"
-                  />
-                  <path
-                    d="M 360,200 Q 380,210 400,200 T 440,200"
-                    fill="none"
-                    stroke="#1e293b"
-                    strokeWidth="2"
-                  />
-                  <text x="370" y="160" fill="#475569" fontSize="11" fontStyle="italic">
-                    Biển Đông (Mar de China Meridional)
-                  </text>
-
-                  {/* Vietnam Country Contour Stylized Path */}
                   <path
                     d="M 140,50 L 220,50 L 260,85 L 230,115 L 260,140 L 290,175 L 300,210 L 270,260 L 240,310 L 210,360 L 160,380 L 170,350 L 210,320 L 240,260 L 260,210 L 240,165 L 200,125 L 140,90 Z"
                     fill="#1c1917"
@@ -546,21 +763,6 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     strokeDasharray="4 2"
                   />
 
-                  {/* Region Highlight Zone */}
-                  {selectedRegionId === 'reg-hanoi-north' && (
-                    <ellipse cx="200" cy="80" rx="60" ry="35" fill="rgba(245, 158, 11, 0.15)" stroke="#f59e0b" strokeWidth="1.5" />
-                  )}
-                  {selectedRegionId === 'reg-central' && (
-                    <ellipse cx="280" cy="180" rx="45" ry="35" fill="rgba(245, 158, 11, 0.15)" stroke="#f59e0b" strokeWidth="1.5" />
-                  )}
-                  {selectedRegionId === 'reg-saigon-south' && (
-                    <ellipse cx="210" cy="330" rx="55" ry="40" fill="rgba(245, 158, 11, 0.15)" stroke="#f59e0b" strokeWidth="1.5" />
-                  )}
-                  {selectedRegionId === 'reg-nature' && (
-                    <ellipse cx="250" cy="140" rx="40" ry="30" fill="rgba(245, 158, 11, 0.15)" stroke="#f59e0b" strokeWidth="1.5" />
-                  )}
-
-                  {/* Interactive Points on Map */}
                   {regionPois.map((poi, idx) => {
                     let cx = 200 + (idx % 3) * 35 - 35;
                     let cy = 80 + Math.floor(idx / 3) * 25 - 20;
@@ -577,6 +779,14 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     }
 
                     const isSelected = selectedPoi?.id === poi.id;
+                    const inclusion = getPoiInclusionStatus(poi.id);
+                    const inCurrentDay = inclusion.occurrences.some(
+                      (o) => o.dayId === selectedDayId
+                    );
+
+                    let fillColor = '#ef4444';
+                    if (inCurrentDay) fillColor = '#059669';
+                    else if (inclusion.inPlan) fillColor = '#d97706';
 
                     return (
                       <g
@@ -585,13 +795,19 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                         className="cursor-pointer transition-all duration-200"
                       >
                         {isSelected && (
-                          <circle cx={cx} cy={cy} r="16" fill="rgba(245, 158, 11, 0.3)" className="animate-ping" />
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r="16"
+                            fill="rgba(245, 158, 11, 0.3)"
+                            className="animate-ping"
+                          />
                         )}
                         <circle
                           cx={cx}
                           cy={cy}
-                          r={isSelected ? "9" : "6"}
-                          fill={isSelected ? "#f59e0b" : "#ef4444"}
+                          r={isSelected ? '9' : '6'}
+                          fill={isSelected ? '#f59e0b' : fillColor}
                           stroke="#ffffff"
                           strokeWidth="2"
                         />
@@ -599,11 +815,11 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                           x={cx}
                           y={cy - 11}
                           textAnchor="middle"
-                          fill={isSelected ? "#fbbf24" : "#e2e8f0"}
+                          fill={isSelected ? '#fbbf24' : '#e2e8f0'}
                           fontSize="9"
                           fontWeight="bold"
                         >
-                          {idx + 1}
+                          {inCurrentDay ? '✓' : idx + 1}
                         </text>
                       </g>
                     );
@@ -611,48 +827,90 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                 </svg>
 
                 <div className="absolute bottom-2 left-2 bg-stone-900/90 backdrop-blur-xs px-2.5 py-1 rounded-md text-[10px] text-stone-400 border border-stone-800">
-                  📍 Modo esquemático offline activo
+                  📍 Modo esquemático activo • Toca pines para añadir a tu itinerario
                 </div>
               </div>
             )}
 
-            {/* Category Filter Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pt-3 text-xs no-scrollbar">
-              <span className="text-stone-400 text-xs flex items-center gap-1 shrink-0">
-                <Filter className="w-3.5 h-3.5" /> Filtrar:
-              </span>
-              {[
-                { id: 'todas', label: 'Todos' },
-                { id: 'Monumento', label: 'Monumentos' },
-                { id: 'Cultura', label: 'Cultura' },
-                { id: 'Naturaleza', label: 'Naturaleza' },
-                { id: 'Mercado', label: 'Mercados' },
-              ].map((cat) => (
+            {/* Map Pins Filter: All vs Itinerary vs Day */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-stone-800 text-xs">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <span className="text-stone-400 text-xs flex items-center gap-1 shrink-0">
+                  <ListFilter className="w-3.5 h-3.5" /> Pines:
+                </span>
                 <button
-                  key={cat.id}
-                  onClick={() => setActiveCategoryFilter(cat.id)}
+                  onClick={() => setMapPinsFilter('all')}
                   className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition cursor-pointer ${
-                    activeCategoryFilter === cat.id
+                    mapPinsFilter === 'all'
                       ? 'bg-amber-500 text-stone-950 font-bold'
                       : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
                   }`}
                 >
-                  {cat.label}
+                  Todos los lugares
                 </button>
-              ))}
+                <button
+                  onClick={() => setMapPinsFilter('itinerary')}
+                  className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
+                    mapPinsFilter === 'itinerary'
+                      ? 'bg-amber-500 text-stone-950 font-bold'
+                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
+                  }`}
+                >
+                  <span>★ Mi Itinerario</span>
+                </button>
+                <button
+                  onClick={() => setMapPinsFilter('day')}
+                  className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
+                    mapPinsFilter === 'day'
+                      ? 'bg-amber-500 text-stone-950 font-bold'
+                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
+                  }`}
+                >
+                  <span>Día {currentDay?.dayNumber || 1}</span>
+                </button>
+              </div>
+
+              {/* Category Filter Chips */}
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                {[
+                  { id: 'todas', label: 'Todo' },
+                  { id: 'Monumento', label: 'Monumentos' },
+                  { id: 'Cultura', label: 'Cultura' },
+                  { id: 'Naturaleza', label: 'Naturaleza' },
+                  { id: 'Mercado', label: 'Mercados' },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategoryFilter(cat.id)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] whitespace-nowrap transition cursor-pointer ${
+                      activeCategoryFilter === cat.id
+                        ? 'bg-stone-100 text-stone-950 font-bold'
+                        : 'text-stone-400 hover:text-white'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* List of Region Points with Quick Cards */}
           <div className="space-y-2">
-            <div className="text-xs font-bold text-stone-500 uppercase tracking-wider">
-              Lugares Clave en {currentRegion.name} ({regionPois.length}):
+            <div className="text-xs font-bold text-stone-500 uppercase tracking-wider flex items-center justify-between">
+              <span>Lugares en {currentRegion.name} ({regionPois.length}):</span>
+              <span className="text-stone-400 font-normal">Toca para centrar en mapa</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {regionPois.map((poi, idx) => {
                 const isSelected = selectedPoi?.id === poi.id;
                 const isFav = favoritePois.includes(poi.id);
+                const status = getPoiInclusionStatus(poi.id);
+                const inCurrentDay = status.occurrences.some(
+                  (o) => o.dayId === selectedDayId
+                );
+
                 return (
                   <div
                     key={poi.id}
@@ -663,7 +921,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     }}
                     className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
                       isSelected
-                        ? 'border-amber-500 bg-amber-50/70 ring-1 ring-amber-500 shadow-xs'
+                        ? 'border-amber-500 bg-amber-50/70 ring-1 ring-amber-500 shadow-2xs'
                         : 'border-stone-200 bg-white hover:border-amber-300'
                     }`}
                   >
@@ -672,20 +930,36 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-100 text-stone-700">
                           #{idx + 1} {poi.category}
                         </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleFavorite(poi.id);
-                          }}
-                          className="text-stone-400 hover:text-amber-500 transition cursor-pointer"
-                          title="Guardar en favoritos"
-                        >
-                          {isFav ? (
-                            <BookmarkCheck className="w-4 h-4 text-amber-500 fill-amber-500" />
-                          ) : (
-                            <Bookmark className="w-4 h-4" />
+
+                        <div className="flex items-center gap-1.5">
+                          {status.inPlan && (
+                            <span
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                                inCurrentDay
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Día {status.occurrences[0].dayNumber}</span>
+                            </span>
                           )}
-                        </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleFavorite(poi.id);
+                            }}
+                            className="text-stone-400 hover:text-amber-500 transition cursor-pointer"
+                            title="Guardar en favoritos"
+                          >
+                            {isFav ? (
+                              <BookmarkCheck className="w-4 h-4 text-amber-500 fill-amber-500" />
+                            ) : (
+                              <Bookmark className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
 
                       <h4 className="font-bold text-sm text-stone-900 mt-1 line-clamp-1">
@@ -698,22 +972,35 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
 
                     <div className="flex items-center justify-between text-[11px] text-stone-500 mt-2 pt-2 border-t border-stone-100">
                       <span>
-                        {poi.ticketVnd > 0 ? `${(poi.ticketVnd / 1000).toLocaleString('es-ES')}k ₫` : 'Gratis'}
+                        {poi.ticketVnd > 0
+                          ? `${(poi.ticketVnd / 1000).toLocaleString('es-ES')}k ₫`
+                          : 'Gratis'}
                       </span>
-                      <div className="flex items-center gap-2">
+
+                      {/* 1-Click Itinerary Button */}
+                      {status.inPlan ? (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleOpenAddToItinerary(poi);
+                            handleQuickRemovePoiFromItinerary(poi.id);
                           }}
-                          className="text-stone-500 hover:text-amber-800 font-medium flex items-center gap-1 transition cursor-pointer"
-                          title="Añadir a mi itinerario"
+                          className="text-rose-600 hover:text-rose-800 font-medium text-[11px] underline cursor-pointer"
                         >
-                          <CalendarPlus className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Itinerario</span>
+                          Quitar
                         </button>
-                        <span className="text-amber-700 font-medium">Ver detalles →</span>
-                      </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleQuickAddPoiToItinerary(poi);
+                          }}
+                          className="text-amber-700 hover:text-amber-900 font-bold flex items-center gap-1 transition cursor-pointer"
+                          title="Añadir a mi itinerario activo"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>+ Sumar a Día {currentDay?.dayNumber || 1}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -767,6 +1054,132 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     <Navigation className="w-4 h-4 text-amber-700" />
                   </button>
                 </div>
+              </div>
+
+              {/* UNIFIED ITINERARY QUICK ACTIONS CARD */}
+              <div className="bg-stone-50/80 p-4 rounded-xl border border-stone-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+                    <CalendarPlus className="w-4 h-4 text-amber-600" />
+                    <span>Tu Itinerario Activo</span>
+                  </span>
+                  {selectedPoiInclusion?.inPlan && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      <span>Ya incluido</span>
+                    </span>
+                  )}
+                </div>
+
+                {selectedPoiInclusion?.inPlan ? (
+                  <div className="space-y-2">
+                    <div className="text-xs text-stone-700">
+                      Este lugar está programado en:
+                      {selectedPoiInclusion.occurrences.map((occ) => (
+                        <div
+                          key={occ.stopId}
+                          className="flex items-center justify-between p-2 rounded-lg bg-white border border-stone-200 mt-1"
+                        >
+                          <div>
+                            <span className="font-bold text-xs text-stone-900">
+                              Día {occ.dayNumber}: {occ.dayCity}
+                            </span>
+                            {occ.timeSlot && (
+                              <span className="text-[10px] text-stone-500 block">
+                                Horario: {occ.timeSlot}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() =>
+                              removeStopFromDay(activePlan!.id, occ.dayId, occ.stopId)
+                            }
+                            className="text-xs text-rose-600 hover:text-rose-800 font-semibold underline cursor-pointer"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Button to also add to another day */}
+                    {activePlan && activePlan.days.length > 1 && (
+                      <div className="pt-2 border-t border-stone-200">
+                        <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                          Añadir también a otro día:
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={targetQuickDayId}
+                            onChange={(e) => setTargetQuickDayId(e.target.value)}
+                            className="flex-1 px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs text-stone-900 focus:outline-none"
+                          >
+                            {activePlan.days.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                Día {d.dayNumber}: {d.destinationCity}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() =>
+                              handleQuickAddPoiToItinerary(selectedPoi, targetQuickDayId)
+                            }
+                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs rounded-lg transition cursor-pointer shrink-0"
+                          >
+                            + Añadir
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                          Día de destino:
+                        </label>
+                        <select
+                          value={targetQuickDayId}
+                          onChange={(e) => setTargetQuickDayId(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        >
+                          {activePlan?.days.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              Día {d.dayNumber}: {d.destinationCity}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                          Momento sugerido:
+                        </label>
+                        <select
+                          value={targetTimeSlot}
+                          onChange={(e) => setTargetTimeSlot(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        >
+                          <option value="Mañana 09:30">Mañana 09:30</option>
+                          <option value="Mediodía 12:30">Mediodía 12:30</option>
+                          <option value="Tarde 15:30">Tarde 15:30</option>
+                          <option value="Puesta de sol 17:30">Puesta de sol 17:30</option>
+                          <option value="Noche 19:30">Noche 19:30</option>
+                          <option value="Horario libre">Horario libre</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleQuickAddPoiToItinerary(selectedPoi, targetQuickDayId)}
+                      className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-xs"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Añadir a mi Itinerario Activo</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Practical details (Price & Hours) */}
@@ -844,7 +1257,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                 </span>
               </div>
 
-              {/* Actions: Add to Itinerary, Free Tour, and Google Maps */}
+              {/* Actions: Free Tour and Google Maps */}
               <div className="pt-2 space-y-2">
                 {onStartFreeTour && (
                   <button
@@ -856,15 +1269,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                   </button>
                 )}
 
-                <button
-                  onClick={() => handleOpenAddToItinerary(selectedPoi)}
-                  className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-xs"
-                >
-                  <CalendarPlus className="w-4 h-4" />
-                  <span>Añadir a mi Itinerario</span>
-                </button>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <a
                     href={`https://www.google.com/maps/dir/?api=1&destination=${selectedPoi.lat},${selectedPoi.lng}`}
                     target="_blank"
@@ -872,7 +1277,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     className="w-full py-2 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 transition text-center"
                   >
                     <Route className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                    <span>Cómo llegar (Ruta)</span>
+                    <span>Cómo llegar</span>
                   </a>
 
                   <a
@@ -882,7 +1287,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     className="w-full py-2 px-3 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition text-center"
                   >
                     <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                    <span>Abrir en Maps</span>
+                    <span>Abrir Maps</span>
                   </a>
                 </div>
               </div>
@@ -908,119 +1313,6 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
               Ver Itinerario →
             </button>
           )}
-        </div>
-      )}
-
-      {/* Modal: Add POI to Itinerary */}
-      {isAddToItineraryOpen && poiToAdd && (
-        <div className="fixed inset-0 z-50 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-stone-200 overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50">
-              <div className="flex items-center gap-2">
-                <CalendarPlus className="w-5 h-5 text-amber-600" />
-                <h3 className="font-bold text-base text-stone-900">Añadir al Itinerario</h3>
-              </div>
-              <button
-                onClick={() => setIsAddToItineraryOpen(false)}
-                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-5 space-y-3.5">
-              {/* Target POI summary */}
-              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">
-                  {poiToAdd.city} • {poiToAdd.category}
-                </span>
-                <h4 className="font-bold text-sm text-stone-900 mt-1">{poiToAdd.nameEs}</h4>
-                <div className="text-xs text-amber-900">{poiToAdd.nameVi}</div>
-                <div className="text-[11px] text-stone-500 mt-1">
-                  Entrada: {poiToAdd.ticketVnd > 0 ? `${(poiToAdd.ticketVnd / 1000).toLocaleString('es-ES')}k ₫` : 'Gratis'}
-                </div>
-              </div>
-
-              {/* Select Plan */}
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Seleccionar Itinerario:
-                </label>
-                <select
-                  value={targetPlanId}
-                  onChange={(e) => {
-                    const newPlanId = e.target.value;
-                    setTargetPlanId(newPlanId);
-                    const plan = itineraryPlans.find((p) => p.id === newPlanId);
-                    if (plan && plan.days.length > 0) {
-                      setTargetDayId(plan.days[0].id);
-                    }
-                  }}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                >
-                  {itineraryPlans.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title} ({p.days.length} días)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Select Day */}
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Seleccionar Día / Destino:
-                </label>
-                {selectedPlan && selectedPlan.days.length > 0 ? (
-                  <select
-                    value={targetDayId}
-                    onChange={(e) => setTargetDayId(e.target.value)}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    {selectedPlan.days.map((day) => (
-                      <option key={day.id} value={day.id}>
-                        Día {day.dayNumber}: {day.destinationCity} - {day.title}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="text-xs text-rose-600">Este plan no tiene días creados aún.</div>
-                )}
-              </div>
-
-              {/* Time slot */}
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Momento del día / Horario sugerido:
-                </label>
-                <input
-                  type="text"
-                  value={targetTimeSlot}
-                  onChange={(e) => setTargetTimeSlot(e.target.value)}
-                  placeholder="Ej: Mañana 09:30, Tarde, Puesta de sol..."
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-stone-200 flex items-center justify-end gap-2 bg-stone-50">
-              <button
-                type="button"
-                onClick={() => setIsAddToItineraryOpen(false)}
-                className="px-4 py-2 rounded-xl text-stone-600 hover:bg-stone-200 text-xs font-medium transition cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmAddToItinerary}
-                disabled={!targetDayId}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-stone-950 font-bold text-xs transition cursor-pointer"
-              >
-                Confirmar y Añadir
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
