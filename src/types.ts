@@ -12,13 +12,14 @@ export interface ExchangeRatesData {
 
 export interface PhraseItem {
   id: string;
-  category: 'compras' | 'comida' | 'transporte' | 'emergencias' | 'cortesia' | 'numeros';
+  category: 'compras' | 'comida' | 'transporte' | 'emergencias' | 'cortesia' | 'numeros' | 'guardadas';
   spanish: string;
   vietnamese: string;
   phonetic: string;
   toneTip?: string;
   audioText?: string;
   priority?: boolean;
+  isCustom?: boolean;
 }
 
 export interface DishItem {

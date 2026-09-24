@@ -329,7 +329,7 @@ export const DEFAULT_ALLERGY_CARDS: AllergyCardData[] = [
     id: 'card-vegetarian-strict',
     title: 'Vegetariano / Vegano Estricto (Ăn Chay)',
     personName: 'Dieta Vegetariana',
-    conditions: ['Sin carne ni pollo', 'Sin pescado ni marisco', 'Sin salsa de pescado tradicional', 'Sin grasa animal'],
+    conditions: ['Carne y pollo', 'Pescado y marisco', 'Salsa de pescado tradicional', 'Grasa animal'],
     vietnameseLarge: 'TÔI ĂN CHAY (THANH TỊNH). Xin KHÔNG CHO: thịt, cá, hải sản, mỡ động vật và TUYỆT ĐỐI KHÔNG DÙNG NƯỚC MẮM thường. Xin dùng xì dầu (nước tương) hoặc nước mắm chay. Cảm ơn bạn!',
     phonetic: 'Toi an chay thanh tinh. Xin khong cho thit, ca, hai san, nuoc mam ca...',
     allowedFoods: ['Đậu phụ / Đậu hũ (Tofu)', 'Rau xào xì dầu', 'Nấm các loại (Setas)', 'Cơm trắng', 'Bún chay'],
@@ -433,6 +433,65 @@ export function deleteSavedFreeTour(placeName: string): FreeTourData[] {
     localStorage.setItem(SAVED_TOURS_KEY, JSON.stringify(updated));
   } catch (e) {
     console.error('Failed deleting free tour from localStorage:', e);
+  }
+  return updated;
+}
+
+const CUSTOM_TRANSLATION_CARDS_KEY = 'vietnam_travel_custom_translation_cards_v1';
+
+export interface CustomTranslationCard {
+  id: string;
+  label: string;
+  category: 'precios' | 'comida' | 'transporte' | 'cortesia' | 'emergencia';
+  en: string;
+  es: string;
+  vi: string;
+  phonetic: string;
+  tip?: string;
+  createdAt: number;
+}
+
+export function getSavedCustomCards(): CustomTranslationCard[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_TRANSLATION_CARDS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Failed reading custom translation cards from localStorage:', e);
+  }
+  return [];
+}
+
+export function saveCustomCard(card: CustomTranslationCard): CustomTranslationCard[] {
+  const current = getSavedCustomCards();
+  const existingIdx = current.findIndex((c) => c.id === card.id);
+  let updated: CustomTranslationCard[];
+  if (existingIdx >= 0) {
+    updated = [...current];
+    updated[existingIdx] = card;
+  } else {
+    // Custom cards appear first
+    updated = [card, ...current];
+  }
+  try {
+    localStorage.setItem(CUSTOM_TRANSLATION_CARDS_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed saving custom card to localStorage:', e);
+  }
+  return updated;
+}
+
+export function deleteSavedCustomCard(id: string): CustomTranslationCard[] {
+  const current = getSavedCustomCards();
+  const updated = current.filter((c) => c.id !== id);
+  try {
+    localStorage.setItem(CUSTOM_TRANSLATION_CARDS_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed deleting custom card from localStorage:', e);
   }
   return updated;
 }

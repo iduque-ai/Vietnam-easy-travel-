@@ -48,6 +48,13 @@ import {
   saveFavoritePoiIds,
   speakVietnamese,
 } from '../utils/storage';
+import {
+  getSmartGeolocation,
+  createSimulatedResult,
+  VIETNAM_SIMULATION_PRESETS,
+  SmartGeoResult,
+  SmartGeoError,
+} from '../utils/geolocation';
 import { ItineraryState } from '../utils/useItineraryState';
 import { MapItineraryPanel } from './MapItineraryPanel';
 
@@ -117,8 +124,17 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
   const [infoWindowOpen, setInfoWindowOpen] = useState<boolean>(true);
   const [selectedLocationTarget, setSelectedLocationTarget] = useState<{ lat: number; lng: number } | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [userLocationLabel, setUserLocationLabel] = useState<string>('Tu ubicación actual');
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [locationToast, setLocationToast] = useState<string | null>(null);
+  const [gpsDiagnostic, setGpsDiagnostic] = useState<{
+    type: 'success_vietnam' | 'success_abroad' | 'error';
+    title: string;
+    description: string;
+    isIframeBlocked?: boolean;
+    details?: string;
+  } | null>(null);
+  const [showGpsHelper, setShowGpsHelper] = useState<boolean>(false);
 
   const { activePlan, currentDay, selectedDayId, addPoiToDay, removeStopFromDay, getPoiInclusionStatus } = itineraryState;
 
@@ -138,31 +154,72 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
     }
   }, [selectedDayId, activePlan]);
 
-  const handleLocateMe = () => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setLocationToast('Geolocalización no soportada en este navegador');
-      setTimeout(() => setLocationToast(null), 3000);
-      return;
-    }
+  const handleLocateMe = async () => {
     setIsLocating(true);
-    setLocationToast(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setUserLocation(loc);
+    setLocationToast('Buscando satélites GPS y redes...');
+    setGpsDiagnostic(null);
+
+    const result = await getSmartGeolocation();
+    setIsLocating(false);
+
+    if (result.success) {
+      const { coords, isInsideVietnam, distanceToVietnamKm, closestPoi, distanceToClosestPoiKm, recommendedRegionId } = result.data;
+      const loc = { lat: coords.latitude, lng: coords.longitude };
+      setUserLocation(loc);
+
+      if (isInsideVietnam) {
+        setUserLocationLabel('Tu ubicación GPS (Vietnam)');
+        setSelectedRegionId(recommendedRegionId);
         setSelectedLocationTarget(loc);
-        setIsLocating(false);
-        setLocationToast('¡Ubicación GPS actual localizada!');
-        setTimeout(() => setLocationToast(null), 3000);
-      },
-      (err) => {
-        console.warn('Geolocation error:', err);
-        setIsLocating(false);
-        setLocationToast('No se pudo obtener la ubicación GPS');
-        setTimeout(() => setLocationToast(null), 3500);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+        setLocationToast(`🎯 ¡Ubicación en Vietnam! Cerca de ${closestPoi.nameEs} (${distanceToClosestPoiKm} km)`);
+        setGpsDiagnostic({
+          type: 'success_vietnam',
+          title: '¡Señal GPS fijada en Vietnam!',
+          description: `Estás en la región de ${closestPoi.city}, a ~${distanceToClosestPoiKm < 1 ? Math.round(distanceToClosestPoiKm * 1000) + ' m' : distanceToClosestPoiKm + ' km'} de ${closestPoi.nameEs}.`,
+        });
+        setTimeout(() => setLocationToast(null), 4000);
+      } else {
+        // Detected real location, but traveler is testing from abroad (Spain, Americas, etc.)
+        setUserLocationLabel(`Tu GPS real (~${distanceToVietnamKm.toLocaleString()} km de Vietnam)`);
+        setSelectedRegionId(recommendedRegionId);
+        setSelectedLocationTarget({ lat: closestPoi.lat, lng: closestPoi.lng });
+        setLocationToast(`📍 GPS detectado fuera de Vietnam. Centrado en ${closestPoi.city}.`);
+        setGpsDiagnostic({
+          type: 'success_abroad',
+          title: `GPS detectado a ~${distanceToVietnamKm.toLocaleString()} km de Vietnam`,
+          description: `Tus satélites te sitúan en tus coordenadas reales (${coords.latitude.toFixed(2)}, ${coords.longitude.toFixed(2)}). Para que el mapa de Vietnam sea 100% interactivo mientras planificas el viaje, te hemos situado en ${closestPoi.city} (${closestPoi.nameEs}).`,
+          details: 'Puedes elegir cualquier otra ciudad con 1 clic en el selector inferior.',
+        });
+        setShowGpsHelper(true);
+      }
+    } else {
+      setGpsDiagnostic({
+        type: 'error',
+        title: 'No se detecta señal de satélites GPS',
+        description: result.error.message,
+        isIframeBlocked: result.error.isIframeBlocked,
+        details: result.error.userTip,
+      });
+      setShowGpsHelper(true);
+      setLocationToast('Sin señal GPS directa. Usa los accesos rápidos a Vietnam.');
+    }
+  };
+
+  const handleSimulateLocation = (presetId: string) => {
+    const sim = createSimulatedResult(presetId);
+    const loc = { lat: sim.coords.latitude, lng: sim.coords.longitude };
+    setUserLocation(loc);
+    setUserLocationLabel(`📍 Simulando posición: ${sim.simulatedName}`);
+    setSelectedRegionId(sim.recommendedRegionId);
+    setSelectedLocationTarget(loc);
+    setShowGpsHelper(false);
+    setGpsDiagnostic({
+      type: 'success_vietnam',
+      title: `Ubicación situada en: ${sim.simulatedName}`,
+      description: `Marcador situado en ${sim.closestPoi.city}. Todos los cálculos de distancia y monumentos se muestran desde este punto.`,
+    });
+    setLocationToast(`📍 Situado en ${sim.simulatedName}`);
+    setTimeout(() => setLocationToast(null), 3500);
   };
 
   const handleRecenterRegion = () => {
@@ -501,12 +558,25 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                   onClick={handleLocateMe}
                   disabled={isLocating}
                   className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl border border-stone-700 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-                  title="Centrar en mi ubicación GPS"
+                  title="Detectar mi ubicación real con satélites GPS"
                 >
                   <Locate className={`w-3.5 h-3.5 text-sky-400 ${isLocating ? 'animate-spin' : ''}`} />
                   <span className="hidden sm:inline">
-                    {isLocating ? 'Buscando...' : 'Mi Ubicación'}
+                    {isLocating ? 'Buscando satélites...' : 'Mi Ubicación GPS'}
                   </span>
+                </button>
+
+                <button
+                  onClick={() => setShowGpsHelper(!showGpsHelper)}
+                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
+                    showGpsHelper
+                      ? 'bg-amber-500 text-stone-950 border-amber-500 font-bold'
+                      : 'bg-stone-800 hover:bg-stone-700 text-amber-300 border-amber-500/40'
+                  }`}
+                  title="Simular estar en cualquier ciudad de Vietnam"
+                >
+                  <Compass className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Simular Posición</span>
                 </button>
 
                 <button
@@ -520,7 +590,74 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
               </div>
             </div>
 
-            {locationToast && (
+            {/* GPS Diagnostic & Simulation Assistant Panel */}
+            {showGpsHelper && (
+              <div className="bg-stone-900 border border-stone-700 rounded-2xl p-4 text-xs text-stone-200 space-y-3 animate-fade-in shadow-md">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Compass className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="font-bold text-white text-sm">
+                      {gpsDiagnostic ? gpsDiagnostic.title : '🧭 Posicionamiento y Prueba en Vietnam'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowGpsHelper(false)}
+                    className="text-stone-400 hover:text-white text-xs font-bold p-1 cursor-pointer"
+                  >
+                    ✕ Cerrar
+                  </button>
+                </div>
+
+                {gpsDiagnostic && (
+                  <p className="text-stone-300 leading-relaxed">
+                    {gpsDiagnostic.description}
+                  </p>
+                )}
+
+                {gpsDiagnostic?.isIframeBlocked && (
+                  <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-700/60 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span className="text-[11px] leading-tight">
+                        Los navegadores bloquean la señal GPS dentro de ventanas incrustadas (iframes).
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => window.open(window.location.href, '_blank')}
+                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-[11px] rounded-lg shrink-0 flex items-center gap-1 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Abrir en Pestaña Completa</span>
+                    </button>
+                  </div>
+                )}
+
+                <div>
+                  <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider block mb-2">
+                    ¿Preparando el viaje desde casa? Sitúa tu GPS en Vietnam con 1 clic:
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {VIETNAM_SIMULATION_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => handleSimulateLocation(preset.id)}
+                        className="p-2 rounded-xl bg-stone-800/80 hover:bg-amber-900/30 border border-stone-700 hover:border-amber-500/50 text-left transition cursor-pointer flex flex-col gap-0.5 group"
+                      >
+                        <div className="flex items-center gap-1.5 font-bold text-white group-hover:text-amber-300 text-xs">
+                          <span>{preset.icon}</span>
+                          <span className="truncate">{preset.cityName}</span>
+                        </div>
+                        <span className="text-[10px] text-stone-400 truncate">
+                          {preset.poiName}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {locationToast && !showGpsHelper && (
               <div className="bg-sky-950/80 border border-sky-700 text-sky-200 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 animate-fade-in">
                 <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                 <span>{locationToast}</span>
@@ -599,7 +736,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
 
                     {/* User Location Marker */}
                     {userLocation && (
-                      <AdvancedMarker position={userLocation} title="Tu ubicación actual">
+                      <AdvancedMarker position={userLocation} title={userLocationLabel}>
                         <div className="relative flex items-center justify-center">
                           <div className="w-4 h-4 bg-sky-500 rounded-full border-2 border-white shadow-lg z-10" />
                           <div className="absolute -inset-2 bg-sky-400 rounded-full opacity-40 animate-ping" />
@@ -729,6 +866,19 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                               <span>Pronunciar</span>
                             </button>
                           </div>
+
+                          {onStartFreeTour && (
+                            <button
+                              onClick={() => {
+                                setInfoWindowOpen(false);
+                                onStartFreeTour(selectedPoi);
+                              }}
+                              className="w-full py-1.5 px-2 bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-[11px] rounded-lg flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer border border-amber-500/30 mt-1.5"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Hacer Free Tour con Gemini</span>
+                            </button>
+                          )}
                         </div>
                       </InfoWindow>
                     )}

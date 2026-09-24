@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   ShieldAlert, ShieldCheck, Plus, Trash2, Volume2, Copy, Check, 
   Maximize2, Minimize2, X, Sparkles, RefreshCw, AlertTriangle, 
-  CheckCircle2, User, Layers, Info
+  CheckCircle2, User, Layers, Info, Search, Filter, PhoneCall,
+  VolumeX, Share2, HeartPulse, Stethoscope
 } from 'lucide-react';
 import { AllergyCardData } from '../types';
 import { 
@@ -17,192 +18,430 @@ interface AllergyCardsSectionProps {
   isOnline: boolean;
 }
 
-interface PresetRestriction {
+export interface PresetRestriction {
   id: string;
   emoji: string;
-  label: string;
+  label: string; // Clean label without "Sin "
   subVi: string;
-  category: 'allergy' | 'diet' | 'sensitive';
+  category: 'frecuentes' | 'marisco_pescado' | 'lacteos_huevos' | 'especias_hierbas' | 'granos_gluten' | 'carnes' | 'dietas';
 }
 
-const PRESET_RESTRICTIONS: PresetRestriction[] = [
+// Clean helper to strip any "Sin " or "sin " prefix
+export function cleanAllergenLabel(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^(sin|no)\s+/i, '')
+    .trim();
+}
+
+// Comprehensive library of 40+ allergens and ingredients in Vietnam
+export const PRESET_RESTRICTIONS: PresetRestriction[] = [
+  // --- 1. ALERGIAS MÁS FRECUENTES ---
   {
     id: 'peanuts',
     emoji: '🥜',
     label: 'Cacahuetes y frutos secos',
     subVi: 'Đậu phộng / Lạc & các loại hạt',
-    category: 'allergy',
+    category: 'frecuentes',
   },
   {
     id: 'seafood',
     emoji: '🦐',
     label: 'Marisco, gambas y calamar',
-    subVi: 'Hải sản: tôm, cua, mực, nghêu',
-    category: 'allergy',
-  },
-  {
-    id: 'fish_sauce',
-    emoji: '🐟',
-    label: 'Sin salsa de pescado',
-    subVi: 'Không dùng nước mắm cá',
-    category: 'allergy',
+    subVi: 'Hải sản: tôm, cua, mực, nghêu, sò',
+    category: 'frecuentes',
   },
   {
     id: 'gluten',
     emoji: '🌾',
     label: 'Gluten / Trigo / Celíaco',
-    subVi: 'Không Gluten / Bột mì, bánh mì',
-    category: 'allergy',
+    subVi: 'Gluten / Bột mì, bánh mì, mì sợi vàng',
+    category: 'frecuentes',
   },
   {
     id: 'lactose',
     emoji: '🥛',
-    label: 'Lactosa / Leche condensada',
-    subVi: 'Không sữa bò, không sữa đặc',
-    category: 'allergy',
-  },
-  {
-    id: 'msg',
-    emoji: '🧂',
-    label: 'Sin Glutamato / MSG',
-    subVi: 'Không bột ngọt / Mì chính',
-    category: 'sensitive',
-  },
-  {
-    id: 'vegetarian',
-    emoji: '🥗',
-    label: 'Vegetariano estricto',
-    subVi: 'Ăn chay thanh tịnh, không mỡ heo',
-    category: 'diet',
-  },
-  {
-    id: 'vegan',
-    emoji: '🌱',
-    label: 'Vegano 100%',
-    subVi: 'Thuần chay 100%, không trứng sữa',
-    category: 'diet',
+    label: 'Lactosa / Leche de vaca',
+    subVi: 'Sữa bò, sữa đặc Ông Thọ, bơ động vật',
+    category: 'frecuentes',
   },
   {
     id: 'egg',
     emoji: '🥚',
-    label: 'Huevo',
-    subVi: 'Không ăn trứng gà, vịt',
-    category: 'allergy',
-  },
-  {
-    id: 'spicy',
-    emoji: '🌶️',
-    label: 'Sin picante ni guindilla',
-    subVi: 'Không ăn cay / Không ớt',
-    category: 'sensitive',
-  },
-  {
-    id: 'garlic_onion',
-    emoji: '🧄',
-    label: 'Sin ajo ni cebolleta',
-    subVi: 'Không tỏi, không hành',
-    category: 'sensitive',
-  },
-  {
-    id: 'pork',
-    emoji: '🥩',
-    label: 'Sin cerdo / Halal',
-    subVi: 'Không thịt heo / Không mỡ lợn',
-    category: 'diet',
-  },
-  {
-    id: 'ice',
-    emoji: '🧊',
-    label: 'Sin hielo de la calle',
-    subVi: 'Không lấy đá / Chỉ nước đóng chai',
-    category: 'sensitive',
+    label: 'Huevo (gallina, pato, codorniz)',
+    subVi: 'Trứng gà, trứng vịt, trứng cút',
+    category: 'frecuentes',
   },
   {
     id: 'soy',
     emoji: '🫘',
     label: 'Soja / Salsa de soja',
-    subVi: 'Không đậu nành / xì dầu',
-    category: 'allergy',
+    subVi: 'Đậu nành / Xì dầu, nước tương',
+    category: 'frecuentes',
+  },
+  {
+    id: 'sesame',
+    emoji: '🌱',
+    label: 'Sésamo / Ajonjolí / Aceite de sésamo',
+    subVi: 'Hạt mè / Vừng & dầu mè',
+    category: 'frecuentes',
+  },
+
+  // --- 2. MARISCOS, PESCADOS Y SALSAS ---
+  {
+    id: 'fish_sauce',
+    emoji: '🐟',
+    label: 'Salsa de pescado tradicional',
+    subVi: 'Nước mắm cá truyền thống',
+    category: 'marisco_pescado',
+  },
+  {
+    id: 'fish',
+    emoji: '🐠',
+    label: 'Pescado fresco y seco',
+    subVi: 'Cá tươi & cá khô các loại',
+    category: 'marisco_pescado',
+  },
+  {
+    id: 'shrimp_paste',
+    emoji: '🏺',
+    label: 'Pasta de gamba fermentada (Mắm tôm)',
+    subVi: 'Mắm tôm / Mắm ruốc / Mắm tép',
+    category: 'marisco_pescado',
+  },
+  {
+    id: 'mollusks',
+    emoji: '🦪',
+    label: 'Ostras, almejas y caracoles',
+    subVi: 'Hàu, nghêu, sò, ốc',
+    category: 'marisco_pescado',
+  },
+  {
+    id: 'crab',
+    emoji: '🦀',
+    label: 'Cangrejo de río o mar',
+    subVi: 'Cua đồng, cua biển, ghẹ',
+    category: 'marisco_pescado',
+  },
+
+  // --- 3. LÁCTEOS, HUEVOS Y DULCES ---
+  {
+    id: 'condensed_milk',
+    emoji: '☕',
+    label: 'Leche condensada (Cà phê sữa)',
+    subVi: 'Sữa đặc có đường (sữa Ông Thọ)',
+    category: 'lacteos_huevos',
+  },
+  {
+    id: 'cheese_butter',
+    emoji: '🧀',
+    label: 'Queso y mantequilla',
+    subVi: 'Phô mai & bơ động vật',
+    category: 'lacteos_huevos',
+  },
+  {
+    id: 'mayo',
+    emoji: '🥪',
+    label: 'Mayonesa con huevo (en Bánh mì)',
+    subVi: 'Sốt bơ trứng / Mayonnaise',
+    category: 'lacteos_huevos',
+  },
+  {
+    id: 'honey',
+    emoji: '🍯',
+    label: 'Miel natural',
+    subVi: 'Mật ong',
+    category: 'lacteos_huevos',
+  },
+
+  // --- 4. ESPECIAS, HIERBAS Y CONDIMENTOS ---
+  {
+    id: 'msg',
+    emoji: '🧂',
+    label: 'Glutamato monosódico (MSG / Bột ngọt)',
+    subVi: 'Bột ngọt (Ajinomoto) / Mì chính',
+    category: 'especias_hierbas',
+  },
+  {
+    id: 'spicy',
+    emoji: '🌶️',
+    label: 'Picante, guindilla y chile fresco',
+    subVi: 'Ớt tươi, tương ớt, sa tế cay',
+    category: 'especias_hierbas',
+  },
+  {
+    id: 'garlic',
+    emoji: '🧄',
+    label: 'Ajo crudo o frito',
+    subVi: 'Tỏi tươi & tỏi phi',
+    category: 'especias_hierbas',
+  },
+  {
+    id: 'onion_shallot',
+    emoji: '🧅',
+    label: 'Cebolla, cebolleta y chalota',
+    subVi: 'Hành tây, hành lá, hành tím phi',
+    category: 'especias_hierbas',
   },
   {
     id: 'cilantro',
     emoji: '🌿',
-    label: 'Sin cilantro / aromáticas',
-    subVi: 'Không rau mùi / ngò gai',
-    category: 'sensitive',
+    label: 'Cilantro y aromáticas (Rau mùi / ngò)',
+    subVi: 'Rau mùi (Hà Nội) / Ngò rí (Sài Gòn)',
+    category: 'especias_hierbas',
+  },
+  {
+    id: 'thai_basil_mint',
+    emoji: '🍃',
+    label: 'Albahaca tailandesa y menta',
+    subVi: 'Húng quế, rau húng lủi, bạc hà',
+    category: 'especias_hierbas',
+  },
+  {
+    id: 'ginger_galangal',
+    emoji: '🫚',
+    label: 'Jengibre y galanga',
+    subVi: 'Gừng & củ riềng',
+    category: 'especias_hierbas',
+  },
+  {
+    id: 'black_pepper',
+    emoji: '⚫',
+    label: 'Pimienta negra o blanca',
+    subVi: 'Hạt tiêu đen, tiêu trắng Phú Quốc',
+    category: 'especias_hierbas',
+  },
+  {
+    id: 'added_sugar',
+    emoji: '🍬',
+    label: 'Azúcar añadido en bebidas / zumos',
+    subVi: 'Đường cát / Nước đường pha sẵn',
+    category: 'especias_hierbas',
+  },
+  {
+    id: 'street_ice',
+    emoji: '🧊',
+    label: 'Hielo no embotellado de la calle',
+    subVi: 'Đá viên vỉa hè / Đá cây không đóng túi',
+    category: 'especias_hierbas',
+  },
+
+  // --- 5. GRANOS, HARINAS Y CEREALES ---
+  {
+    id: 'bread_baguette',
+    emoji: '🥖',
+    label: 'Pan baguette de trigo (Bánh mì)',
+    subVi: 'Bánh mì làm từ bột mì',
+    category: 'granos_gluten',
+  },
+  {
+    id: 'instant_noodles',
+    emoji: '🍜',
+    label: 'Fideos amarillos de trigo (Mì tôm / mì trứng)',
+    subVi: 'Mì sợi vàng / Mì gói làm từ lúa mì',
+    category: 'granos_gluten',
+  },
+  {
+    id: 'corn',
+    emoji: '🌽',
+    label: 'Maíz y fécula de maíz',
+    subVi: 'Bắp / Ngô & tinh bột bắp',
+    category: 'granos_gluten',
+  },
+  {
+    id: 'cashews_almonds',
+    emoji: '🌰',
+    label: 'Anacardos, almendras y nueces',
+    subVi: 'Hạt điều, hạnh nhân, hạt dẻ',
+    category: 'granos_gluten',
+  },
+
+  // --- 6. CARNES Y GRASAS ANIMALES ---
+  {
+    id: 'pork',
+    emoji: '🥩',
+    label: 'Carne de cerdo y manteca de cerdo',
+    subVi: 'Thịt heo (lợn), mỡ heo, giò lụa',
+    category: 'carnes',
+  },
+  {
+    id: 'beef',
+    emoji: '🐂',
+    label: 'Carne de ternera / vacuno',
+    subVi: 'Thịt bò & nước dùng ninh xương bò',
+    category: 'carnes',
+  },
+  {
+    id: 'chicken',
+    emoji: '🍗',
+    label: 'Carne de pollo y caldos de ave',
+    subVi: 'Thịt gà & nước luộc gà',
+    category: 'carnes',
+  },
+  {
+    id: 'duck',
+    emoji: '🦆',
+    label: 'Carne de pato',
+    subVi: 'Thịt vịt & tiết canh',
+    category: 'carnes',
+  },
+  {
+    id: 'animal_fat',
+    emoji: '🍳',
+    label: 'Grasa o manteca animal en frituras',
+    subVi: 'Mỡ động vật chiên rán',
+    category: 'carnes',
+  },
+
+  // --- 7. DIETAS Y ESTILOS DE VIDA ---
+  {
+    id: 'vegetarian',
+    emoji: '🥗',
+    label: 'Vegetariano estricto (Ăn chay budista)',
+    subVi: 'Ăn chay thanh tịnh, không thịt cá mỡ',
+    category: 'dietas',
+  },
+  {
+    id: 'vegan',
+    emoji: '🌱',
+    label: 'Vegano 100% (Thuần chay)',
+    subVi: 'Thuần chay 100%, không trứng, sữa, mật ong',
+    category: 'dietas',
+  },
+  {
+    id: 'halal',
+    emoji: '☪️',
+    label: 'Halal (Sin cerdo ni alcohol en la comida)',
+    subVi: 'Chuẩn Halal: không thịt heo, không rượu nấu',
+    category: 'dietas',
+  },
+  {
+    id: 'celiac_strict',
+    emoji: '🩺',
+    label: 'Celíaco estricto (Sin contaminación cruzada)',
+    subVi: 'Dị ứng Gluten nghiêm ngặt, chảo muỗng riêng',
+    category: 'dietas',
   },
 ];
 
-// Offline fallback generator for combined multiple conditions
-function generateClientFallbackCard(conditions: string[], personName?: string): AllergyCardData {
-  const cleanList = conditions.length > 0 ? conditions : ['Cacahuetes y frutos secos'];
+// Offline fallback card generator with comprehensive coverage
+function generateClientFallbackCard(rawConditions: string[], personName?: string): AllergyCardData {
+  const cleanList = rawConditions.length > 0 
+    ? rawConditions.map(cleanAllergenLabel) 
+    : ['Cacahuetes y frutos secos'];
+  
   const fullLower = cleanList.join(' ').toLowerCase();
 
   const matchedViItems: string[] = [];
   const forbidden: string[] = [];
   const safeFoods: string[] = [];
 
-  if (fullLower.includes('cacahuete') || fullLower.includes('fruto') || fullLower.includes('đậu phộng') || fullLower.includes('lạc')) {
+  // Peanut & Tree nuts
+  if (fullLower.includes('cacahuete') || fullLower.includes('fruto') || fullLower.includes('anacardo') || fullLower.includes('lạc') || fullLower.includes('đậu phộng')) {
     matchedViItems.push('ĐẬU PHỘNG / LẠC & CÁC LOẠI HẠT (Cacahuete y frutos secos)');
-    forbidden.push('Đậu phộng / Lạc (Cacahuete)', 'Dầu lạc (Aceite cacahuete)', 'Bơ đậu phộng', 'Hạt điều (Anacardo)');
-    safeFoods.push('Cơm trắng (Arroz blanco)', 'Thịt luộc', 'Trứng chiên');
+    forbidden.push('Đậu phộng / Lạc (Cacahuete)', 'Dầu lạc (Aceite cacahuete)', 'Hạt điều (Anacardo)', 'Bơ đậu phộng');
+    safeFoods.push('Cơm trắng (Arroz blanco)', 'Trứng chiên', 'Thịt luộc không lạc');
   }
 
-  if (fullLower.includes('marisco') || fullLower.includes('gamba') || fullLower.includes('calamar') || fullLower.includes('hải sản') || fullLower.includes('tôm') || fullLower.includes('cua')) {
-    matchedViItems.push('HẢI SẢN: TÔM, CUA, MỰC, TÉP, NGHÊU (Marisco)');
-    forbidden.push('Tôm / Tép (Gambas)', 'Cua / Ghẹ (Cangrejo)', 'Mực (Calamar)', 'Nước luộc hải sản');
-    safeFoods.push('Thịt gà (Pollo)', 'Thịt bò (Ternera)', 'Thịt heo');
+  // Seafood & Shellfish
+  if (fullLower.includes('marisco') || fullLower.includes('gamba') || fullLower.includes('calamar') || fullLower.includes('cangrejo') || fullLower.includes('hải sản') || fullLower.includes('tôm') || fullLower.includes('mực')) {
+    matchedViItems.push('HẢI SẢN: TÔM, CUA, MỰC, TÉP, NGHÊU, SÒ (Marisco y crustáceos)');
+    forbidden.push('Tôm / Tép (Gambas)', 'Cua / Ghẹ (Cangrejo)', 'Mực (Calamar)', 'Mắm ruốc / Mắm tép', 'Nước dùng ninh hải sản');
+    safeFoods.push('Thịt gà (Pollo)', 'Thịt bò (Ternera)', 'Cơm trắng', 'Rau luộc');
   }
 
-  if (fullLower.includes('salsa de pescado') || fullLower.includes('nước mắm') || fullLower.includes('pescado')) {
-    matchedViItems.push('NƯỚC MẮM CÁ (Salsa de pescado truyền thống)');
-    forbidden.push('Nước mắm cá', 'Mắm tôm', 'Mắm ruốc');
-    safeFoods.push('Nước tương / Xì dầu (Salsa de soja)', 'Muối tiêu chanh');
+  // Fish & Fish Sauce
+  if (fullLower.includes('pescado') || fullLower.includes('nước mắm') || fullLower.includes('cá')) {
+    matchedViItems.push('NƯỚC MẮM CÁ & CÁ CÁC LOẠI (Salsa de pescado y pescado)');
+    forbidden.push('Nước mắm cá truyền thống', 'Cá tươi / cá khô', 'Mắm tôm / mắm ruốc');
+    safeFoods.push('Nước tương / Xì dầu (Salsa de soja)', 'Muối tiêu chanh', 'Đậu hũ chiên');
   }
 
-  if (fullLower.includes('gluten') || fullLower.includes('trigo') || fullLower.includes('celíac') || fullLower.includes('bột mì')) {
-    matchedViItems.push('GLUTEN / LÚA MÌ / BỘT MÌ (Bột mì, bánh mì, mì sợi vàng)');
-    forbidden.push('Bánh mì (Baguette)', 'Mì gói / mì tôm (Fideos trigo)', 'Bột mì chiên giòn');
-    safeFoods.push('Phở (Fideos de arroz 100%)', 'Bún tươi', 'Cơm trắng');
+  // Gluten & Wheat
+  if (fullLower.includes('gluten') || fullLower.includes('trigo') || fullLower.includes('celíac') || fullLower.includes('pan') || fullLower.includes('bột mì')) {
+    matchedViItems.push('GLUTEN / LÚA MÌ / BỘT MÌ (Bột mì, bánh mì baguette, mì sợi vàng)');
+    forbidden.push('Bánh mì (Baguette)', 'Mì gói / mì tôm (Trigo)', 'Bột mì chiên xù', 'Mì vằn thắn');
+    safeFoods.push('Phở (Fideos de arroz 100%)', 'Bún tươi', 'Cơm trắng', 'Bánh tráng cuốn');
   }
 
-  if (fullLower.includes('lactos') || fullLower.includes('leche') || fullLower.includes('sữa')) {
-    matchedViItems.push('SỮA BÒ & SỮA ĐẶC (Lactosa y lácteos)');
-    forbidden.push('Sữa đặc có đường Ông Thọ', 'Sữa tươi', 'Bơ động vật', 'Phô mai');
-    safeFoods.push('Cà phê đen (Café solo)', 'Trà đá / Trà chanh', 'Nước dừa tươi');
+  // Lactose & Dairy
+  if (fullLower.includes('lactos') || fullLower.includes('leche') || fullLower.includes('queso') || fullLower.includes('sữa')) {
+    matchedViItems.push('SỮA BÒ, SỮA ĐẶC & CHẾ PHẨM SỮA (Lactosa y lácteos)');
+    forbidden.push('Sữa đặc Ông Thọ', 'Sữa tươi bò', 'Bơ động vật', 'Phô mai');
+    safeFoods.push('Cà phê đen (Café solo)', 'Trà đá / Trà chanh', 'Nước dừa tươi', 'Nước mía');
   }
 
+  // Egg
+  if (fullLower.includes('huevo') || fullLower.includes('trứng') || fullLower.includes('mayonesa')) {
+    matchedViItems.push('TRỨNG GÀ, TRỨNG VỊT, TRỨNG CÚT (Huevos y derivados)');
+    forbidden.push('Trứng chiên / ốp la', 'Sốt bơ trứng mayonesa', 'Bánh bông lan', 'Trứng cút');
+    safeFoods.push('Cơm thịt luộc', 'Phở bò chín', 'Rau củ xào');
+  }
+
+  // Sesame
+  if (fullLower.includes('sésamo') || fullLower.includes('ajonjolí') || fullLower.includes('mè') || fullLower.includes('vừng')) {
+    matchedViItems.push('HẠT MÈ / VỪNG & DẦU MÈ (Sésamo y aceite de sésamo)');
+    forbidden.push('Hạt mè trắng / đen', 'Dầu mè thơm', 'Muối vừng');
+    safeFoods.push('Cơm trắng', 'Món luộc thanh đạm', 'Nước suối');
+  }
+
+  // MSG / Glutamate
+  if (fullLower.includes('msg') || fullLower.includes('glutamat') || fullLower.includes('bột ngọt') || fullLower.includes('mì chính')) {
+    matchedViItems.push('BỘT NGỌT / MÌ CHÍNH (Glutamato monosódico / MSG)');
+    forbidden.push('Bột ngọt (Ajinomoto)', 'Mì chính', 'Hạt nêm thịt Knorr');
+    safeFoods.push('Món nướng ướp muối', 'Rau luộc chấm kho quẹt chay', 'Cơm trắng');
+  }
+
+  // Spicy / Chili
+  if (fullLower.includes('picante') || fullLower.includes('guindilla') || fullLower.includes('chile') || fullLower.includes('ớt')) {
+    matchedViItems.push('ỚT TƯƠI / VỊ CAY (Không ăn cay / Đừng cho ớt)');
+    forbidden.push('Ớt tươi thái lát', 'Tương ớt cay', 'Sa tế ớt', 'Bột ớt');
+    safeFoods.push('Phở nước trong không ớt', 'Món luộc thanh đạm', 'Cơm chiên trứng');
+  }
+
+  // Garlic / Onion
+  if (fullLower.includes('ajo') || fullLower.includes('cebolla') || fullLower.includes('tỏi') || fullLower.includes('hành')) {
+    matchedViItems.push('TỎI & HÀNH (Không ăn tỏi, hành lá, hành tây, hành phi)');
+    forbidden.push('Tỏi phi / tỏi sống', 'Hành lá cắt nhỏ', 'Hành tây', 'Hành tím phi');
+    safeFoods.push('Cơm trắng', 'Rau luộc', 'Món nướng ướp muối');
+  }
+
+  // Cilantro / Coriander
+  if (fullLower.includes('cilantro') || fullLower.includes('rau mùi') || fullLower.includes('ngò')) {
+    matchedViItems.push('RAU MÙI / NGÒ RÍ / NGÒ GAI (Không cho rau thơm)');
+    forbidden.push('Rau mùi (Hà Nội)', 'Ngò rí (Sài Gòn)', 'Ngò gai', 'Húng quế');
+    safeFoods.push('Phở không hành ngò', 'Cơm tấm sườn', 'Bánh mì không rau');
+  }
+
+  // Pork / Animal Fat / Halal
+  if (fullLower.includes('cerdo') || fullLower.includes('puerco') || fullLower.includes('heo') || fullLower.includes('lợn') || fullLower.includes('halal')) {
+    matchedViItems.push('THỊT HEO & MỠ HEO (Không ăn thịt lợn / Mỡ động vật)');
+    forbidden.push('Thịt heo (lợn)', 'Mỡ heo', 'Chả lụa heo', 'Nước dùng ninh xương heo');
+    safeFoods.push('Thịt gà', 'Thịt bò', 'Cơm rau củ', 'Cá tươi');
+  }
+
+  // Street Ice
+  if (fullLower.includes('hielo') || fullLower.includes('đá')) {
+    matchedViItems.push('ĐÁ LẠNH (Không lấy đá / Chỉ uống nước đóng chai)');
+    forbidden.push('Đá viên vỉa hè / Đá cây không đóng túi');
+    safeFoods.push('Nước suối nguyên chai đóng nắp', 'Trà nóng', 'Nước dừa tươi nguyên trái');
+  }
+
+  // Sugar
+  if (fullLower.includes('azúcar') || fullLower.includes('đường')) {
+    matchedViItems.push('ĐƯỜNG CÁT (Không cho đường / Ít ngọt)');
+    forbidden.push('Đường cát trắng', 'Siro đường', 'Nước đường pha sẵn');
+    safeFoods.push('Cà phê không đường', 'Nước dừa tươi', 'Trà đá không ngọt');
+  }
+
+  // Vegetarian / Vegan
   if (fullLower.includes('vegetar') || fullLower.includes('vegan') || fullLower.includes('chay')) {
-    matchedViItems.push('ĂN CHAY THANH TỊNH (Vegetariano / Vegano)');
-    forbidden.push('Thịt các loại', 'Cá & hải sản', 'Mỡ heo (Manteca)', 'Nước mắm cá');
+    matchedViItems.push('ĂN CHAY THANH TỊNH / THUẦN CHAY (Không thịt, cá, mỡ, nước mắm)');
+    forbidden.push('Thịt các loại', 'Cá & hải sản', 'Mỡ heo (Manteca)', 'Nước mắm cá', 'Hạt nêm Knorr');
     safeFoods.push('Đậu phụ / Đậu hũ (Tofu)', 'Nấm các loại', 'Rau xào xì dầu', 'Cơm trắng');
   }
 
-  if (fullLower.includes('msg') || fullLower.includes('glutamat') || fullLower.includes('bột ngọt') || fullLower.includes('mì chính')) {
-    matchedViItems.push('BỘT NGỌT / MÌ CHÍNH (MSG / Glutamato)');
-    forbidden.push('Bột ngọt (Ajinomoto)', 'Mì chính', 'Hạt nêm thịt Knorr');
-    safeFoods.push('Món nướng ướp muối', 'Rau luộc', 'Cơm trắng');
-  }
-
-  if (fullLower.includes('picante') || fullLower.includes('guindilla') || fullLower.includes('ớt')) {
-    matchedViItems.push('ỚT / VỊ CAY (Không ăn cay)');
-    forbidden.push('Ớt tươi', 'Tương ớt cay', 'Sa tế ớt', 'Bột ớt');
-    safeFoods.push('Phở nước trong', 'Món luộc thanh đạm', 'Cơm chiên không ớt');
-  }
-
-  if (fullLower.includes('cerdo') || fullLower.includes('heo') || fullLower.includes('halal')) {
-    matchedViItems.push('THỊT HEO / MỠ HEO (Không ăn thịt lợn)');
-    forbidden.push('Thịt heo', 'Mỡ heo', 'Chả lụa heo', 'Nước dùng ninh xương heo');
-    safeFoods.push('Thịt gà', 'Thịt bò', 'Cơm rau');
-  }
-
-  if (fullLower.includes('hielo') || fullLower.includes('đá')) {
-    matchedViItems.push('ĐÁ LẠNH (Không lấy đá / Chỉ uống nước đóng chai)');
-    forbidden.push('Đá viên / Đá cây vỉa hè');
-    safeFoods.push('Nước suối nguyên chai đóng nắp', 'Trà nóng');
-  }
-
-  // Include any extra custom words
+  // Include any extra custom words not yet matched
   cleanList.forEach((item) => {
     if (!forbidden.some((f) => f.toLowerCase().includes(item.toLowerCase()))) {
       forbidden.push(item);
@@ -211,10 +450,10 @@ function generateClientFallbackCard(conditions: string[], personName?: string): 
 
   const bulletList = matchedViItems.length > 0 
     ? matchedViItems.map((v) => `• ${v}`).join('\n')
-    : cleanList.map((c) => `• KHÔNG ĂN: ${c.toUpperCase()}`).join('\n');
+    : cleanList.map((c) => `• TUYỆT ĐỐI KHÔNG DÙNG: ${c.toUpperCase()}`).join('\n');
 
   const title = cleanList.length > 1 
-    ? `Ficha Médica Combinada (${cleanList.length} restricciones)` 
+    ? `Ficha Médica (${cleanList.length} restricciones)` 
     : `Ficha Médica: ${cleanList[0]}`;
 
   return {
@@ -222,9 +461,9 @@ function generateClientFallbackCard(conditions: string[], personName?: string): 
     title,
     personName: personName || 'Ficha Personal',
     conditions: cleanList,
-    vietnameseLarge: `XIN CHÚ Ý ĐẶC BIỆT! Tôi bị DỊ ỨNG & BẤT DUNG NẠP NGUY HIỂM TÍNH MẠNG với các thứ sau:\n${bulletList}\nXin đầu bếp TUYỆT ĐỐI KHÔNG SỬ DỤNG những nguyên liệu này hoặc bất kỳ chế phẩm nào trong món ăn của tôi! Cảm ơn bạn rất nhiều!`,
-    phonetic: 'Xin chu y dac biet! Toi bi di ung nguy hiem tinh mang voi cac mon nay... Xin khong cho vao do an.',
-    allowedFoods: safeFoods.length > 0 ? Array.from(new Set(safeFoods)).slice(0, 6) : ['Cơm trắng (Arroz blanco)', 'Món luộc thanh đạm', 'Nước suối đóng chai'],
+    vietnameseLarge: `XIN CHÚ Ý ĐẶC BIỆT!\nTôi bị DỊ ỨNG & BẤT DUNG NẠP NGUY HIỂM TÍNH MẠNG với các thứ sau:\n\n${bulletList}\n\nXin đầu bếp TUYỆT ĐỐI KHÔNG SỬ DỤNG những nguyên liệu này hoặc bất kỳ chế phẩm nào trong món ăn của tôi! Cảm ơn bạn rất nhiều!`,
+    phonetic: 'Xin chu y dac biet! Toi bi di ung nguy hiem tinh mang voi cac mon nay... Xin tuyet doi khong cho vao do an.',
+    allowedFoods: safeFoods.length > 0 ? Array.from(new Set(safeFoods)).slice(0, 6) : ['Cơm trắng (Arroz blanco)', 'Món luộc thanh đạm', 'Nước suối nguyên chai đóng nắp'],
     forbiddenIngredients: Array.from(new Set(forbidden)).slice(0, 10),
     emergencyNote: 'Nếu tôi ăn phải và có dấu hiệu sưng họng, khó thở hoặc sốc phản vệ, xin làm ơn gọi cấp cứu 115 ngay lập tức!',
     createdAt: Date.now(),
@@ -248,13 +487,18 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
   // Editor form state
   const [selectedConditions, setSelectedConditions] = useState<string[]>(() => {
     const list = getSavedAllergyCards();
-    return list.length > 0 ? list[0].conditions : ['Cacahuetes y frutos secos'];
+    return list.length > 0 ? (list[0].conditions || []).map(cleanAllergenLabel) : ['Cacahuetes y frutos secos'];
   });
   const [personName, setPersonName] = useState<string>(() => {
     const list = getSavedAllergyCards();
     return list.length > 0 ? (list[0].personName || 'Ficha Principal') : 'Ficha Principal';
   });
+
+  // Search & Filter state for the ingredients list
+  const [ingredientSearch, setIngredientSearch] = useState<string>('');
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>('todos');
   const [customInput, setCustomInput] = useState<string>('');
+
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
@@ -265,7 +509,7 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
   const handleSelectCard = (card: AllergyCardData) => {
     setActiveCardId(card.id);
     setCurrentCard(card);
-    setSelectedConditions(card.conditions || []);
+    setSelectedConditions((card.conditions || []).map(cleanAllergenLabel));
     setPersonName(card.personName || card.title);
     setIsCreatingNew(false);
   };
@@ -275,33 +519,43 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
     setIsCreatingNew(true);
     setActiveCardId('new');
     setSelectedConditions(['Cacahuetes y frutos secos']);
-    setPersonName(`Ficha ${savedCards.length + 1}`);
-    const draft = generateClientFallbackCard(['Cacahuetes y frutos secos'], `Ficha ${savedCards.length + 1}`);
+    const defaultName = `Ficha ${savedCards.length + 1}`;
+    setPersonName(defaultName);
+    const draft = generateClientFallbackCard(['Cacahuetes y frutos secos'], defaultName);
     setCurrentCard(draft);
   };
 
-  // Toggle a condition chip
-  const handleToggleCondition = (conditionLabel: string) => {
+  // Toggle a condition chip (always clean of "Sin ")
+  const handleToggleCondition = (rawCondition: string) => {
+    const clean = cleanAllergenLabel(rawCondition);
     setSelectedConditions((prev) => {
-      let next: string[];
-      if (prev.includes(conditionLabel)) {
-        next = prev.filter((c) => c !== conditionLabel);
+      if (prev.includes(clean)) {
+        return prev.filter((c) => c !== clean);
       } else {
-        next = [...prev, conditionLabel];
+        return [...prev, clean];
       }
-      return next;
     });
   };
 
   // Add custom typed condition
   const handleAddCustom = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const clean = customInput.trim();
+    const clean = cleanAllergenLabel(customInput);
     if (!clean) return;
     if (!selectedConditions.includes(clean)) {
       setSelectedConditions((prev) => [...prev, clean]);
     }
     setCustomInput('');
+  };
+
+  // Add from search bar directly if user typed something custom
+  const handleAddFromSearch = () => {
+    const clean = cleanAllergenLabel(ingredientSearch);
+    if (!clean) return;
+    if (!selectedConditions.includes(clean)) {
+      setSelectedConditions((prev) => [...prev, clean]);
+    }
+    setIngredientSearch('');
   };
 
   // Remove a specific tag
@@ -312,7 +566,7 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
   // Generate / Regenerate Card with AI or smart multi-item fallback
   const handleGenerateCard = async () => {
     if (selectedConditions.length === 0) {
-      alert('Por favor selecciona al menos una alergia o restricción.');
+      alert('Por favor selecciona al menos una alergia o ingrediente para generar la ficha.');
       return;
     }
 
@@ -414,82 +668,111 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
     speakVietnamese(text);
   };
 
+  // Filtered ingredients by search and category
+  const filteredPresets = useMemo(() => {
+    const q = ingredientSearch.toLowerCase().trim();
+    return PRESET_RESTRICTIONS.filter((p) => {
+      const matchesCategory = selectedCategoryTab === 'todos' || p.category === selectedCategoryTab;
+      const matchesQuery = 
+        !q ||
+        p.label.toLowerCase().includes(q) ||
+        p.subVi.toLowerCase().includes(q);
+      return matchesCategory && matchesQuery;
+    });
+  }, [ingredientSearch, selectedCategoryTab]);
+
+  const CATEGORY_TABS = [
+    { id: 'todos', label: 'Todos' },
+    { id: 'frecuentes', label: '⭐ Frecuentes' },
+    { id: 'marisco_pescado', label: '🦐 Marisco & Pescado' },
+    { id: 'especias_hierbas', label: '🌿 Especias & Hierbas' },
+    { id: 'lacteos_huevos', label: '🥛 Lácteos & Huevos' },
+    { id: 'granos_gluten', label: '🌾 Trigo & Gluten' },
+    { id: 'carnes', label: '🥩 Carnes' },
+    { id: 'dietas', label: '🥗 Dietas' },
+  ];
+
   return (
     <div className="space-y-6 max-w-4xl w-full mx-auto min-w-0">
-      {/* 1. Header Banner & Context */}
-      <div className="bg-gradient-to-r from-rose-900 to-rose-800 text-white rounded-2xl p-5 sm:p-6 shadow-md border border-rose-700/50">
+      {/* 1. Header Banner & Saved Cards Navigation */}
+      <div className="bg-gradient-to-br from-rose-950 via-rose-900 to-rose-800 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-rose-700/60 relative overflow-hidden">
+        {/* Subtle decorative background glow */}
+        <div className="absolute -top-12 -right-12 w-48 h-48 bg-rose-500/10 rounded-full blur-2xl pointer-events-none" />
+
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="p-2.5 rounded-xl bg-white/10 text-white backdrop-blur-xs border border-white/20">
-              <ShieldAlert className="w-6 h-6 text-rose-300" />
+            <div className="p-3 rounded-2xl bg-white/10 text-white backdrop-blur-md border border-white/20 shadow-inner">
+              <ShieldAlert className="w-6 h-6 sm:w-7 sm:h-7 text-rose-300" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white">
-                  Fichas Médicas y Alergias para Restaurantes
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-lg sm:text-xl font-black tracking-tight text-white">
+                  Fichas Médicas de Alérgenos & Intolerancias
                 </h3>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-200 border border-rose-400/30">
-                  Multirrestricción
+                <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-rose-500/40 text-rose-100 border border-rose-400/40 tracking-wider">
+                  Traducción Garantizada
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-rose-100/90 mt-0.5">
-                Crea, combina varias alergias a la vez y guarda múltiples fichas para ti o tus acompañantes de viaje.
+              <p className="text-xs sm:text-sm text-rose-100/90 mt-1 max-w-2xl leading-relaxed">
+                Selecciona ingredientes con el buscador, genera tu tarjeta en vietnamita para el restaurante y activa el <strong>Modo Pantalla Completa</strong> para mostrárselo al cocinero.
               </p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={handleStartNewCard}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white text-rose-900 hover:bg-rose-50 font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer shrink-0"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-rose-950 hover:bg-rose-50 font-bold text-xs sm:text-sm shadow-sm hover:shadow transition cursor-pointer shrink-0"
           >
             <Plus className="w-4 h-4 text-rose-700" />
             <span>Nueva Ficha</span>
           </button>
         </div>
 
-        {/* Saved Cards Quick Selector Tabs */}
+        {/* Saved Cards Carousel Tabs */}
         <div className="mt-5 pt-4 border-t border-white/15">
           <div className="flex items-center justify-between gap-2 mb-2.5">
-            <span className="text-xs font-semibold text-rose-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5" />
+            <span className="text-xs font-bold text-rose-200 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-rose-300" />
               Tus Fichas Guardadas ({savedCards.length}):
             </span>
-            <span className="text-[11px] text-rose-200/80">
-              Disponibles 100% sin conexión
+            <span className="text-[11px] text-rose-200/80 font-medium">
+              100% disponibles sin conexión
             </span>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x">
             {savedCards.map((card) => {
               const isActive = activeCardId === card.id && !isCreatingNew;
               return (
                 <div
                   key={card.id}
                   onClick={() => handleSelectCard(card)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer shrink-0 select-none ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-bold transition cursor-pointer shrink-0 select-none shadow-2xs ${
                     isActive
-                      ? 'bg-white text-rose-950 border-white shadow-md'
+                      ? 'bg-white text-rose-950 border-white shadow-sm'
                       : 'bg-white/10 text-white border-white/15 hover:bg-white/20'
                   }`}
                 >
                   <User className={`w-3.5 h-3.5 ${isActive ? 'text-rose-600' : 'text-rose-300'}`} />
-                  <span className="truncate max-w-[140px] sm:max-w-[180px]">
+                  <span className="truncate max-w-[130px] sm:max-w-[170px]">
                     {card.personName || card.title}
                   </span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
                     isActive ? 'bg-rose-100 text-rose-800' : 'bg-white/20 text-white'
                   }`}>
                     {card.conditions?.length || 1}
                   </span>
                   {savedCards.length > 1 && (
                     <button
+                      type="button"
                       onClick={(e) => handleDeleteCard(card.id, e)}
-                      title="Eliminar esta ficha"
-                      className={`p-0.5 rounded hover:bg-rose-200/50 transition cursor-pointer ${
+                      title="Eliminar esta ficha médica"
+                      className={`p-1 rounded-md hover:bg-rose-200/50 transition cursor-pointer ml-1 ${
                         isActive ? 'text-stone-400 hover:text-rose-700' : 'text-rose-300 hover:text-white'
                       }`}
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
@@ -497,93 +780,96 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
             })}
 
             {isCreatingNew && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 text-amber-950 font-bold text-xs shrink-0 shadow-sm animate-pulse">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 text-amber-950 font-black text-xs shrink-0 shadow-sm animate-pulse">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Creando nueva ficha...</span>
+                <span>Configurando nueva ficha...</span>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Save Success Toast */}
+      {/* Toast Notification */}
       {saveToast && (
-        <div className="bg-emerald-50 text-emerald-900 border border-emerald-300 px-4 py-2.5 rounded-xl flex items-center justify-between gap-3 text-xs font-semibold animate-in fade-in slide-in-from-top-2">
+        <div className="bg-emerald-50 text-emerald-900 border border-emerald-300 px-4 py-3 rounded-2xl flex items-center justify-between gap-3 text-xs font-bold animate-in fade-in slide-in-from-top-2 shadow-xs">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span>{saveToast}</span>
           </div>
-          <button onClick={() => setSaveToast(null)} className="text-emerald-700 hover:text-emerald-950">
-            <X className="w-3.5 h-3.5" />
+          <button type="button" onClick={() => setSaveToast(null)} className="text-emerald-700 hover:text-emerald-950">
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* 2. CREATION / EDITING PANEL */}
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-sm space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700 font-bold text-sm">
+      {/* 2. INGREDIENT & ALLERGY BUILDER PANEL */}
+      <div className="bg-white rounded-3xl p-5 sm:p-7 border border-stone-200 shadow-sm space-y-6">
+        {/* Panel Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700 font-black text-sm">
               1
             </div>
             <div>
-              <h4 className="font-bold text-sm sm:text-base text-stone-900">
-                {isCreatingNew ? 'Configurar Nueva Ficha' : `Editar Restricciones de "${personName}"`}
+              <h4 className="font-bold text-base text-stone-900">
+                {isCreatingNew ? 'Configurar Ficha de Alérgenos' : `Restricciones de "${personName}"`}
               </h4>
               <p className="text-xs text-stone-500">
-                Selecciona una o varias condiciones para combinarlas en la misma ficha en vietnamita.
+                Selecciona ingredientes o alérgenos. Puedes combinar varios en la misma tarjeta.
               </p>
             </div>
           </div>
 
-          {/* Person / Card Name Field */}
-          <div className="flex items-center gap-2 self-stretch sm:self-auto">
-            <span className="text-xs font-semibold text-stone-500 shrink-0">Nombre:</span>
+          {/* Name Field */}
+          <div className="flex items-center gap-2 self-stretch sm:self-auto bg-stone-50 p-1.5 rounded-xl border border-stone-200">
+            <span className="text-xs font-bold text-stone-500 pl-2 shrink-0">Nombre:</span>
             <input
               type="text"
               value={personName}
               onChange={(e) => setPersonName(e.target.value)}
-              placeholder="Ej: Ficha de Carlos / Niños..."
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-rose-500 w-full sm:w-48"
+              placeholder="Ej: Ficha Carlos, Niños..."
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-stone-300 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 w-full sm:w-44"
             />
           </div>
         </div>
 
-        {/* Selected Conditions Active Chips Bar */}
-        <div className="space-y-2">
+        {/* ACTIVE INGREDIENTS TRAY (Chips without "Sin ") */}
+        <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-stone-800 uppercase tracking-wide flex items-center gap-1.5">
-              <span>Restricciones añadidas a esta ficha ({selectedConditions.length}):</span>
+              <span>Ingredientes añadidos a excluir ({selectedConditions.length}):</span>
             </label>
             {selectedConditions.length > 0 && (
               <button
+                type="button"
                 onClick={() => setSelectedConditions([])}
-                className="text-[11px] text-stone-400 hover:text-rose-600 transition cursor-pointer"
+                className="text-[11px] text-stone-400 hover:text-rose-600 font-semibold transition cursor-pointer"
               >
-                Limpiar todas
+                Limpiar selección
               </button>
             )}
           </div>
 
           {selectedConditions.length === 0 ? (
-            <div className="p-3.5 rounded-xl border border-dashed border-stone-200 bg-stone-50/50 text-center">
+            <div className="p-4 rounded-2xl border-2 border-dashed border-stone-200 bg-stone-50/50 text-center">
               <p className="text-xs text-stone-500">
-                No has añadido ninguna restricción aún. Haz clic en las etiquetas de abajo o escribe un ingrediente personalizado.
+                Aún no has seleccionado ingredientes. Busca o toca en la lista inferior para agregarlos a tu ficha.
               </p>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2 p-2.5 rounded-xl bg-stone-50 border border-stone-200">
+            <div className="flex flex-wrap gap-2 p-3 rounded-2xl bg-rose-50/40 border border-rose-200/80">
               {selectedConditions.map((cond) => (
                 <span
                   key={cond}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white font-bold text-xs shadow-xs"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 text-white font-bold text-xs shadow-2xs group"
                 >
                   <Check className="w-3.5 h-3.5" />
                   <span>{cond}</span>
                   <button
+                    type="button"
                     onClick={() => handleRemoveCondition(cond)}
-                    className="p-0.5 rounded-full hover:bg-rose-700 transition cursor-pointer"
-                    title="Eliminar de la ficha"
+                    className="p-0.5 rounded-full hover:bg-rose-700 transition cursor-pointer ml-0.5 text-white/80 hover:text-white"
+                    title="Eliminar ingrediente"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -593,38 +879,100 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
           )}
         </div>
 
-        {/* Quick Presets Grid (categorized and easy to tap) */}
-        <div className="space-y-2.5">
-          <label className="text-xs font-semibold text-stone-700 block">
-            Alergias e intolerancias más comunes en Vietnam (toca para añadir o quitar):
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-            {PRESET_RESTRICTIONS.map((preset) => {
+        {/* INGREDIENTS SEARCH & CATEGORIES BAR */}
+        <div className="space-y-3 pt-1">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            {/* Search Input */}
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar alérgeno o ingrediente (ej. cacahuete, huevo, marisco, gluten, sésamo, picante...)"
+                value={ingredientSearch}
+                onChange={(e) => setIngredientSearch(e.target.value)}
+                className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white text-xs sm:text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-rose-500 transition shadow-2xs"
+              />
+              {ingredientSearch && (
+                <button
+                  type="button"
+                  onClick={() => setIngredientSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Custom typed add button if searched term is not in list */}
+            {ingredientSearch.trim() && (
+              <button
+                type="button"
+                onClick={handleAddFromSearch}
+                className="px-3.5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Añadir "{cleanAllergenLabel(ingredientSearch)}"</span>
+              </button>
+            )}
+          </div>
+
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar touch-pan-x text-xs">
+            {CATEGORY_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSelectedCategoryTab(tab.id)}
+                className={`px-3 py-1.5 rounded-xl whitespace-nowrap font-bold transition cursor-pointer shrink-0 ${
+                  selectedCategoryTab === tab.id
+                    ? 'bg-stone-900 text-white shadow-2xs'
+                    : 'bg-stone-100 hover:bg-stone-200/80 text-stone-600 border border-stone-200/60'
+                }`}
+              >
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* EXTENDED INGREDIENTS GRID */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-stone-500">
+            <span>
+              Mostrando {filteredPresets.length} {filteredPresets.length === 1 ? 'ingrediente' : 'ingredientes'}:
+            </span>
+            <span className="text-[11px] text-stone-400">
+              Toca para marcar o desmarcar
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[360px] overflow-y-auto pr-1">
+            {filteredPresets.map((preset) => {
               const isSelected = selectedConditions.includes(preset.label);
               return (
                 <button
                   key={preset.id}
                   type="button"
                   onClick={() => handleToggleCondition(preset.label)}
-                  className={`text-left p-2.5 rounded-xl border transition cursor-pointer flex items-start gap-2.5 ${
+                  className={`text-left p-3 rounded-2xl border transition cursor-pointer flex items-start gap-3 select-none ${
                     isSelected
-                      ? 'bg-rose-50 border-rose-400 text-rose-950 shadow-xs'
-                      : 'bg-white border-stone-200 hover:border-stone-300 hover:bg-stone-50/80 text-stone-700'
+                      ? 'bg-rose-50/90 border-rose-400 text-rose-950 shadow-xs ring-1 ring-rose-400'
+                      : 'bg-white border-stone-200 hover:border-stone-300 hover:bg-stone-50/70 text-stone-700'
                   }`}
                 >
-                  <span className="text-xl shrink-0 mt-0.5">{preset.emoji}</span>
+                  <span className="text-2xl shrink-0 mt-0.5">{preset.emoji}</span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className={`text-xs font-bold truncate ${isSelected ? 'text-rose-950' : 'text-stone-900'}`}>
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className={`text-xs font-bold truncate leading-tight ${isSelected ? 'text-rose-950' : 'text-stone-900'}`}>
                         {preset.label}
                       </span>
                       {isSelected ? (
-                        <CheckCircle2 className="w-4 h-4 text-rose-600 shrink-0" />
+                        <CheckCircle2 className="w-4 h-4 text-rose-600 shrink-0 fill-rose-100" />
                       ) : (
                         <div className="w-4 h-4 rounded-full border border-stone-300 shrink-0" />
                       )}
                     </div>
-                    <span className="text-[11px] text-stone-500 block truncate mt-0.5 font-sans">
+                    <span className="text-[11px] text-stone-500 block truncate mt-1 font-sans">
                       {preset.subVi}
                     </span>
                   </div>
@@ -632,26 +980,39 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
               );
             })}
           </div>
+
+          {filteredPresets.length === 0 && (
+            <div className="text-center py-8 bg-stone-50 rounded-2xl border border-stone-200 text-stone-500 text-xs space-y-2">
+              <p>No se encontraron ingredientes en la lista con "{ingredientSearch}".</p>
+              <button
+                type="button"
+                onClick={handleAddFromSearch}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs inline-flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Añadir "{cleanAllergenLabel(ingredientSearch)}" a la ficha</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Custom Ingredient / Allergy Adder */}
-        <form onSubmit={handleAddCustom} className="space-y-1.5 pt-1">
+        {/* CUSTOM INGREDIENT MANUAL INPUT */}
+        <form onSubmit={handleAddCustom} className="pt-2 border-t border-stone-100 space-y-2">
           <label className="text-xs font-semibold text-stone-700 block">
-            ¿Tienes otra alergia o ingrediente personalizado? (ej: sésamo, fresas, mostaza, apio...):
+            ¿Quieres añadir otro ingrediente personalizado? (ej. fresas, mostaza, canela, apio...):
           </label>
           <div className="flex items-center gap-2">
             <input
               type="text"
               value={customInput}
               onChange={(e) => setCustomInput(e.target.value)}
-              placeholder="Escribe ingrediente o alimento..."
-              className="flex-1 text-xs sm:text-sm px-3.5 py-2 rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-rose-500"
+              placeholder="Escribe el alimento o ingrediente..."
+              className="flex-1 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-2xs"
             />
             <button
-              type="button"
-              onClick={() => handleAddCustom()}
+              type="submit"
               disabled={!customInput.trim()}
-              className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-900 disabled:opacity-40 text-white font-semibold text-xs sm:text-sm transition cursor-pointer flex items-center gap-1.5 shrink-0"
+              className="px-4 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 disabled:opacity-40 text-white font-bold text-xs sm:text-sm transition cursor-pointer flex items-center gap-1.5 shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Añadir</span>
@@ -659,30 +1020,30 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
           </div>
         </form>
 
-        {/* Action Button: Generate / Update Card */}
-        <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-stone-100">
-          <div className="flex items-center gap-1.5 text-xs text-stone-500">
+        {/* GENERATE & SAVE ACTIONS */}
+        <div className="pt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-stone-100">
+          <div className="flex items-center gap-2 text-xs text-stone-500">
             <Info className="w-4 h-4 text-stone-400 shrink-0" />
             <span>
-              {isOnline ? 'Traduce con vocabulario culinario vietnamita certificado.' : 'Modo sin conexión: plantilla médica inmediata.'}
+              {isOnline ? 'Traducción culinaria profesional con IA y revisión fonética.' : 'Modo sin conexión: plantilla médica inmediata.'}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={handleGenerateCard}
               disabled={isGenerating || selectedConditions.length === 0}
-              className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer flex items-center justify-center gap-2"
+              className="flex-1 sm:flex-initial px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-black text-xs sm:text-sm shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-center gap-2"
             >
               {isGenerating ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Generando ficha...</span>
+                  <span>Traduciendo al vietnamita...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
+                  <Sparkles className="w-4 h-4 text-rose-200" />
                   <span>Generar Ficha en Vietnamita</span>
                 </>
               )}
@@ -692,7 +1053,7 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
               <button
                 type="button"
                 onClick={handleSaveCard}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                className="px-4 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm shadow-md hover:shadow-lg transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
                 title="Guardar en tu colección de fichas de viaje"
               >
                 <Check className="w-4 h-4" />
@@ -703,69 +1064,72 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
         </div>
       </div>
 
-      {/* 3. PRESENTATION CARD (High Contrast, Restaurant & Vendor Ready) */}
+      {/* 3. RESTAURANT PRESENTATION CARD (HIGH CONTRAST & CLEAR FOR COOKS) */}
       {currentCard && (
-        <div className="bg-rose-50/70 rounded-2xl p-5 sm:p-7 border-2 border-rose-300 shadow-lg space-y-5 relative">
-          {/* Card Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-rose-200/80 pb-4">
+        <div className="bg-white rounded-3xl p-5 sm:p-7 border-2 border-rose-300 shadow-lg space-y-5 relative">
+          {/* Card Top Ribbon */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-200/80 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-rose-600 text-white shadow-xs">
+              <div className="p-3 rounded-2xl bg-rose-600 text-white shadow-xs">
                 <ShieldCheck className="w-6 h-6" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">
+                  <span className="text-xs font-black text-rose-700 uppercase tracking-wider">
                     {currentCard.personName || 'Ficha Médica'}
                   </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-900">
-                    {currentCard.conditions?.length || 1} {currentCard.conditions?.length === 1 ? 'restricción' : 'restricciones'}
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 border border-rose-200">
+                    {currentCard.conditions?.length || 1} {currentCard.conditions?.length === 1 ? 'ingrediente' : 'ingredientes'}
                   </span>
                 </div>
-                <h3 className="text-base sm:text-lg font-black text-rose-950">
-                  {currentCard.title || 'THẺ DỊ ỨNG / ALERGIAS'}
+                <h3 className="text-base sm:text-lg font-black text-stone-900 mt-0.5">
+                  {currentCard.title || 'THẺ DỊ ỨNG THỰC PHẨM (Ficha de Alérgenos)'}
                 </h3>
               </div>
             </div>
 
-            {/* Presentation Controls: Fullscreen Mode, TTS, Copy */}
-            <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+            {/* Quick Actions: Fullscreen Restaurant Mode, TTS, Copy */}
+            <div className="w-full sm:w-auto flex items-center justify-start sm:justify-end gap-2 flex-wrap">
               <button
+                type="button"
                 onClick={() => setIsFullscreenMode(true)}
-                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-stone-900 text-white hover:bg-stone-800 transition cursor-pointer shadow-xs"
+                className="flex items-center gap-1.5 text-xs font-black px-3.5 py-2 rounded-xl bg-stone-900 text-white hover:bg-stone-800 transition cursor-pointer shadow-sm"
                 title="Abrir en pantalla completa para mostrar directamente al cocinero"
               >
-                <Maximize2 className="w-3.5 h-3.5 text-rose-300" />
-                <span>Modo Restaurante</span>
+                <Maximize2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>Modo Pantalla Completa</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => handleSpeak(currentCard.vietnameseLarge)}
-                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-rose-200 text-rose-900 hover:bg-rose-300 transition cursor-pointer"
+                className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-950 transition cursor-pointer border border-rose-200"
                 title="Escuchar pronunciación"
               >
-                <Volume2 className="w-3.5 h-3.5" />
+                <Volume2 className="w-3.5 h-3.5 text-rose-700" />
                 <span>Pronunciar</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => handleCopyText(`${currentCard.vietnameseLarge}\n\n${currentCard.emergencyNote || ''}`)}
-                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-900 hover:bg-rose-100 transition cursor-pointer"
-                title="Copiar texto para enviar por chat"
+                className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 transition cursor-pointer border border-stone-200"
+                title="Copiar texto para enviar por Grab o chat"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-stone-500" />}
                 <span>{copied ? 'Copiado' : 'Copiar'}</span>
               </button>
             </div>
           </div>
 
-          {/* Vietnamese Large Print Box - Designed to be shown across the counter */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border-2 border-rose-200 shadow-xs space-y-3">
+          {/* Vietnamese Large Display Card (Designed to be read 1m away across counter) */}
+          <div className="bg-rose-50/60 rounded-2xl p-5 sm:p-6 border-2 border-rose-300 shadow-2xs space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black tracking-widest uppercase text-rose-600 flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+              <span className="text-[11px] font-black tracking-widest uppercase text-rose-700 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-rose-600" />
                 Muestra esta pantalla al dependiente o cocinero:
               </span>
-              <span className="text-[11px] text-stone-400 font-sans">
+              <span className="text-[11px] font-bold text-stone-400 font-sans">
                 Tiếng Việt (Vietnamita)
               </span>
             </div>
@@ -775,8 +1139,9 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
             </div>
 
             {currentCard.phonetic && (
-              <div className="pt-2 border-t border-stone-100 text-xs text-stone-500 italic">
-                <strong>Guía fonética aproximada:</strong> {currentCard.phonetic}
+              <div className="pt-2.5 border-t border-rose-200/80 text-xs text-stone-600 font-mono leading-relaxed">
+                <strong className="text-stone-500 font-sans">Guía de pronunciación aproximada: </strong>
+                {currentCard.phonetic}
               </div>
             )}
           </div>
@@ -785,16 +1150,16 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
           {currentCard.forbiddenIngredients && currentCard.forbiddenIngredients.length > 0 && (
             <div className="space-y-2">
               <span className="text-xs font-bold text-rose-950 flex items-center gap-1.5">
-                <span className="text-rose-600">🚫</span>
+                <span className="text-rose-600 font-black">🚫</span>
                 Ingredientes prohibidos para el cocinero (TUYỆT ĐỐI KHÔNG DÙNG):
               </span>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 {currentCard.forbiddenIngredients.map((ing) => (
                   <span
                     key={ing}
-                    className="bg-rose-200/90 border border-rose-300 text-rose-950 font-black text-xs sm:text-sm px-3 py-1.5 rounded-lg shadow-2xs"
+                    className="bg-rose-100 border border-rose-300 text-rose-950 font-black text-xs sm:text-sm px-3 py-1.5 rounded-xl shadow-2xs"
                   >
-                    {ing}
+                    {cleanAllergenLabel(ing)}
                   </span>
                 ))}
               </div>
@@ -804,15 +1169,15 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
           {/* Safe Food Suggestions */}
           {currentCard.allowedFoods && currentCard.allowedFoods.length > 0 && (
             <div className="space-y-2 pt-1">
-              <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
-                <span className="text-emerald-600">✅</span>
+              <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                <span className="text-emerald-600 font-black">✅</span>
                 Platos recomendados seguros (MÓN AN TOÀN NÊN DÙNG):
               </span>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 {currentCard.allowedFoods.map((food) => (
                   <span
                     key={food}
-                    className="bg-emerald-100/90 border border-emerald-300 text-emerald-950 font-bold text-xs px-2.5 py-1 rounded-md"
+                    className="bg-emerald-50 border border-emerald-300 text-emerald-950 font-bold text-xs px-3 py-1 rounded-lg"
                   >
                     {food}
                   </span>
@@ -823,12 +1188,13 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
 
           {/* Emergency Note 115 */}
           {currentCard.emergencyNote && (
-            <div className="text-xs text-rose-950 bg-rose-200/80 p-3.5 rounded-xl border border-rose-300 font-medium flex items-start gap-2.5">
-              <span className="text-lg shrink-0">🚑</span>
+            <div className="text-xs text-rose-950 bg-rose-50 p-4 rounded-2xl border border-rose-200 font-medium flex items-start gap-3">
+              <HeartPulse className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
               <div className="leading-relaxed">
-                <strong>Instrucción médica de emergencia:</strong> {currentCard.emergencyNote}
+                <strong>Instrucción médica de emergencia: </strong>
+                {currentCard.emergencyNote}
                 <div className="mt-1 font-bold text-rose-900">
-                  Teléfono de ambulancia en Vietnam: <span className="underline text-rose-950">115</span> | Policía: <span className="underline text-rose-950">113</span>
+                  Teléfono de ambulancia en Vietnam: <span className="underline font-black text-rose-950">115</span> | Policía: <span className="underline font-black text-rose-950">113</span>
                 </div>
               </div>
             </div>
@@ -836,17 +1202,18 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
         </div>
       )}
 
-      {/* 4. FULLSCREEN / RESTAURANT VENDOR OVERLAY */}
+      {/* 4. FULLSCREEN VENDOR OVERLAY (FOR BUSY RESTAURANTS & FOOD CARTS) */}
       {isFullscreenMode && currentCard && (
         <div className="fixed inset-0 z-50 bg-stone-950/95 backdrop-blur-md flex flex-col p-4 sm:p-8 overflow-y-auto">
           <div className="max-w-3xl w-full mx-auto my-auto space-y-6">
             {/* Top Close Bar */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-rose-400 font-bold text-sm uppercase tracking-widest">
+              <div className="flex items-center gap-2 text-rose-400 font-black text-sm uppercase tracking-widest">
                 <ShieldAlert className="w-5 h-5 text-rose-500" />
-                <span>Modo Vendedor Ambulante / Nhà Hàng</span>
+                <span>Modo Vendedor / Nhà Hàng (Pantalla Completa)</span>
               </div>
               <button
+                type="button"
                 onClick={() => setIsFullscreenMode(false)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm transition cursor-pointer border border-white/20"
               >
@@ -860,11 +1227,12 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
               <div className="flex items-center justify-between border-b-2 border-stone-200 pb-4">
                 <div className="flex items-center gap-2 text-rose-700 font-black text-sm uppercase tracking-wider">
                   <AlertTriangle className="w-5 h-5" />
-                  <span>XIN ĐỌC KỸ TRƯỚC KHI NẤU (POR FAVOR LEA ANTES DE COCINAR)</span>
+                  <span>XIN ĐỌC KỸ TRƯỚC KHI NẤU (LEER ANTES DE COCINAR)</span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => handleSpeak(currentCard.vietnameseLarge)}
-                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black flex items-center gap-1.5 transition cursor-pointer shadow-xs"
                 >
                   <Volume2 className="w-4 h-4" />
                   <span>Phát âm (Audio)</span>
@@ -878,17 +1246,17 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
 
               {/* Prohibited items badges */}
               {currentCard.forbiddenIngredients && currentCard.forbiddenIngredients.length > 0 && (
-                <div className="p-4 rounded-2xl bg-rose-100 border-2 border-rose-400">
-                  <span className="text-xs sm:text-sm font-black text-rose-950 uppercase tracking-wide block mb-2">
-                    🚫 TUYỆT ĐỐI KHÔNG SỬ DỤNG (PROHIBIDO USAR):
+                <div className="p-4 sm:p-5 rounded-2xl bg-rose-50 border-2 border-rose-300 space-y-2">
+                  <span className="text-xs sm:text-sm font-black text-rose-950 uppercase tracking-wide block">
+                    🚫 NGUYÊN LIỆU TUYỆT ĐỐI CẤM (PROHIBIDO USAR):
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {currentCard.forbiddenIngredients.map((item) => (
                       <span
                         key={item}
-                        className="bg-rose-600 text-white font-black text-sm sm:text-lg px-3.5 py-1.5 rounded-xl shadow-xs"
+                        className="bg-rose-600 text-white font-black text-sm sm:text-lg px-4 py-2 rounded-xl shadow-xs"
                       >
-                        {item}
+                        {cleanAllergenLabel(item)}
                       </span>
                     ))}
                   </div>
@@ -897,7 +1265,7 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
 
               {/* Emergency Call Note */}
               <div className="text-sm font-bold text-rose-900 bg-stone-100 p-4 rounded-2xl border border-stone-300">
-                🚑 <strong>Cấp cứu khẩn cấp:</strong> Nếu xảy ra sốc phản vệ, vui lòng gọi <strong>115</strong> ngay lập tức!
+                🚑 <strong>Cấp cứu khẩn cấp:</strong> Nếu có dấu hiệu sốc phản vệ, vui lòng gọi cấp cứu <strong>115</strong> ngay lập tức!
               </div>
             </div>
           </div>

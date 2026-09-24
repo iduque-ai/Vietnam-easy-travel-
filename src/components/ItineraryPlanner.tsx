@@ -1507,6 +1507,16 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
                                         </button>
                                       )}
 
+                                      {poi && onStartFreeTour && (
+                                        <button
+                                          onClick={() => onStartFreeTour(poi)}
+                                          className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition cursor-pointer"
+                                          title="Hacer Free Tour con Gemini aquí"
+                                        >
+                                          <Sparkles className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+
                                       {poi && (
                                         <a
                                           href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}

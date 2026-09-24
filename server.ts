@@ -50,11 +50,6 @@ function getAI(): GoogleGenAI {
   if (!aiClient) {
     aiClient = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY || '',
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
     });
   }
   return aiClient;
@@ -139,15 +134,33 @@ app.get('/api/rates', async (req, res) => {
   });
 });
 
-// Multi-model Gemini caller with candidate fallbacks (handles 503 spikes, rate limits)
-async function callGeminiJsonWithFallback(prompt: string): Promise<any> {
+// Robust JSON parser that handles codeblocks and extra text from Gemini
+function parseJsonSafely(raw: string): any {
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  }
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  }
+  return JSON.parse(cleaned);
+}
+
+// Multi-model Gemini caller with candidate fallbacks and strict timeout
+async function callGeminiJsonWithFallback(
+  prompt: string,
+  timeoutMs: number = 8000,
+  models: string[] = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest']
+): Promise<any> {
   const ai = getAI();
-  const candidateModels = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+  const candidateModels = models;
   let lastError: any = null;
 
   for (const model of candidateModels) {
     try {
-      const response = await ai.models.generateContent({
+      const generatePromise = ai.models.generateContent({
         model,
         contents: prompt,
         config: {
@@ -155,8 +168,14 @@ async function callGeminiJsonWithFallback(prompt: string): Promise<any> {
         },
       });
 
-      if (response.text) {
-        return JSON.parse(response.text.trim());
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout model ${model}`)), timeoutMs)
+      );
+
+      const response: any = await Promise.race([generatePromise, timeoutPromise]);
+
+      if (response && response.text) {
+        return parseJsonSafely(response.text);
       }
     } catch (err: any) {
       console.warn(`[Gemini] Model ${model} encountered an issue (${err?.status || err?.message || 'error'}). Attempting candidate model...`);
@@ -339,7 +358,205 @@ function getPresetOrFallbackAllergyCard(rawInput: string | string[]) {
   };
 }
 
-// Translation endpoint using Gemini with multi-model fallback supporting bidirectional English <-> Vietnamese
+// High-reliability phonetic guide generator for Vietnamese phrases
+function generateVietnamesePhonetics(vietnamese: string): string {
+  if (!vietnamese) return '';
+  const toneMap: Record<string, string> = {
+    'à':'a','á':'a','ả':'a','ã':'a','ạ':'a',
+    'â':'a','ầ':'a','ấ':'a','ẩ':'a','ẫ':'a','ậ':'a',
+    'ă':'a','ằ':'a','ắ':'a','ẳ':'a','ẵ':'a','ặ':'a',
+    'è':'e','é':'e','ẻ':'e','ẽ':'e','ẹ':'e',
+    'ê':'e','ề':'e','ế':'e','ể':'e','ễ':'e','ệ':'e',
+    'ì':'i','í':'i','ỉ':'i','ĩ':'i','ị':'i',
+    'ò':'o','ó':'o','ỏ':'o','õ':'o','ọ':'o',
+    'ô':'o','ồ':'o','ố':'o','ổ':'o','ỗ':'o','ộ':'o',
+    'ơ':'o','ờ':'o','ớ':'o','ở':'o','ỡ':'o','ợ':'o',
+    'ù':'u','ú':'u','ủ':'u','ũ':'u','ụ':'u',
+    'ư':'u','ừ':'u','ứ':'u','ử':'u','ữ':'u','ự':'u',
+    'ỳ':'y','ý':'y','ỷ':'y','ỹ':'y','ỵ':'y',
+    'đ':'d','Đ':'D'
+  };
+  return vietnamese
+    .split(' ')
+    .map(word => {
+      let punct = '';
+      let w = word;
+      const m = w.match(/[.,!?¡¿:;"]+$/);
+      if (m) {
+        punct = m[0];
+        w = w.slice(0, -punct.length);
+      }
+      const isCap = w && w[0] === w[0].toUpperCase();
+      let lower = w.toLowerCase();
+      lower = lower.replace(/^x/, 's').replace(/qu/g, 'kw').replace(/ph/g, 'f').replace(/ch$/g, 'k').replace(/nh$/g, 'ny');
+      lower = lower.replace(/ao/g, 'ow').replace(/iêu/g, 'yew').replace(/ieu/g, 'yew').replace(/ơi/g, 'oy').replace(/oi/g, 'oy');
+      let cleaned = '';
+      for (const char of lower) {
+        cleaned += toneMap[char] || char;
+      }
+      if (isCap && cleaned) {
+        cleaned = cleaned[0].toUpperCase() + cleaned.slice(1);
+      }
+      return cleaned + punct;
+    })
+    .join(' ');
+}
+
+// Generate contextual travel tips for Vietnam
+function getVietnameseTravelTip(text: string, viText: string): string {
+  const combined = (text + ' ' + viText).toLowerCase();
+  if (combined.includes('cà phê') || combined.includes('cafe') || combined.includes('coffee')) {
+    return 'El café vietnamita tradicional suele servirse con leche condensada dulce y hielo (Cà phê sữa đá).';
+  }
+  if (combined.includes('tiền') || combined.includes('giá') || combined.includes('cuesta') || combined.includes('precio') || combined.includes('cuanto') || combined.includes('cuánto')) {
+    return 'Pregunta esencial para mercados callejeros. En Vietnam los precios orales suelen decirse en miles ("k").';
+  }
+  if (combined.includes('cay') || combined.includes('ớt') || combined.includes('picante') || combined.includes('chili')) {
+    return 'Imprescindible en puestos de sopa callejeros, donde suelen añadir guindillas rojas muy picantes.';
+  }
+  if (combined.includes('nhà vệ sinh') || combined.includes('baño') || combined.includes('restroom') || combined.includes('toilet')) {
+    return 'Los servicios públicos en Vietnam suelen señalizarse con el cartel "WC" o "Nhà vệ sinh".';
+  }
+  if (combined.includes('cảm ơn') || combined.includes('gracias') || combined.includes('thank')) {
+    return 'Acompaña el agradecimiento con una sonrisa cordial o una ligera inclinación de cabeza.';
+  }
+  if (combined.includes('chào') || combined.includes('hola') || combined.includes('hello')) {
+    return 'En Vietnam se saluda cordialmente con "Xin chào", apto tanto para dependientes como para personas mayores.';
+  }
+  if (combined.includes('nước') || combined.includes('agua') || combined.includes('water')) {
+    return 'Pide siempre agua embotellada con precinto cerrado de fábrica (nước suối đóng chai).';
+  }
+  return 'Muestra esta pantalla al dependiente o pulsa el altavoz para que escuche la pronunciación nativa.';
+}
+
+// High-speed public translation engine
+async function translateWithGoogleGtx(
+  text: string,
+  sourceLang: string = 'auto',
+  targetLang: string = 'vi'
+): Promise<string | null> {
+  try {
+    const sl = sourceLang === 'es' ? 'es' : sourceLang === 'vi' ? 'vi' : 'auto';
+    const tl = targetLang === 'es' ? 'es' : targetLang === 'vi' ? 'vi' : 'en';
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4500);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (Array.isArray(data) && Array.isArray(data[0])) {
+      const translated = data[0].map((item: any) => item[0]).filter(Boolean).join('');
+      if (translated && translated.trim()) {
+        return translated.trim();
+      }
+    }
+  } catch (e) {
+    console.warn('GTX translation request error:', e);
+  }
+  return null;
+}
+
+// Built-in offline travel dictionary for immediate instant fallback
+const TRAVEL_OFFLINE_DICT: Array<{
+  esKeywords: string[];
+  vi: string;
+  en: string;
+  es: string;
+  phonetic: string;
+  tip: string;
+}> = [
+  {
+    esKeywords: ['hola', 'buenos dias', 'buenas tardes', 'buenas noches', 'que tal', 'qué tal'],
+    vi: 'Xin chào, bạn khỏe không?',
+    en: 'Hello, how are you?',
+    es: '¡Hola! ¿Cómo estás?',
+    phonetic: 'Sin chao, ban kwoe khong?',
+    tip: 'Saludo cortés y amigable universal en Vietnam.'
+  },
+  {
+    esKeywords: ['cuanto cuesta', 'cuánto cuesta', 'cuanto vale', 'cuánto vale', 'precio', 'cuanto es'],
+    vi: 'Cái này bao nhiêu tiền vậy ạ?',
+    en: 'How much is this?',
+    es: '¿Cuánto cuesta esto?',
+    phonetic: 'Cai nay bao nyew tien vay ah?',
+    tip: 'Pregunta universal para compras en puestos callejeros y tiendas.'
+  },
+  {
+    esKeywords: ['rebaja', 'descuento', 'regatear', 'mas barato', 'más barato'],
+    vi: 'Bớt một chút được không ạ?',
+    en: 'Can you give a small discount please?',
+    es: '¿Puede hacerme una pequeña rebaja por favor?',
+    phonetic: 'Bot mot choot duoc khong ah?',
+    tip: 'Para regatear amablemente en mercados como Bến Thành o Đông Xuân.'
+  },
+  {
+    esKeywords: ['gracias', 'muchas gracias'],
+    vi: 'Cảm ơn bạn rất nhiều!',
+    en: 'Thank you very much!',
+    es: '¡Muchas gracias!',
+    phonetic: 'Cam on ban rut nyew!',
+    tip: 'Acompaña con una sonrisa cordial.'
+  },
+  {
+    esKeywords: ['la cuenta', 'cuenta por favor', 'cobrar', 'pagar', 'la cuenta por favor'],
+    vi: 'Em ơi, tính tiền giúp anh / chị với!',
+    en: 'Can I have the bill please?',
+    es: 'La cuenta, por favor.',
+    phonetic: 'Em oy, tin tien zoop voy!',
+    tip: '"Em ơi" es la llamada educada estándar a los camareros.'
+  },
+  {
+    esKeywords: ['sin picante', 'no picante', 'no chile', 'no picante por favor', 'sin chile'],
+    vi: 'Làm ơn đừng cho ớt và không cay nhé!',
+    en: 'No spicy, no chili please!',
+    es: 'Sin picante ni guindilla, por favor.',
+    phonetic: 'Lam on dung cho ot va khong cay nye!',
+    tip: 'Imprescindible en platos de fideos y sopas vietnamitas.'
+  },
+  {
+    esKeywords: ['baño', 'donde esta el baño', 'dónde está el baño', 'servicios', 'toilet'],
+    vi: 'Nhà vệ sinh ở đâu vậy ạ?',
+    en: 'Where is the restroom?',
+    es: '¿Dónde está el baño / servicio?',
+    phonetic: 'Nya ve sin o dau vay ah?',
+    tip: 'En los carteles verás a menudo "WC" o "Nhà vệ sinh".'
+  },
+  {
+    esKeywords: ['cafe', 'café', 'cafe con leche', 'café con leche'],
+    vi: 'Cho tôi một ly cà phê sữa đá nhé!',
+    en: 'One iced milk coffee please!',
+    es: 'Un café con leche condensada y hielo, por favor.',
+    phonetic: 'Cho toi mot ly ca fe sua da nye!',
+    tip: 'El emblemático café vietnamita con leche condensada y hielo.'
+  },
+  {
+    esKeywords: ['agua', 'agua mineral', 'agua por favor', 'botella de agua'],
+    vi: 'Cho tôi một chai nước suối nhé!',
+    en: 'One bottle of mineral water please!',
+    es: 'Una botella de agua mineral, por favor.',
+    phonetic: 'Cho toi mot chai nuoc suoy nye!',
+    tip: 'Asegúrate de que la botella tenga el precinto de fábrica intacto.'
+  },
+  {
+    esKeywords: ['ayuda', 'ayudame', 'ayúdame', 'socorro', 'por favor ayude'],
+    vi: 'Làm ơn giúp tôi với được không?',
+    en: 'Can you help me please?',
+    es: '¿Puede ayudarme, por favor?',
+    phonetic: 'Lam on zoop toi voy duoc khong?',
+    tip: 'Para solicitar auxilio o pedir indicaciones en la calle.'
+  },
+  {
+    esKeywords: ['wifi', 'clave wifi', 'contraseña'],
+    vi: 'Ở đây có wifi không? Cho tôi xin mật khẩu với.',
+    en: 'Do you have wifi? Password please.',
+    es: '¿Tiene wifi? ¿Cuál es la contraseña?',
+    phonetic: 'O day co wifi khong? Cho toi sin mat khau voy.',
+    tip: 'Casi todas las cafeterías en Vietnam ofrecen wifi gratuito para clientes.'
+  }
+];
+
+// Translation endpoint using Gemini with GTX fallback and zero-downtime dictionary
 app.post('/api/translate', async (req, res) => {
   const { text, sourceLang = 'en', targetLang = 'vi' } = req.body;
   if (!text || typeof text !== 'string') {
@@ -348,71 +565,141 @@ app.post('/api/translate', async (req, res) => {
 
   const isViToEn = (sourceLang === 'vi' || targetLang === 'en' || targetLang === 'es');
   
-  let prompt: string;
-  if (isViToEn) {
-    prompt = `Act as an expert travel interpreter for a tourist in Vietnam.
+  // 1. Attempt Gemini if API Key is configured with a fast timeout (3.5s)
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const prompt = isViToEn
+        ? `Act as an expert travel interpreter for a tourist in Vietnam.
 A Vietnamese local or vendor said: "${text}".
-Translate this Vietnamese text into natural, clear English (and Spanish).
-
+Translate this Vietnamese text into natural, clear ${targetLang === 'es' ? 'Spanish' : 'English'}.
 Respond with a strictly valid JSON object with these keys:
 {
   "vietnamese": "${text.replace(/"/g, '\\"')}",
-  "translatedText": "Natural English translation for the tourist",
+  "translatedText": "Natural translation for the tourist",
   "phonetic": "Phonetic reading guide of the Vietnamese phrase",
   "literal": "Literal meaning or breakdown of terms/numbers/slang",
-  "tip": "Short 1-sentence cultural context (e.g. price mentioned in 'k' meaning thousands VND, informal polite particles, etc.)",
+  "tip": "Short 1-sentence cultural context (price, politeness, pronouns)",
   "category": "comida | compras | transporte | cortesía | salud | general"
-}`;
-  } else {
-    prompt = `Act as an expert travel translator for someone visiting Vietnam.
+}`
+        : `Act as an expert travel translator for someone visiting Vietnam.
 Translate the following traveler text from ${sourceLang === 'es' ? 'Spanish' : 'English'} to natural, polite Vietnamese.
 Text to translate: "${text}"
-
 Respond with a strictly valid JSON object with these keys:
 {
-  "vietnamese": "Vietnamese text with accurate diacritics and natural colloquial politeness",
-  "translatedText": "Natural Vietnamese text",
-  "phonetic": "Easy phonetic pronunciation guide for an English speaker (e.g., 'Sin chow' for Xin chào, 'Bao nyew tien' for Bao nhiêu tiền)",
-  "literal": "Literal meaning or breakdown of the terms",
-  "tip": "Short 1-sentence cultural or pronunciation tip (tones, politeness, or pronoun used like em/anh)",
+  "vietnamese": "Accurate Vietnamese translation with diacritics and politeness",
+  "translatedText": "Accurate Vietnamese translation",
+  "phonetic": "Easy phonetic pronunciation guide for a Spanish/English speaker",
+  "literal": "Literal meaning",
+  "tip": "Short 1-sentence cultural or pronunciation tip",
   "category": "comida | compras | transporte | cortesía | salud | general"
 }`;
-  }
 
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      const parsed = await callGeminiJsonWithFallback(prompt);
-      // Normalize translatedText vs vietnamese for frontend
+      const parsed = await callGeminiJsonWithFallback(prompt, 1800, ['gemini-3.8-flash']);
       if (parsed) {
         if (!parsed.translatedText) {
           parsed.translatedText = isViToEn ? parsed.vietnamese : (parsed.vietnamese || text);
         }
         return res.json({
           success: true,
+          source: 'gemini_ai',
           translation: parsed,
         });
       }
     } catch (error: any) {
-      console.warn('Gemini translation models unavailable (e.g. 503 high demand spike). Serving graceful translation helper.');
+      console.warn('Gemini translation models busy or unavailable. Seamlessly using real-time translation engine.');
     }
   }
 
-  // Graceful fallback response when API key is missing or model is temporarily unavailable
+  // 2. High-speed, high-accuracy translation engine (100% genuine Vietnamese / Spanish translation)
+  const gtxTranslated = await translateWithGoogleGtx(text, sourceLang, targetLang);
+  if (gtxTranslated && gtxTranslated.trim()) {
+    const cleanTranslated = gtxTranslated.trim();
+    if (isViToEn) {
+      return res.json({
+        success: true,
+        source: 'gtx_engine',
+        translation: {
+          vietnamese: text,
+          translatedText: cleanTranslated,
+          phonetic: generateVietnamesePhonetics(text),
+          literal: cleanTranslated,
+          tip: getVietnameseTravelTip(cleanTranslated, text),
+          category: 'general'
+        }
+      });
+    } else {
+      const phonetic = generateVietnamesePhonetics(cleanTranslated);
+      const tip = getVietnameseTravelTip(text, cleanTranslated);
+      return res.json({
+        success: true,
+        source: 'gtx_engine',
+        translation: {
+          vietnamese: cleanTranslated,
+          translatedText: cleanTranslated,
+          phonetic,
+          literal: text,
+          tip,
+          category: 'general'
+        }
+      });
+    }
+  }
+
+  // 3. Built-in Offline Travel Dictionary fallback
+  const cleanInput = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const matchedPhrase = TRAVEL_OFFLINE_DICT.find(item =>
+    item.esKeywords.some(keyword => {
+      const cleanKeyword = keyword.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return cleanInput.includes(cleanKeyword) || cleanKeyword.includes(cleanInput);
+    })
+  );
+
+  if (matchedPhrase) {
+    if (isViToEn) {
+      return res.json({
+        success: true,
+        source: 'offline_dict',
+        translation: {
+          vietnamese: text,
+          translatedText: targetLang === 'es' ? matchedPhrase.es : matchedPhrase.en,
+          phonetic: matchedPhrase.phonetic,
+          literal: matchedPhrase.es,
+          tip: matchedPhrase.tip,
+          category: 'general'
+        }
+      });
+    } else {
+      return res.json({
+        success: true,
+        source: 'offline_dict',
+        translation: {
+          vietnamese: matchedPhrase.vi,
+          translatedText: matchedPhrase.vi,
+          phonetic: matchedPhrase.phonetic,
+          literal: matchedPhrase.es,
+          tip: matchedPhrase.tip,
+          category: 'general'
+        }
+      });
+    }
+  }
+
+  // 4. Default graceful response (NEVER return raw Spanish in the Vietnamese output!)
   const fallbackTranslation = isViToEn
     ? {
         vietnamese: text,
-        translatedText: `(Local said): "${text}"`,
-        phonetic: text,
-        literal: 'Traducción local aproximada',
-        tip: 'Muestra tu respuesta en inglés o en vietnamita usando las frases rápidas.',
+        translatedText: `"${text}"`,
+        phonetic: generateVietnamesePhonetics(text),
+        literal: 'Frase vietnamita',
+        tip: 'Muestra tu respuesta en vietnamita usando las frases rápidas.',
         category: 'general',
       }
     : {
-        vietnamese: `Xin chào, tôi muốn hỏi: "${text}"`,
-        translatedText: `Xin chào, tôi muốn hỏi: "${text}"`,
-        phonetic: 'Sin chow, toi muon hoi... (Show this screen to the local)',
-        literal: text,
-        tip: 'Los modelos online están en alta demanda temporal. Puedes usar las frases rápidas integradas.',
+        vietnamese: 'Xin chào! Làm ơn giúp tôi với.',
+        translatedText: 'Xin chào! Làm ơn giúp tôi với.',
+        phonetic: 'Sin chao! Lam on zoop toi voy.',
+        literal: '¡Hola! Por favor ayúdame.',
+        tip: 'Pulsa cualquiera de las frases rápidas abajo para traducir al instante sin conexión.',
         category: 'general',
       };
 
@@ -529,6 +816,148 @@ const CURATED_FALLBACK_TOURS: Record<string, any> = {
       '¿Qué significado tiene el color rojo y dorado en este templo?'
     ]
   },
+  hoan_kiem: {
+    placeName: 'Lago Hoàn Kiếm y Templo Ngọc Sơn',
+    cityName: 'Hà Nội',
+    vietnameseName: 'Hồ Hoàn Kiếm – Đền Ngọc Sơn',
+    tagline: 'El corazón palpitante de Hanói donde la tortuga dorada custodia la espada sagrada del emperador',
+    durationMinutes: 35,
+    audioGuideScript: '¡Hola, viajero! Bienvenido al alma poética de Hanói. Respira hondo: frente a ti descansa el mítico Lago Hoàn Kiếm, o "Lago de la Espada Restituida". Cuenta la leyenda que en el siglo XV, el emperador Lê Lợi recibió una espada mágica de una tortuga gigante dorada para liberar al país de los invasores Ming. Tras la victoria imperial, mientras paseaba en barca por aquí, la tortuga emergió a la superficie y reclamó la espada para devolverla a los dioses acuáticos. Y no fue sólo un mito: hasta hace pocos años habitaron en este lago ejemplares vivos de tortugas gigantes de más de 200 kilos, veneradas como el espíritu protector de la nación.',
+    stops: [
+      {
+        number: 1,
+        title: 'El Puente Rojo Thê Húc (Puente del Sol Naciente)',
+        whatToLookAt: 'El puente curvo de madera roja escarlata que conecta la orilla con el islote del templo.',
+        story: 'El color rojo simboliza la alegría y la vitalidad del sol naciente. Su curvatura tradicional no es casual: según las creencias populares, los espíritus malignos solo pueden avanzar en línea recta, por lo que este diseño ondulado impide su acceso al santuario.',
+        insiderTip: 'Cruza despacio a primera hora de la mañana para ver los sauces llorones acariciando el agua y a los ancianos practicando Tai Chi en la orilla.'
+      },
+      {
+        number: 2,
+        title: 'El Santuario de la Montaña de Jade (Đền Ngọc Sơn)',
+        whatToLookAt: 'La vitrina de cristal con la tortuga gigante disecada que habitó el lago.',
+        story: 'Este espécimen pesó 250 kg y vivió más de un siglo en las aguas del lago. Los lugareños la consideran un pariente espiritual directo de la tortuga legendaria de Lê Lợi.',
+        insiderTip: 'En el pabellón trasero hay una vista directa a la Torre de la Tortuga sin multitudes.'
+      },
+      {
+        number: 3,
+        title: 'La Torre de la Tortuga (Tháp Rùa)',
+        whatToLookAt: 'La pequeña torre de tres niveles en el islote central del lago.',
+        story: 'Construida en 1886 por un mandarín local, mezcla arcos de influencia francesa con techos curvos vietnamitas, convirtiéndose en el icono más fotografiado del país.',
+        insiderTip: 'Por la noche, con la iluminación dorada, el reflejo en el agua quieta es un espectáculo.'
+      }
+    ],
+    photoSpot: {
+      location: 'En la orilla este del lago, a 20 metros al norte del Puente Thê Húc.',
+      bestLight: 'Al amanecer (06:30) con la bruma del lago o durante la hora azul tras la puesta de sol.',
+      instruction: 'Encuadra el puente escarlata en diagonal cruzando hacia el templo bajo las ramas de los sauces.'
+    },
+    culturalEtiquette: {
+      dressCode: 'Hombros y rodillas cubiertos para acceder al templo Ngọc Sơn.',
+      whatNotToDo: 'No alimentes a los peces del lago ni arrojes monedas al agua.',
+      scamWarning: 'Cuidado con limpiabotas ambulantes que se acercan fingiendo ver una suela rota en tus zapatillas para cobrar sumas exorbitantes.'
+    },
+    streetFoodReward: {
+      dishNameVi: 'Cà Phê Trứng (Café de Huevo)',
+      dishNameEs: 'Café vietnamita coronado con una suave crema batida de yema y leche condensada',
+      whereToFind: 'Café Giảng, calle Nguyễn Hữu Huân 39 (a 3 minutos caminando del lago).',
+      priceEstimate: '35.000 ₫ – 45.000 ₫'
+    },
+    suggestedQuestions: [
+      '¿Cuándo murió la última tortuga gigante del lago?',
+      '¿Por qué se cierran las calles alrededor del lago los fines de semana?',
+      '¿Qué significan los caracteres chinos en la entrada del templo?'
+    ]
+  },
+  train_street: {
+    placeName: 'Calle del Tren (Hanoi Train Street)',
+    cityName: 'Hà Nội',
+    vietnameseName: 'Phố Đường Tàu Hà Nội',
+    tagline: 'La estrecha vía ferroviaria colonial donde los trenes rozan las mesas de café y la vida cotidiana',
+    durationMinutes: 30,
+    audioGuideScript: '¡Bienvenido a la calle más adrenalínica y pintoresca de todo Hanói! Estás en la famosa "Train Street". Aquí, la vía del tren construida por los ingenieros franceses en 1902 atraviesa un estrecho corredor residencial donde las casas y cafeterías quedan a escasos centímetros de los vagones en marcha. Verás cómo los vecinos recogen ropa tendida, apartan macetas y doblan sillas diminutas instantes antes de que una locomotora de decenas de toneladas retumbe haciendo vibrar el suelo bajo tus pies. Una lección viva de cómo los vietnamitas adaptan el espacio urbano con ingenio y naturalidad.',
+    stops: [
+      {
+        number: 1,
+        title: 'El Pasaje Estrecho de Phùng Hưng / Trần Phú',
+        whatToLookAt: 'El ancho de la vía: apenas metro y medio entre el raíl y las fachadas de las casas antiguas.',
+        story: 'Construida para conectar Hanói con Hải Phòng y la provincia china de Yunnan, esta vía fue vital para el transporte de víveres durante más de un siglo. Hoy conviven trenes de pasajeros con cafeterías familiares.',
+        insiderTip: 'Los dueños de los cafés reciben llamadas de radio con el horario exacto del tren y te avisarán para pegarte a la pared 3 minutos antes.'
+      },
+      {
+        number: 2,
+        title: 'Las Casas Tubo (Nhà Ống) de la Vía',
+        whatToLookAt: 'La arquitectura de las viviendas: fachadas de apenas 2 a 3 metros de ancho pero hasta 30 metros de profundidad.',
+        story: 'En el siglo XIX, los impuestos inmobiliarios se cobraban según el ancho de la fachada que daba a la calle; los hanoyenses inventaron estas "casas tubo" para pagar menos impuestos y aprovechar el terreno.',
+        insiderTip: 'Mira hacia los balcones superiores: casi todos tienen pequeños huertos con hierbas aromáticas para cocinar Phở.'
+      }
+    ],
+    photoSpot: {
+      location: 'Desde el segundo piso de uno de los cafés tradicionales con balcón sobre la vía.',
+      bestLight: 'A media tarde (15:30 - 17:00) o justo cuando el tren pasa con las luces encendidas.',
+      instruction: 'Pégate a la pared y mantén los brazos hacia dentro; no uses palos de selfie que puedan sobresalir hacia la vía.'
+    },
+    culturalEtiquette: {
+      dressCode: 'Ropa cómoda y calzado antideslizante para caminar sobre las traviesas de piedra.',
+      whatNotToDo: 'NUNCA te quedes en medio de la vía para hacer una foto cuando suene la campana o el silbato de aviso.',
+      scamWarning: 'A veces hay controles policiales en los accesos; los dueños de los cafés te guiarán pacíficamente para que entres como cliente autorizado.'
+    },
+    streetFoodReward: {
+      dishNameVi: 'Cà Phê Muối (Café de Sal)',
+      dishNameEs: 'Café filtrado tradicional con crema salada batida que potencia el dulzor del caramelo',
+      whereToFind: 'En cualquiera de las cafeterías a pie de vía sobre taburetes de madera.',
+      priceEstimate: '30.000 ₫ – 40.000 ₫'
+    },
+    suggestedQuestions: [
+      '¿A qué horas exactas pasa el tren hoy?',
+      '¿Por qué las vías del tren en Vietnam usan ancho métrico?',
+      '¿Cómo duermen los vecinos con el ruido nocturno?'
+    ]
+  },
+  st_joseph: {
+    placeName: 'Catedral de San José (Nhà Thờ Lớn)',
+    cityName: 'Hà Nội',
+    vietnameseName: 'Nhà Thờ Lớn Hà Nội',
+    tagline: 'El "Pequeño Notre-Dame" de Indochina en el corazón del Barrio Antiguo',
+    durationMinutes: 25,
+    audioGuideScript: '¡Hola viajero! Ante ti se alza Nhà Thờ Lớn, la Catedral de San José, consagrada en la Navidad de 1886. Su fachada neogótica de doble torre y piedra ennegrecida por la humedad tropical fue inspirada directamente en la Catedral de Notre-Dame de París. Pero bajo sus cimientos duerme una historia más antigua: aquí se levantaba la Pagoda Báo Thiên, una de las maravillas budistas del siglo XI. Hoy, esta plaza es el epicentro social de la juventud hanoyense, donde el aroma a incienso católico se mezcla con el té helado con lima que se bebe en las aceras.',
+    stops: [
+      {
+        number: 1,
+        title: 'La Fachada Neogótica de Granito y Ladrillo',
+        whatToLookAt: 'El reloj central y el rosetón de vidrieras importadas de Francia a finales del siglo XIX.',
+        story: 'El aspecto exterior envejecido y manchado no es abandono: es la pátina natural provocada por las lluvias monzónicas y el clima subtropical sobre la piedra caliza.',
+        insiderTip: 'Si vienes durante la misa de la tarde (18:00), escucharás los cánticos en vietnamita entonados por cientos de fieles con un fervor conmovedor.'
+      },
+      {
+        number: 2,
+        title: 'La Estatua de Nuestra Señora y el Patio Central',
+        whatToLookAt: 'La estatua de la Virgen María de bronce en el centro de la plazoleta arbolada.',
+        story: 'La comunidad católica representa cerca del 7% de la población de Vietnam, siendo una de las más activas y devotas de todo el sudeste asiático.',
+        insiderTip: 'Los callejones que rodean la catedral albergan las mejores tiendas de artesanía y seda de Hanói.'
+      }
+    ],
+    photoSpot: {
+      location: 'Desde la terraza del segundo piso de Cong Caphe, justo enfrente de la plaza.',
+      bestLight: 'Al atardecer o con la iluminación nocturna de las dos torres.',
+      instruction: 'Encuadra la catedral a través de los árboles de la plaza con las tazas de café en primer plano.'
+    },
+    culturalEtiquette: {
+      dressCode: 'Para entrar al interior se exige cubrir hombros y rodillas.',
+      whatNotToDo: 'No tomes fotos durante los oficios litúrgicos sin discreción.',
+      scamWarning: 'Vendedores de postales o mapas falsos en la plaza exterior; cómpralos en librerías oficiales.'
+    },
+    streetFoodReward: {
+      dishNameVi: 'Trà Chanh Chém Gió & Nem Chua Rán',
+      dishNameEs: 'Té helado con lima y rollitos crujientes de cerdo fermentado frito',
+      whereToFind: 'En las terrazas con mesitas de plástico bajas alrededor de la plaza Nhà Thờ.',
+      priceEstimate: '20.000 ₫ – 40.000 ₫'
+    },
+    suggestedQuestions: [
+      '¿Qué porcentaje de vietnamitas practica el catolicismo?',
+      '¿Qué pasó con la pagoda budista que estaba aquí antes?',
+      '¿Por qué los jóvenes de Hanói llaman a esta plaza "Trà Chanh Nhà Thờ"?'
+    ]
+  },
   chua_cau: {
     placeName: 'Puente Japonés Cubierto (Chùa Cầu)',
     cityName: 'Hội An',
@@ -580,12 +1009,457 @@ const CURATED_FALLBACK_TOURS: Record<string, any> = {
       '¿Cómo sobrevivió el puente a las grandes riadas de Hội An?',
       '¿Dónde vivían los comerciantes japoneses y holandeses en la época de esplendor?'
     ]
+  },
+  dai_noi: {
+    placeName: 'Ciudadela Imperial de Huế (Đại Nội)',
+    cityName: 'Huế',
+    vietnameseName: 'Hoàng Thành Huế – Đại Nội',
+    tagline: 'El trono de los 13 emperadores Nguyễn, murallas bastión y la Ciudad Púrpura Prohibida',
+    durationMinutes: 50,
+    audioGuideScript: '¡Xin chào y bienvenido al epicentro del poder dinástico de Vietnam! Ante ti se despliega la Ciudadela Imperial de Huế, declarada Patrimonio de la Humanidad por la UNESCO. Construida a partir de 1804 por orden del emperador Gia Long, combina los principios del Feng Shui oriental con la ingeniería de fortalezas militares francesas del Marqués de Vauban. Acompáñame a través de la Puerta del Mediodía hacia la Ciudad Prohibida Púrpura, el recinto donde sólo el emperador, sus concubinas y los eunucos de la corte tenían permiso para entrar bajo pena de muerte.',
+    stops: [
+      {
+        number: 1,
+        title: 'La Puerta del Mediodía (Cửa Ngọ Môn)',
+        whatToLookAt: 'El mirador superior de cinco pabellones con tejas amarillas imperiales y la puerta central.',
+        story: 'La puerta central de piedra estaba reservada estrictamente para el paso del emperador; los mandarines usaban los laterales y los soldados las puertas extremas. Aquí abdicó en 1945 el último emperador, Bảo Đại.',
+        insiderTip: 'Sube al mirador superior para contemplar la vista panorámica del mástil de la bandera y el Río del Perfume.'
+      },
+      {
+        number: 2,
+        title: 'El Palacio de la Suprema Armonía (Điện Thái Hòa)',
+        whatToLookAt: 'Las 80 columnas de madera noble de lim lacadas en rojo con dragones dorados entrelazados.',
+        story: 'Aquí se celebraban las coronaciones imperiales y las recepciones diplomáticas de embajadores extranjeros. El trono de oro del emperador preside la sala.',
+        insiderTip: 'Los dragones de Huế tienen cinco garras, el distintivo reservado exclusivamente a los emperadores.'
+      },
+      {
+        number: 3,
+        title: 'El Templo Thế Miếu y las 9 Urnas Dinásticas de Bronce',
+        whatToLookAt: 'Las enormes urnas de bronce fundidas en 1835, cada una pesando más de dos toneladas.',
+        story: 'Cada urna representa a un soberano de la dinastía Nguyễn y está grabada con mapas de los ríos, montañas y mares sagrados de Vietnam, afirmando la soberanía territorial.',
+        insiderTip: 'Tómate un minuto para acariciar el relieve de bronce de la urna central (Cao Đỉnh), la más imponente.'
+      }
+    ],
+    photoSpot: {
+      location: 'Frente a los corredores lacados en rojo que bordean los patios de la Ciudad Prohibida.',
+      bestLight: 'A las 08:30 con la luz dorada matutina filtrándose entre las columnas rojas.',
+      instruction: 'Usa una perspectiva de fuga por el pasillo de madera bermellón con los faroles colgados.'
+    },
+    culturalEtiquette: {
+      dressCode: 'Hombros y rodillas cubiertos para acceder a los templos Thế Miếu y Thái Hòa.',
+      whatNotToDo: 'No toques el trono imperial ni te sientes en los muebles de época protegidos.',
+      scamWarning: 'Cuidado con carritos de golf eléctricos que cobran tarifas infladas en la entrada sin ticket oficial.'
+    },
+    streetFoodReward: {
+      dishNameVi: 'Bún Bò Huế & Bánh Bèo',
+      dishNameEs: 'Sopa de fideos de arroz con ternera picante, hierba limón y platillos de arroz al vapor',
+      whereToFind: 'En los puestos de la calle Đinh Tiên Hoàng a la salida este de la ciudadela.',
+      priceEstimate: '40.000 ₫ – 60.000 ₫'
+    },
+    suggestedQuestions: [
+      '¿Cómo se seleccionaban los eunucos que servían en la Ciudad Prohibida?',
+      '¿Qué daños sufrió la ciudadela durante la Ofensiva del Tet en 1968?',
+      '¿Por qué las tejas amarillas solo podían usarse en los palacios del emperador?'
+    ]
+  },
+  thien_mu: {
+    placeName: 'Pagoda Thiên Mụ (Pagoda de la Dama Celestial)',
+    cityName: 'Huế',
+    vietnameseName: 'Chùa Thiên Mụ',
+    tagline: 'La torre octogonal de siete pisos que custodia el Río del Perfume desde hace más de cuatro siglos',
+    durationMinutes: 30,
+    audioGuideScript: '¡Hola viajero! Respira la paz y serenidad de la colina Hà Khê, mirando hacia las aguas mansas del Río del Perfume. Estás en la Pagoda Thiên Mụ, fundada en 1601. La leyenda cuenta que una anciana vestida con túnica roja y pantalones verdes bajó del cielo y profetizó: "Un verdadero señor vendrá aquí y construirá una pagoda para canalizar las energías del país". El señor Nguyễn Hoàng escuchó la profecía y mandó levantar este templo sagrado. Hoy, su torre octogonal de siete niveles es el emblema espiritual indiscutible de Huế.',
+    stops: [
+      {
+        number: 1,
+        title: 'La Torre Phước Duyên (7 Pisos de Iluminación)',
+        whatToLookAt: 'La torre octogonal de ladrillo de 21 metros de altura con una estatua de Buda en cada piso.',
+        story: 'Construida por el emperador Thiệu Trị en 1844, cada uno de sus siete niveles simboliza una reencarnación del Buda histórico hacia el Nirvana.',
+        insiderTip: 'Camina alrededor de la torre en el sentido de las agujas del reloj, la forma tradicional de respeto budista.'
+      },
+      {
+        number: 2,
+        title: 'La Gran Campana Đại Hồng Chung y la Estela de la Tortuga',
+        whatToLookAt: 'La colosal campana de bronce fundida en 1710 con más de dos toneladas de peso.',
+        story: 'Dicen que cuando repica en el silencio del alba, su sonido celestial viaja hasta 10 kilómetros por el valle del río, trayendo calma y bendiciones a los pescadores.',
+        insiderTip: 'Al fondo del recinto verás expuesto el coche Austin azul con el que el monje Thích Quảng Đức viajó a Saigón en 1963 antes de su histórica inmolación por la paz.'
+      }
+    ],
+    photoSpot: {
+      location: 'Desde el muelle de piedra a orillas del río, mirando hacia la torre entre los pinos centenarios.',
+      bestLight: 'Durante el atardecer (17:00 - 17:45) cuando el sol cae sobre las aguas del Río del Perfume.',
+      instruction: 'Encuadra la escalinata de piedra con las barcas de dragón en la orilla inferior.'
+    },
+    culturalEtiquette: {
+      dressCode: 'Ropa recatada obligatoria. Quítate zapatos y sombreros al entrar al santuario principal.',
+      whatNotToDo: 'No hables en voz alta ni interrumpas los cánticos de los monjes residentes.',
+      scamWarning: 'Vendedoras de souvenirs en el muelle fluvial; compara precios con amabilidad.'
+    },
+    streetFoodReward: {
+      dishNameVi: 'Chè Hạt Sen Long Nhãn',
+      dishNameEs: 'Dulce refrescante de semillas de loto de Huế envueltas en pulpa de longan',
+      whereToFind: 'En los carritos frente al embarcadero de barcas de la pagoda.',
+      priceEstimate: '20.000 ₫ – 30.000 ₫'
+    },
+    suggestedQuestions: [
+      '¿Siguen viviendo y estudiando monjes novicios en esta pagoda?',
+      '¿Qué papel jugó esta pagoda en el movimiento budista de 1963?',
+      '¿Por qué el Río del Perfume se llama así?'
+    ]
+  },
+  ngu_hanh_son: {
+    placeName: 'Montañas de Mármol (Ngũ Hành Sơn)',
+    cityName: 'Đà Nẵng',
+    vietnameseName: 'Ngũ Hành Sơn (Marble Mountains)',
+    tagline: 'Cinco colinas cársticas sagradas que representan los cinco elementos del universo oriental',
+    durationMinutes: 45,
+    audioGuideScript: '¡Bienvenido a Ngũ Hành Sơn, las cinco Montañas de Mármol de Đà Nẵng! Estas cinco colinas de roca caliza y mármol emergen abruptamente de la llanura costera como dragones que se lanzan hacia el Mar del Este. Cada montaña lleva el nombre de uno de los cinco elementos de la cosmología oriental: Metal, Madera, Agua, Fuego y Tierra. La montaña Thủy Sơn (Agua) es la más venerada: en su interior esconde cuevas kársticas donde los rayos de sol entran por hendiduras cenitales creando columnas de luz mística sobre santuarios budistas milenarios.',
+    stops: [
+      {
+        number: 1,
+        title: 'La Cueva Huyền Không y la Luz Divina',
+        whatToLookAt: 'El agujero natural en el techo de la cueva por donde descienden rayos de sol iluminando al Buda de piedra.',
+        story: 'Durante la guerra de Vietnam, esta cueva secreta funcionó como hospital de campaña para el Viet Cong debido a su inaccesibilidad y protección natural.',
+        insiderTip: 'Ven entre las 11:30 y las 13:00 para ver el rayo de sol perpendicular iluminar el humo del incienso.'
+      },
+      {
+        number: 2,
+        title: 'El Mirador Vọng Giang Đài',
+        whatToLookAt: 'La panorámica de 360 grados sobre el río Cổ Cò, la playa de Non Nước y las otras cuatro montañas.',
+        story: 'El emperador Minh Mạng subía a caballo hasta aquí en el siglo XIX para meditar y contemplar la belleza de su reino.',
+        insiderTip: 'Usa el ascensor de cristal panorámico para subir y baja caminando por las escaleras de piedra tallada.'
+      }
+    ],
+    photoSpot: {
+      location: 'En el interior de la cueva Huyền Không, mirando hacia la estatua del Buda con la luz cenital detrás.',
+      bestLight: 'A mediodía con luz solar directa entrando por la cúpula de roca.',
+      instruction: 'Usa modo nocturno o exposición media para capturar el contraste de luz y sombra.'
+    },
+    culturalEtiquette: {
+      dressCode: 'Pantalones o bermudas largas y hombros cubiertos al entrar a las cuevas-templo.',
+      whatNotToDo: 'No toques las estalactitas ni esculpas inscripciones en el mármol natural.',
+      scamWarning: 'En la base hay talleres de esculturas de mármol; si compras una figura, exige certificado de exportación y embalaje acolchado.'
+    },
+    streetFoodReward: {
+      dishNameVi: 'Mì Quảng Đà Nẵng',
+      dishNameEs: 'Fideos amarillos de cúrcuma con langostinos, cerdo, cacahuetes y galleta de arroz crujiente',
+      whereToFind: 'En los restaurantes tradicionales de la calle Lê Văn Hiến frente al acceso.',
+      priceEstimate: '35.000 ₫ – 50.000 ₫'
+    },
+    suggestedQuestions: [
+      '¿De dónde se extrae hoy el mármol para las esculturas?',
+      '¿Qué significado tiene cada uno de los 5 elementos en la tradición vietnamita?',
+      '¿Cuánto tiempo se tarda en recorrer toda la montaña Thủy Sơn?'
+    ]
+  },
+  cu_chi: {
+    placeName: 'Túneles de Củ Chi',
+    cityName: 'TP. Hồ Chí Minh',
+    vietnameseName: 'Địa Đạo Củ Chi',
+    tagline: 'La asombrosa ciudad subterránea de 250 kilómetros cavada a mano que desafió a la superpotencia militar',
+    durationMinutes: 45,
+    audioGuideScript: '¡Hola viajero! Te encuentras sobre uno de los complejos subterráneos más extraordinarios de la historia militar moderna. Bajo la densa selva de Củ Chi, a unos 50 km de Saigón, los guerrilleros del Frente de Liberación Nacional excavaron a mano con azadones más de 250 kilómetros de túneles en tres niveles de profundidad. Aquí abajo vivían miles de personas: había hospitales de campaña, fábricas de armas con proyectiles reciclados, comedores con chimeneas sin humo e incluso teatros subterráneos. Una demostración extrema de resistencia, camuflaje e ingenio que cambió el curso de la historia.',
+    stops: [
+      {
+        number: 1,
+        title: 'La Trampa Secreta de Acceso (Hầm Nắp)',
+        whatToLookAt: 'La diminuta tapa de madera de apenas 30x40 cm cubierta con hojas secas del bosque.',
+        story: 'El guía demostrará cómo un combatiente podía deslizarse en un segundo en este hueco invisible y taparlo desde dentro sin dejar rastro para los soldados enemigos.',
+        insiderTip: 'Prueba a meterte en la trampilla para sentir la estrechez extrema y sacarte la clásica foto de camuflaje.'
+      },
+      {
+        number: 2,
+        title: 'El Tramo de Túnel Real para Visitantes',
+        whatToLookAt: 'Las paredes de arcilla roja compactada y las estrechas secciones de 80 cm de alto.',
+        story: 'Los túneles originales se ensancharon ligeramente para que los turistas occidentales pudieran pasar; aun así, se avanza agachado o a gatas en la penumbra.',
+        insiderTip: 'Si tienes claustrofobia, avisa al guía: hay salidas de emergencia cada 20 metros para salir a la superficie.'
+      },
+      {
+        number: 3,
+        title: 'La Cocina Hoàng Cầm (Cocina sin Humo)',
+        whatToLookAt: 'Los conductos de ventilación enterrados que dispersaban el humo a ras del suelo a decenas de metros de la hoguera.',
+        story: 'Inventada en 1951, esta técnica permitía a los cocineros preparar arroz caliente al alba sin que los aviones enemigos detectaran columnas de humo sobre la selva.',
+        insiderTip: 'Al final de la visita te servirán yuca cocida (khoai mì) mojada en cacahuete machacado con sal, la dieta base de los combatientes.'
+      }
+    ],
+    photoSpot: {
+      location: 'Saliendo de la trampilla de madera camuflada con el sombrero cónico tradicional.',
+      bestLight: 'Luz filtrada entre la copa de los árboles de caucho a media mañana.',
+      instruction: 'Encuadra desde el nivel del suelo para destacar lo imperceptible de la tapa entre las hojas secas.'
+    },
+    culturalEtiquette: {
+      dressCode: 'Ropa oscura que no importe ensuciar y calzado cerrado para caminar por la tierra.',
+      whatNotToDo: 'No toques las trampas punji de bambú expuestas ni te alejes de los senderos marcados por el guía.',
+      scamWarning: 'El campo de tiro con fusiles AK-47 es opcional y tiene coste aparte por bala; verifica el precio antes de comprar munición.'
+    },
+    streetFoodReward: {
+      dishNameVi: 'Khoai Mì Luộc Chấm Muối Mè & Nước Mía',
+      dishNameEs: 'Yuca hervida con sal de sésamo y cacahuete acompañada de jugo de caña de azúcar',
+      whereToFind: 'En el comedor tradicional al aire libre al final del recorrido.',
+      priceEstimate: 'Incluido en la visita / 15.000 ₫ por jugo de caña'
+    },
+    suggestedQuestions: [
+      '¿Cómo respiraban y se ventilaban los túneles del tercer nivel?',
+      '¿Qué hacían cuando llovía torrencialmente durante los monzones?',
+      '¿Cómo conseguían agua potable en las profundidades de la selva?'
+    ]
+  },
+  ben_thanh: {
+    placeName: 'Mercado Bến Thành',
+    cityName: 'TP. Hồ Chí Minh',
+    vietnameseName: 'Chợ Bến Thành',
+    tagline: 'La torre del reloj centenaria y el laberinto de sabores, sedas y regateo de Saigón',
+    durationMinutes: 35,
+    audioGuideScript: '¡Xin chào! Te encuentras en el epicentro comercial y sentimental de Ciudad Ho Chi Minh: el histórico Mercado Bến Thành. Inaugurado en 1914 bajo administración colonial francesa, su emblemática torre del reloj de cuatro esferas ha sido testigo de revoluciones, cambios de divisas y el despegue económico de Vietnam. En su interior, más de 1.500 puestos forman un universo bullicioso donde se mezclan el aroma a café torrefacto con mantequilla, montones de frutas exóticas como el mangostán y el durián, rollos de seda bordada y el sonido del regateo amistoso.',
+    stops: [
+      {
+        number: 1,
+        title: 'La Puerta Sur y la Torre del Reloj',
+        whatToLookAt: 'El relieve de terracota sobre el arco de entrada que representa escenas de la vida agrícola vietnamita.',
+        story: 'Esta torre es el punto de encuentro por excelencia de los habitantes de Saigón. A pesar de los bombardeos del siglo XX, la estructura se mantuvo en pie como símbolo de la tenacidad de la ciudad.',
+        insiderTip: 'Cruza con decisión la plaza del mercado: en Saigón las motos no frenan en seco, sino que te esquivan suavemente si caminas a paso constante.'
+      },
+      {
+        number: 2,
+        title: 'El Callejón Gastronómico Central',
+        whatToLookAt: 'Las ollas gigantescas humeantes con caldos aromáticos y las vitrinas con pasteles de arroz multicolor.',
+        story: 'Aquí comen tanto oficinistas como comerciantes del mercado. Es el mejor lugar para probar la auténtica cocina sureña vietnamita, caracterizada por sabores más dulces y hierbas frescas.',
+        insiderTip: 'Busca el puesto con más locales sentados en taburetes para degustar el mejor Bánh Xèo crujiente.'
+      }
+    ],
+    photoSpot: {
+      location: 'Desde el paso de peatones frente a la Puerta Sur al atardecer, cuando se encienden las luces del reloj.',
+      bestLight: 'Entre las 17:30 y las 18:30 al caer la tarde.',
+      instruction: 'Capta el tráfico fluido de motos en primer plano con la torre del reloj iluminada al fondo.'
+    },
+    culturalEtiquette: {
+      dressCode: 'Ropa fresca y cómoda para caminar por los pasillos interiores concurridos.',
+      whatNotToDo: 'No bloquees los pasillos estrechos con mochilas grandes y cuida tus pertenencias.',
+      scamWarning: 'En los puestos de souvenirs y ropa, el primer precio suele estar inflado entre un 30% y un 50%. Regatea siempre con una sonrisa amplia y buen humor.'
+    },
+    streetFoodReward: {
+      dishNameVi: 'Bánh Xèo & Cơm Tấm Sườn Nướng',
+      dishNameEs: 'Crepe crujiente de harina de arroz con gambas y cerdo, o arroz quebrado con chuleta de cerdo caramelizada',
+      whereToFind: 'En la sección de comida rápida tradicional del pasillo este del mercado.',
+      priceEstimate: '50.000 ₫ – 75.000 ₫'
+    },
+    suggestedQuestions: [
+      '¿Cuál es la regla de oro para regatear con respeto en Bến Thành?',
+      '¿Por qué el mercado cambia por completo de aspecto a partir de las 18:00?',
+      '¿Qué cafés vietnamitas auténticos se pueden comprar a granel aquí?'
+    ]
+  },
+  ha_long: {
+    placeName: 'Bahía de Hạ Long y Cueva Sửng Sốt (Cueva de las Sorpresas)',
+    cityName: 'Quảng Ninh',
+    vietnameseName: 'Vịnh Hạ Long – Hang Sửng Sốt',
+    tagline: 'Donde los dragones celestiales descendieron para crear un laberinto de torres de esmeralda',
+    durationMinutes: 40,
+    audioGuideScript: '¡Bienvenido a uno de los paisajes más sobrecogedores de la Tierra! Hạ Long significa literalmente "Donde el dragón desciende al mar". Según la mitología ancestral, cuando Vietnam fue invadida por mar, los dioses enviaron una familia de dragones celestiales que escupieron perlas y jades; estas joyas se convirtieron en miles de islas cársticas escarpadas que destrozaron los barcos invasores. Hoy navegamos por estas aguas verde esmeralda para adentrarnos en Hang Sửng Sốt, la cueva de las sorpresas descubierta por exploradores franceses en 1901.',
+    stops: [
+      {
+        number: 1,
+        title: 'La Primera Sala de las Estalactitas Sagradas',
+        whatToLookAt: 'El techo ondulado de la cueva que parece esculpido por las olas de un océano fósil.',
+        story: 'Esta cueva se formó hace más de 500 millones de años cuando el nivel del mar subía y bajaba lentamente disolviendo la roca caliza.',
+        insiderTip: 'Fíjate en las formaciones de piedra que los pescadores locales identifican como tortugas gigantes, caballos y monjes en oración.'
+      },
+      {
+        number: 2,
+        title: 'La Gran Sala del Dragón y el Mirador Panorámico',
+        whatToLookAt: 'La inmensa cámara subterránea con capacidad para miles de personas iluminada con luces cálidas.',
+        story: 'Al salir de la cueva se abre un mirador natural que ofrece la vista más famosa de toda la bahía con los juncos tradicionales de madera fondeados en el mar calmo.',
+        insiderTip: 'Aprovecha la salida para respirar el aire yodado del golfo de Tonkín.'
+      }
+    ],
+    photoSpot: {
+      location: 'Desde la terraza de salida de Hang Sửng Sốt sobre el acantilado.',
+      bestLight: 'A media tarde cuando los barcos encienden sus faroles y la niebla acaricia las cimas de roca.',
+      instruction: 'Encuadra la bahía enmarcada por la boca de la cueva de roca en sombra y el agua verde esmeralda iluminada.'
+    },
+    culturalEtiquette: {
+      dressCode: 'Calzado antideslizante obligatorio (los escalones de piedra dentro de la cueva pueden ser resbaladizos).',
+      whatNotToDo: 'No toques las estalagmitas en crecimiento ni dejes basura en el barco o en el agua protegida.',
+      scamWarning: 'Si alquilas un kayak en las lagunas interiores, confirma previamente si el chaleco salvavidas está incluido.'
+    },
+    streetFoodReward: {
+      dishNameVi: 'Chả Mực Hạ Long',
+      dishNameEs: 'Pastel de calamar fresco golpeado a mano y frito al punto crujiente',
+      whereToFind: 'En los puertos de cruceros de Tuần Châu o en el mercado de mariscos de Hạ Long.',
+      priceEstimate: '60.000 ₫ – 100.000 ₫'
+    },
+    suggestedQuestions: [
+      '¿Cuántas islas e islotes forman en total la Bahía de Hạ Long?',
+      '¿Sigue habiendo aldeas flotantes de pescadores viviendo en la bahía?',
+      '¿Por qué el agua de la bahía tiene ese característico color verde esmeralda?'
+    ]
   }
 };
 
-// Free Tour generation endpoint using Gemini
+// Helper to look up curated tours quickly with robust keyword matching
+function findCuratedTour(placeName: string, cityName?: string): any | null {
+  const text = (placeName + ' ' + (cityName || '')).toLowerCase();
+  
+  if (text.includes('literatura') || text.includes('van mieu') || text.includes('văn miếu')) {
+    return CURATED_FALLBACK_TOURS.van_mieu;
+  }
+  if (text.includes('hoan kiem') || text.includes('hoàn kiếm') || text.includes('ngoc son') || text.includes('ngọc sơn') || text.includes('espada restituida')) {
+    return CURATED_FALLBACK_TOURS.hoan_kiem;
+  }
+  if (text.includes('tren') || text.includes('train') || text.includes('vía') || text.includes('duong tau') || text.includes('đường tàu')) {
+    return CURATED_FALLBACK_TOURS.train_street;
+  }
+  if (text.includes('catedral') || text.includes('jose') || text.includes('josé') || text.includes('nha tho lon') || text.includes('nhà thờ lớn')) {
+    return CURATED_FALLBACK_TOURS.st_joseph;
+  }
+  if (text.includes('japon') || text.includes('japonés') || text.includes('chùa cầu') || text.includes('chua cau')) {
+    return CURATED_FALLBACK_TOURS.chua_cau;
+  }
+  if (text.includes('ciudadela') || text.includes('dai noi') || text.includes('đại nội') || text.includes('imperial de hue') || text.includes('imperial de huế')) {
+    return CURATED_FALLBACK_TOURS.dai_noi;
+  }
+  if (text.includes('thien mu') || text.includes('thiên mụ') || text.includes('dama celestial')) {
+    return CURATED_FALLBACK_TOURS.thien_mu;
+  }
+  if (text.includes('marmol') || text.includes('mármol') || text.includes('marble') || text.includes('ngũ hành') || text.includes('ngu hanh')) {
+    return CURATED_FALLBACK_TOURS.ngu_hanh_son;
+  }
+  if (text.includes('cu chi') || text.includes('củ chi') || text.includes('tunel') || text.includes('túnel')) {
+    return CURATED_FALLBACK_TOURS.cu_chi;
+  }
+  if (text.includes('ben thanh') || text.includes('bến thành')) {
+    return CURATED_FALLBACK_TOURS.ben_thanh;
+  }
+  if (text.includes('ha long') || text.includes('hạ long') || text.includes('sung sot') || text.includes('sửng sốt')) {
+    return CURATED_FALLBACK_TOURS.ha_long;
+  }
+
+  return null;
+}
+
+// Ensure every single field of the tour is normalized and non-null to prevent any frontend TypeError crash
+function normalizeTour(raw: any, fallbackPlace: string, fallbackCity: string) {
+  const place = String(raw?.placeName || fallbackPlace).trim();
+  const city = String(raw?.cityName || fallbackCity).trim();
+
+  // Normalize photoSpot
+  let photoSpot = raw?.photoSpot;
+  if (typeof photoSpot === 'string') {
+    photoSpot = {
+      location: photoSpot,
+      bestLight: 'A primera hora de la mañana o durante la hora dorada',
+      instruction: 'Busca un ángulo frontal capturando la armonía del conjunto.',
+    };
+  } else if (!photoSpot || typeof photoSpot !== 'object') {
+    photoSpot = {
+      location: `Frente a la entrada principal de ${place}`,
+      bestLight: 'Luz natural matutina o al atardecer',
+      instruction: 'Encuadra la fachada arquitectónica con perspectiva limpia.',
+    };
+  } else {
+    photoSpot = {
+      location: String(photoSpot.location || `Frente a ${place}`),
+      bestLight: String(photoSpot.bestLight || 'Luz suave de mañana o atardecer'),
+      instruction: String(photoSpot.instruction || 'Busca un buen encuadre de los elementos tradicionales.'),
+    };
+  }
+
+  // Normalize culturalEtiquette
+  let etiquette = raw?.culturalEtiquette;
+  if (typeof etiquette === 'string') {
+    etiquette = {
+      dressCode: etiquette,
+      whatNotToDo: 'Evitar movimientos bruscos o hablar en tono alto ante los altares.',
+      scamWarning: 'Acuerda cualquier precio antes de aceptar souvenirs o servicios.',
+    };
+  } else if (!etiquette || typeof etiquette !== 'object') {
+    etiquette = {
+      dressCode: 'Vestimenta respetuosa: hombros y rodillas cubiertos en templos y pagodas.',
+      whatNotToDo: 'No tocar las figuras sagradas ni dar la espalda a los altares.',
+      scamWarning: 'Desconfía de ofertas no solicitadas o venta de incienso a precios inflados.',
+    };
+  } else {
+    etiquette = {
+      dressCode: String(etiquette.dressCode || 'Hombros y rodillas cubiertos respetuosamente.'),
+      whatNotToDo: String(etiquette.whatNotToDo || 'No tocar altares sagrados ni gritar.'),
+      scamWarning: etiquette.scamWarning ? String(etiquette.scamWarning) : undefined,
+    };
+  }
+
+  // Normalize streetFoodReward
+  let food = raw?.streetFoodReward;
+  if (typeof food === 'string') {
+    food = {
+      dishNameVi: food,
+      dishNameEs: food,
+      whereToFind: 'En los puestos tradicionales cercanos.',
+      priceEstimate: '30.000 ₫ – 50.000 ₫',
+    };
+  } else if (!food || typeof food !== 'object') {
+    food = {
+      dishNameVi: 'Cà Phê Sữa Đá / Trà Đá',
+      dishNameEs: 'Café vietnamita con leche condensada o té helado tradicional',
+      whereToFind: 'En las cafeterías y puestos de la calle contigua.',
+      priceEstimate: '25.000 ₫ – 40.000 ₫',
+    };
+  } else {
+    food = {
+      dishNameVi: String(food.dishNameVi || 'Món ngon địa phương'),
+      dishNameEs: String(food.dishNameEs || 'Especialidad gastronómica de la zona'),
+      whereToFind: String(food.whereToFind || 'En los alrededores del recinto.'),
+      priceEstimate: String(food.priceEstimate || '30.000 ₫ – 60.000 ₫'),
+    };
+  }
+
+  // Normalize stops
+  let stops = Array.isArray(raw?.stops) && raw.stops.length > 0 ? raw.stops : [];
+  if (stops.length === 0) {
+    stops = [
+      {
+        number: 1,
+        title: `Pórtico y Acceso a ${place}`,
+        whatToLookAt: 'Los detalles arquitectónicos del portal y el entorno.',
+        story: 'Un enclave cargado de espiritualidad y memoria comunitaria.',
+        insiderTip: 'Pasea sin prisas observando el ritmo de la vida local.',
+      }
+    ];
+  } else {
+    stops = stops.map((s: any, idx: number) => ({
+      number: typeof s?.number === 'number' ? s.number : idx + 1,
+      title: String(s?.title || `Parada ${idx + 1}`),
+      whatToLookAt: String(s?.whatToLookAt || 'Observa los detalles artesanales.'),
+      story: String(s?.story || 'Un rincón lleno de leyendas y significado cultural.'),
+      insiderTip: String(s?.insiderTip || 'Respeta la paz del entorno.'),
+    }));
+  }
+
+  // Normalize suggestedQuestions
+  let questions = Array.isArray(raw?.suggestedQuestions) && raw.suggestedQuestions.length > 0
+    ? raw.suggestedQuestions.map(String)
+    : [
+        `¿Cuál es la leyenda más importante de ${place}?`,
+        '¿Qué significado tienen las ofrendas en los altares?',
+        '¿Qué plato local recomiendas probar después de esta visita?'
+      ];
+
+  return {
+    placeName: place,
+    cityName: city,
+    vietnameseName: String(raw?.vietnameseName || place),
+    tagline: String(raw?.tagline || `Descubre los secretos culturales y leyendas vivas de ${place}`),
+    durationMinutes: Number(raw?.durationMinutes) || 30,
+    audioGuideScript: String(raw?.audioGuideScript || `¡Hola, viajero! Te damos la bienvenida a ${place}.`),
+    stops,
+    photoSpot,
+    culturalEtiquette: etiquette,
+    streetFoodReward: food,
+    suggestedQuestions: questions,
+  };
+}
+
+// Free Tour generation endpoint using Gemini with instant curated matches and robust normalization
 app.post('/api/free-tour', async (req, res) => {
-  const { placeName, cityName, category, userVibe, lat, lng } = req.body;
+  const { placeName, cityName, category, userVibe } = req.body;
 
   if (!placeName || typeof placeName !== 'string') {
     return res.status(400).json({ error: 'El nombre del lugar es obligatorio.' });
@@ -594,6 +1468,16 @@ app.post('/api/free-tour', async (req, res) => {
   const cleanPlace = placeName.trim();
   const cleanCity = (cityName || 'Vietnam').trim();
   const targetVibe = userVibe || 'curiosidades';
+
+  // Check if we have an instant curated tour match
+  const curatedMatch = findCuratedTour(cleanPlace, cleanCity);
+  if (curatedMatch) {
+    return res.json({
+      success: true,
+      tour: normalizeTour(curatedMatch, cleanPlace, cleanCity),
+      source: 'curated_verified',
+    });
+  }
 
   const prompt = `Actúa como un guía turístico local vietnamita apasionado, divertido, culto y con excelente español.
 El viajero está ahora mismo de pie frente a: "${cleanPlace}" en la ciudad de "${cleanCity}" (categoría: ${category || 'monumento'}).
@@ -605,28 +1489,28 @@ Debes responder en un JSON estrictamente válido con este esquema:
 {
   "placeName": "${cleanPlace.replace(/"/g, '\\"')}",
   "cityName": "${cleanCity.replace(/"/g, '\\"')}",
-  "vietnameseName": "Nombre oficial en vietnamita con acentos diacríticos (ej. Văn Miếu, Chùa Cầu, Đại Nội)",
-  "tagline": "Una frase gancho intrigante de 1 línea que capture la esencia o misterio del lugar",
+  "vietnameseName": "Nombre oficial en vietnamita con acentos diacríticos",
+  "tagline": "Una frase gancho intrigante de 1 línea",
   "durationMinutes": 35,
-  "audioGuideScript": "Un guion de audioguía continuo de 2 a 3 párrafos (200-280 palabras), narrado en primera persona con tono vibrante ('¡Hola viajero!', 'Si miras a tu alrededor...'). Explica el contexto histórico, la energía del lugar, olores a incienso o maderas, y la gran leyenda central.",
+  "audioGuideScript": "Un guion de audioguía continuo de 2 a 3 párrafos (200-280 palabras), narrado en primera persona ('¡Hola viajero!', 'Si miras a tu alrededor...'). Explica el contexto histórico, la energía del lugar, olores a incienso o maderas, y la gran leyenda central.",
   "stops": [
     {
       "number": 1,
-      "title": "Nombre de la primera parada o rincón específico en el lugar",
-      "whatToLookAt": "Qué buscar exactamente con los ojos ahora mismo (detalles curiosos que el 90% pasa por alto)",
-      "story": "La anécdota, secreto histórico o mito que ocurrió justo aquí",
-      "insiderTip": "Consejo de guía local (dónde tocar, qué mirar, tradición local)"
+      "title": "Nombre de la primera parada",
+      "whatToLookAt": "Qué buscar exactamente con los ojos ahora mismo",
+      "story": "La anécdota o secreto histórico que ocurrió justo aquí",
+      "insiderTip": "Consejo de guía local"
     },
     {
       "number": 2,
-      "title": "Nombre de la segunda parada en el recorrido",
-      "whatToLookAt": "Detalle arquitectónico, altar, tallado o elemento destacado",
+      "title": "Nombre de la segunda parada",
+      "whatToLookAt": "Detalle arquitectónico o elemento destacado",
       "story": "La historia o simbolismo de este elemento",
       "insiderTip": "Consejo práctico de guía"
     },
     {
       "number": 3,
-      "title": "Nombre de la tercera parada clave",
+      "title": "Nombre de la tercera parada",
       "whatToLookAt": "Detalle visual",
       "story": "Significado cultural o histórico",
       "insiderTip": "Consejo"
@@ -634,22 +1518,22 @@ Debes responder en un JSON estrictamente válido con este esquema:
   ],
   "photoSpot": {
     "location": "Dónde pararse exactamente para la mejor foto",
-    "bestLight": "Momento del día ideal o ángulo de luz",
-    "instruction": "Cómo encuadrar para evitar multitudes o lograr una perspectiva única"
+    "bestLight": "Momento del día ideal",
+    "instruction": "Cómo encuadrar para lograr una perspectiva única"
   },
   "culturalEtiquette": {
-    "dressCode": "Requisitos de vestimenta (hombros, rodillas, descalzarse si aplica)",
-    "whatNotToDo": "Acciones que se consideran irrespetuosas hacia monjes, altares o locales",
-    "scamWarning": "Alerta de picaresca o timos habituales en este lugar específico"
+    "dressCode": "Requisitos de vestimenta",
+    "whatNotToDo": "Acciones consideradas irrespetuosas",
+    "scamWarning": "Alerta de picaresca habitual si aplica"
   },
   "streetFoodReward": {
-    "dishNameVi": "Nombre en vietnamita del plato o café tradicional que debes probar al salir",
+    "dishNameVi": "Nombre en vietnamita del plato o café tradicional",
     "dishNameEs": "Nombre en español y descripción apetitosa",
-    "whereToFind": "Dónde buscarlo en los alrededores (calle o callejón)",
-    "priceEstimate": "Precio justo estimado en Dong (ej: 40.000 ₫ – 60.000 ₫)"
+    "whereToFind": "Dónde buscarlo en los alrededores",
+    "priceEstimate": "Precio justo estimado en Dong (ej: 35.000 ₫ – 50.000 ₫)"
   },
   "suggestedQuestions": [
-    "Pregunta curiosa 1 que el turista puede hacerte a continuación",
+    "Pregunta curiosa 1",
     "Pregunta curiosa 2",
     "Pregunta curiosa 3"
   ]
@@ -657,26 +1541,17 @@ Debes responder en un JSON estrictamente válido con este esquema:
 
   if (process.env.GEMINI_API_KEY) {
     try {
-      const tour = await callGeminiJsonWithFallback(prompt);
+      const tour = await callGeminiJsonWithFallback(prompt, 8000);
       if (tour && tour.placeName && Array.isArray(tour.stops) && tour.stops.length > 0) {
         return res.json({
           success: true,
-          tour,
+          tour: normalizeTour(tour, cleanPlace, cleanCity),
           source: 'gemini_ai',
         });
       }
     } catch (err: any) {
-      console.warn(`[Gemini Free Tour] Error calling model (${err?.message || 'error'}). Checking curated tours...`);
+      console.warn(`[Gemini Free Tour] Error or timeout calling model (${err?.message || 'error'}). Generating guaranteed tour...`);
     }
-  }
-
-  // Check if we have a curated offline match
-  const lower = cleanPlace.toLowerCase();
-  if (lower.includes('literatura') || lower.includes('van mieu') || lower.includes('văn miếu')) {
-    return res.json({ success: true, tour: CURATED_FALLBACK_TOURS.van_mieu, fallback: true });
-  }
-  if (lower.includes('japon') || lower.includes('japonés') || lower.includes('chùa cầu') || lower.includes('chua cau')) {
-    return res.json({ success: true, tour: CURATED_FALLBACK_TOURS.chua_cau, fallback: true });
   }
 
   // Dynamic fallback guide generator for zero downtime
@@ -735,7 +1610,7 @@ Debes responder en un JSON estrictamente válido con este esquema:
 
   return res.json({
     success: true,
-    tour: genericTour,
+    tour: normalizeTour(genericTour, cleanPlace, cleanCity),
     fallback: true,
   });
 });
@@ -761,12 +1636,16 @@ Sé conciso, ameno y añade un detalle histórico, visual o de etiqueta que el v
   if (process.env.GEMINI_API_KEY) {
     try {
       const ai = getAI();
-      const response = await ai.models.generateContent({
+      const contentPromise = ai.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: prompt,
       });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout chat model')), 6000)
+      );
+      const response: any = await Promise.race([contentPromise, timeoutPromise]);
 
-      if (response.text) {
+      if (response && response.text) {
         return res.json({
           success: true,
           reply: response.text.trim(),
@@ -774,7 +1653,7 @@ Sé conciso, ameno y añade un detalle histórico, visual o de etiqueta que el v
         });
       }
     } catch (err: any) {
-      console.warn('Gemini chat model error:', err?.message);
+      console.warn('Gemini chat model error or timeout:', err?.message);
     }
   }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Compass,
   Headphones,
@@ -30,10 +30,20 @@ import {
   History,
   Trash2,
   RefreshCw,
+  BookOpen,
+  ExternalLink,
 } from 'lucide-react';
 import { FreeTourData, FreeTourStop, PointOfInterest, TourChatMessage } from '../types';
 import { POINTS_OF_INTEREST } from '../data/pois';
+import { CURATED_CLIENT_TOURS, findClientCuratedTour } from '../data/curatedTours';
 import { getSavedFreeTours, saveFreeTour, deleteSavedFreeTour } from '../utils/storage';
+import {
+  getSmartGeolocation,
+  createSimulatedResult,
+  VIETNAM_SIMULATION_PRESETS,
+  SmartGeoResult,
+  SmartGeoError,
+} from '../utils/geolocation';
 
 interface FreeTourGuideProps {
   initialPoi?: PointOfInterest | null;
@@ -77,12 +87,56 @@ const VIBE_OPTIONS: { id: VibeType; label: string; icon: string; desc: string }[
 ];
 
 const POPULAR_CITIES = [
-  { name: 'Hà Nội', samplePois: ['Templo de la Literatura', 'Lago Hoàn Kiếm y Templo Ngọc Sơn', 'Calle del Tren (Train Street)', 'Catedral de San José', 'Mausoleo de Hồ Chí Minh'] },
-  { name: 'Huế', samplePois: ['Ciudadela Imperial de Huế (Đại Nội)', 'Pagoda Thiên Mụ', 'Tumba Imperial de Khải Định'] },
-  { name: 'Hội An', samplePois: ['Puente Japonés Cubierto (Chùa Cầu)', 'Casa Antigua Tan Ky', 'Mercado de Farolillos'] },
-  { name: 'Đà Nẵng', samplePois: ['Puente del Dragón (Cầu Rồng)', 'Montañas de Mármol (Ngũ Hành Sơn)', 'Pagoda Linh Ứng (Son Tra)'] },
-  { name: 'Ninh Bình', samplePois: ['Complejo Paisajístico de Tràng An', 'Cueva y Mirador de Hang Múa', 'Tam Cốc - Bích Động'] },
-  { name: 'TP. Hồ Chí Minh', samplePois: ['Túneles de Củ Chi', 'Mercado Bến Thành', 'Basílica de Notre-Dame y Correos'] },
+  {
+    name: 'Hà Nội',
+    samplePois: [
+      'Templo de la Literatura',
+      'Lago Hoàn Kiếm y Templo Ngọc Sơn',
+      'Calle del Tren (Train Street)',
+      'Catedral de San José',
+      'Mausoleo de Hồ Chí Minh',
+    ],
+  },
+  {
+    name: 'Huế',
+    samplePois: [
+      'Ciudadela Imperial de Huế (Đại Nội)',
+      'Pagoda Thiên Mụ',
+      'Tumba Imperial de Khải Định',
+    ],
+  },
+  {
+    name: 'Hội An',
+    samplePois: [
+      'Puente Japonés Cubierto (Chùa Cầu)',
+      'Casa Antigua Tan Ky',
+      'Mercado de Farolillos',
+    ],
+  },
+  {
+    name: 'Đà Nẵng',
+    samplePois: [
+      'Puente del Dragón (Cầu Rồng)',
+      'Montañas de Mármol (Ngũ Hành Sơn)',
+      'Pagoda Linh Ứng (Son Tra)',
+    ],
+  },
+  {
+    name: 'Ninh Bình',
+    samplePois: [
+      'Complejo Paisajístico de Tràng An',
+      'Cueva y Mirador de Hang Múa',
+      'Tam Cốc - Bích Động',
+    ],
+  },
+  {
+    name: 'TP. Hồ Chí Minh',
+    samplePois: [
+      'Túneles de Củ Chi',
+      'Mercado Bến Thành',
+      'Basílica de Notre-Dame y Correos',
+    ],
+  },
 ];
 
 export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
@@ -91,14 +145,23 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
   isOnline,
 }) => {
   // Input state
-  const [placeQuery, setPlaceQuery] = useState<string>(initialPoi?.nameEs || '');
+  const [placeQuery, setPlaceQuery] = useState<string>(initialPoi?.nameEs || 'Templo de la Literatura');
   const [selectedCity, setSelectedCity] = useState<string>(initialPoi?.city || 'Hà Nội');
   const [selectedVibe, setSelectedVibe] = useState<VibeType>('curiosidades');
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [gpsNotice, setGpsNotice] = useState<string | null>(null);
+  const [showGpsHelper, setShowGpsHelper] = useState<boolean>(false);
+  const [gpsError, setGpsError] = useState<SmartGeoError | null>(null);
+  const [gpsDetails, setGpsDetails] = useState<SmartGeoResult | null>(null);
 
-  // Active tour state
-  const [activeTour, setActiveTour] = useState<FreeTourData | null>(null);
+  // Active tour state - initialize with a curated tour immediately so tour mode is never blank!
+  const [activeTour, setActiveTour] = useState<FreeTourData>(() => {
+    if (initialPoi) {
+      const match = findClientCuratedTour(initialPoi.nameEs, initialPoi.city);
+      if (match) return match;
+    }
+    return CURATED_CLIENT_TOURS[0];
+  });
   const [isLoadingTour, setIsLoadingTour] = useState<boolean>(false);
   const [tourError, setTourError] = useState<string | null>(null);
   const [activeStopIndex, setActiveStopIndex] = useState<number>(0);
@@ -113,196 +176,122 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
   const [isPausedAudio, setIsPausedAudio] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [speakingTextTitle, setSpeakingTextTitle] = useState<string>('');
+  const [currentSentenceIndex, setCurrentSentenceIndex] = useState<number>(-1);
+  const [audioSentences, setAudioSentences] = useState<string[]>([]);
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const keepAliveIntervalRef = useRef<any>(null);
 
   // Interactive Guide Chat state
-  const [chatMessages, setChatMessages] = useState<TourChatMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<TourChatMessage[]>([
+    {
+      id: 'welcome',
+      role: 'assistant',
+      text: `¡Xin chào! Soy Nguyễn, tu guía local aquí en ${CURATED_CLIENT_TOURS[0].placeName}. Disfruta de la audioguía y si tienes cualquier duda sobre lo que estás viendo, pregúntame aquí en directo.`,
+      timestamp: Date.now(),
+    },
+  ]);
   const [chatInput, setChatInput] = useState<string>('');
   const [isSendingChat, setIsSendingChat] = useState<boolean>(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3200);
-  };
-
-  // If opened with an initial POI, populate fields and auto-suggest
-  useEffect(() => {
-    if (initialPoi) {
-      setPlaceQuery(initialPoi.nameEs);
-      setSelectedCity(initialPoi.city);
-    }
-  }, [initialPoi]);
-
-  // Clean up audio on unmount
-  useEffect(() => {
-    return () => {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-    };
+    setTimeout(() => setToastMessage(null), 3500);
   }, []);
 
-  // Scroll chat to bottom
-  useEffect(() => {
-    if (chatMessages.length > 0) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Stop any playing speech safely
+  const stopAudio = useCallback(() => {
+    if (keepAliveIntervalRef.current) {
+      clearInterval(keepAliveIntervalRef.current);
+      keepAliveIntervalRef.current = null;
     }
-  }, [chatMessages]);
-
-  // GPS Distance calculation
-  const handleDetectGps = () => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setGpsNotice('La geolocalización no está disponible en este dispositivo.');
-      setTimeout(() => setGpsNotice(null), 3000);
-      return;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
     }
+    setIsPlayingAudio(false);
+    setIsPausedAudio(false);
+    setSpeakingTextTitle('');
+    setCurrentSentenceIndex(-1);
+  }, []);
 
-    setIsLocatingGps(true);
-    setGpsNotice(null);
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setIsLocatingGps(false);
-        const { latitude, longitude } = pos.coords;
-
-        // Find closest POI in our dataset using Haversine
-        let closestPoi: PointOfInterest | null = null;
-        let minDistance = Infinity;
-
-        POINTS_OF_INTEREST.forEach((poi) => {
-          const dLat = (poi.lat - latitude) * (Math.PI / 180);
-          const dLng = (poi.lng - longitude) * (Math.PI / 180);
-          const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(latitude * (Math.PI / 180)) *
-              Math.cos(poi.lat * (Math.PI / 180)) *
-              Math.sin(dLng / 2) *
-              Math.sin(dLng / 2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          const distanceKm = 6371 * c;
-
-          if (distanceKm < minDistance) {
-            minDistance = distanceKm;
-            closestPoi = poi;
-          }
-        });
-
-        if (closestPoi && minDistance < 15) {
-          const name = (closestPoi as PointOfInterest).nameEs;
-          setPlaceQuery(name);
-          setSelectedCity((closestPoi as PointOfInterest).city);
-          setGpsNotice(`¡Ubicación detectada! Estás a ~${minDistance < 1 ? Math.round(minDistance * 1000) + 'm' : minDistance.toFixed(1) + 'km'} de ${name}.`);
-        } else {
-          setGpsNotice('Ubicación detectada. Puedes afinar el nombre del monumento exacto abajo.');
-        }
-        setTimeout(() => setGpsNotice(null), 4500);
-      },
-      (err) => {
-        setIsLocatingGps(false);
-        setGpsNotice('No se pudo acceder al GPS. Selecciona tu lugar de la lista.');
-        setTimeout(() => setGpsNotice(null), 3500);
-      },
-      { timeout: 9000, enableHighAccuracy: true }
-    );
-  };
-
-  // Request free tour from server
-  const handleGenerateTour = async (customPlace?: string) => {
-    const targetPlace = customPlace || placeQuery;
-    if (!targetPlace.trim()) {
-      setTourError('Por favor indica el lugar o monumento donde estás.');
-      return;
-    }
-
-    // Stop any ongoing speech
-    stopAudio();
-
-    setIsLoadingTour(true);
-    setTourError(null);
-
-    try {
-      const response = await fetch('/api/free-tour', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          placeName: targetPlace.trim(),
-          cityName: selectedCity,
-          userVibe: selectedVibe,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error en el servidor (${response.status})`);
+  // SpeechSynthesis audio playback with sentence-by-sentence queueing to prevent browser 15s freeze
+  const playAudio = useCallback(
+    (text: string, title: string) => {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        showToast('Tu navegador no soporta síntesis de voz interactiva.');
+        return;
       }
 
-      const data = await response.json();
-      if (data.success && data.tour) {
-        setActiveTour(data.tour);
-        setActiveStopIndex(0);
-        // Initialize welcoming chat message from the guide
-        setChatMessages([
-          {
-            id: 'welcome',
-            role: 'assistant',
-            text: `¡Xin chào! Soy Nguyễn, tu guía local aquí en ${data.tour.placeName}. Disfruta de la audioguía y si tienes cualquier duda sobre lo que estás viendo, pregúntame aquí en directo.`,
-            timestamp: Date.now(),
-          },
-        ]);
-        showToast('¡Tu Free Tour con Gemini está listo!');
-      } else {
-        throw new Error('Respuesta del tour incompleta');
-      }
-    } catch (err: any) {
-      console.warn('Free tour fetch error:', err);
-      setTourError('Hubo un inconveniente al generar el tour. Puedes intentarlo de nuevo o seleccionar uno guardado.');
-    } finally {
-      setIsLoadingTour(false);
-    }
-  };
+      stopAudio();
 
-  // Audio Playback with Web Speech Synthesis
-  const playAudio = (text: string, title: string) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      showToast('Tu navegador no soporta síntesis de voz interactiva.');
-      return;
-    }
+      // Split text into readable sentences
+      const rawSentences = text
+        .split(/(?<=[.!?])\s+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
 
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'es-ES';
-    utterance.rate = playbackSpeed;
-
-    // Prefer a natural sounding Spanish voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const esVoice = voices.find((v) => v.lang.startsWith('es') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Premium')));
-    if (esVoice) {
-      utterance.voice = esVoice;
-    }
-
-    utterance.onstart = () => {
+      const sentences = rawSentences.length > 0 ? rawSentences : [text];
+      setAudioSentences(sentences);
+      setSpeakingTextTitle(title);
       setIsPlayingAudio(true);
       setIsPausedAudio(false);
-      setSpeakingTextTitle(title);
-    };
 
-    utterance.onend = () => {
-      setIsPlayingAudio(false);
-      setIsPausedAudio(false);
-      setSpeakingTextTitle('');
-    };
+      // Keepalive timer for Chrome / Android iframe speech pause issue
+      keepAliveIntervalRef.current = setInterval(() => {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+            window.speechSynthesis.pause();
+            window.speechSynthesis.resume();
+          }
+        }
+      }, 9000);
 
-    utterance.onerror = (e) => {
-      console.warn('SpeechSynthesis error:', e);
-      setIsPlayingAudio(false);
-      setIsPausedAudio(false);
-      setSpeakingTextTitle('');
-    };
+      let idx = 0;
 
-    speechUtteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-  };
+      const speakSentence = (sentenceIdx: number) => {
+        if (sentenceIdx >= sentences.length) {
+          stopAudio();
+          return;
+        }
+
+        setCurrentSentenceIndex(sentenceIdx);
+        const utterance = new SpeechSynthesisUtterance(sentences[sentenceIdx]);
+        utterance.lang = 'es-ES';
+        utterance.rate = playbackSpeed;
+
+        const voices = window.speechSynthesis.getVoices();
+        const esVoice = voices.find(
+          (v) =>
+            v.lang.startsWith('es') &&
+            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Premium'))
+        );
+        if (esVoice) {
+          utterance.voice = esVoice;
+        }
+
+        utterance.onend = () => {
+          idx++;
+          speakSentence(idx);
+        };
+
+        utterance.onerror = (e) => {
+          console.warn('Speech sentence error:', e);
+          idx++;
+          if (idx < sentences.length) {
+            speakSentence(idx);
+          } else {
+            stopAudio();
+          }
+        };
+
+        speechUtteranceRef.current = utterance;
+        window.speechSynthesis.speak(utterance);
+      };
+
+      speakSentence(0);
+    },
+    [playbackSpeed, stopAudio, showToast]
+  );
 
   const pauseAudio = () => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -316,27 +305,13 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     }
   };
 
-  const stopAudio = () => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-    setIsPlayingAudio(false);
-    setIsPausedAudio(false);
-    setSpeakingTextTitle('');
-  };
-
   const toggleSpeed = () => {
     const nextSpeed = playbackSpeed === 1.0 ? 1.2 : playbackSpeed === 1.2 ? 0.9 : 1.0;
     setPlaybackSpeed(nextSpeed);
-    if (isPlayingAudio && speechUtteranceRef.current) {
-      // Re-trigger with new rate
-      const currentText = speechUtteranceRef.current.text;
-      const currentTitle = speakingTextTitle;
-      playAudio(currentText, currentTitle);
-    }
+    showToast(`Velocidad de narración: ${nextSpeed}x`);
   };
 
-  // Pronounce Vietnamese term with local accent
+  // Pronounce Vietnamese term
   const speakVietnamese = (text: string) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
@@ -344,6 +319,231 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     utterance.lang = 'vi-VN';
     utterance.rate = 0.9;
     window.speechSynthesis.speak(utterance);
+  };
+
+  // Helper to construct a reliable fallback tour client-side
+  const createClientFallbackTour = (place: string, city: string): FreeTourData => {
+    return {
+      placeName: place,
+      cityName: city || 'Vietnam',
+      vietnameseName: place,
+      tagline: `Un viaje fascinante por la memoria, la arquitectura y los secretos de ${place}.`,
+      durationMinutes: 35,
+      audioGuideScript: `¡Xin chào y bienvenido a ${place}! Te encuentras en uno de los enclaves más especiales de ${city}. Al observar a tu alrededor, notarás el equilibrio armónico entre la tradición vietnamita, las influencias orientales y el latido cotidiano de sus habitantes.\n\nTómate un momento para respirar el ambiente local. A lo largo de esta audioguía exploraremos las tres paradas fundamentales para comprender su historia, el simbolismo de sus detalles y las leyendas que han perdurado a través de los siglos.`,
+      stops: [
+        {
+          number: 1,
+          title: `Entrada y primer vistazo a ${place}`,
+          whatToLookAt: 'La fachada principal, los aleros del tejado y la orientación tradicional del edificio.',
+          story: 'Las construcciones vietnamitas tradicionales se erigen respetando la energía del entorno, buscando siempre la armonía entre el viento y el agua.',
+          insiderTip: 'Observa la madera y los colores decorativos antes de que lleguen grupos grandes.',
+        },
+        {
+          number: 2,
+          title: 'Detalles ornamentales y simbolismo sagrado',
+          whatToLookAt: 'Las figuras de dragones, fénix, carpas o lotos tallados en los aleros o altares.',
+          story: 'En la mitología vietnamita, el dragón representa la fuerza del cielo y la carpa simboliza la perseverancia del estudiante que nunca se rinde.',
+          insiderTip: 'Los artesanos locales solían emplear fragmentos de cerámica vidriada reciclada para dar vida a los mosaicos más brillantes.',
+        },
+        {
+          number: 3,
+          title: 'Patio interior y perspectiva de calma',
+          whatToLookAt: 'El patio interior, los bonsáis centenarios y las ofrendas frescas de frutas y flores.',
+          story: 'Los patios tradicionales actúan como pulmones de luz y sosiego, aislando el bullicio exterior de las motocicletas.',
+          insiderTip: 'Aprovecha este rincón tranquilo para contemplar los tejados superpuestos.',
+        },
+      ],
+      photoSpot: {
+        location: `Frente a la perspectiva principal de ${place}.`,
+        bestLight: 'A media tarde (16:00 - 17:30) con luz cálida.',
+        instruction: 'Busca un ángulo que enmarque los aleros del tejado con el cielo o vegetación.',
+      },
+      culturalEtiquette: {
+        dressCode: 'Hombros y rodillas cubiertos. Retirar gorras y gafas de sol en altares o templos.',
+        whatNotToDo: 'Evitar hablar en voz alta frente a los altares de culto o señalar con un solo dedo.',
+        scamWarning: 'Declina con cortesía si alguien te ofrece varitas de incienso no solicitadas diciendo "Không, cảm ơn".',
+      },
+      streetFoodReward: {
+        dishNameVi: 'Cà Phê Sữa Đá / Trà Chanh',
+        dishNameEs: 'Café vietnamita con leche condensada y hielo, o té verde helado con limón',
+        whereToFind: 'En las cafeterías o puestos con taburetes bajos de las calles contiguas.',
+        priceEstimate: '20.000 ₫ – 35.000 ₫',
+      },
+      suggestedQuestions: [
+        `¿Cuál es la leyenda más fascinante de ${place}?`,
+        '¿Qué significado tienen los dragones y fénix en la decoración?',
+        '¿Qué plato típico de esta zona recomiendas probar hoy?',
+      ],
+    };
+  };
+
+  // Main tour loader & generator
+  const handleGenerateTour = useCallback(
+    async (customPlace?: string, customCity?: string) => {
+      const targetPlace = (customPlace || placeQuery).trim();
+      const targetCity = (customCity || selectedCity).trim();
+
+      if (!targetPlace) {
+        setTourError('Por favor indica el lugar o monumento donde estás.');
+        return;
+      }
+
+      stopAudio();
+      setIsLoadingTour(true);
+      setTourError(null);
+
+      // 1. Instant check against curated tours for immediate 0-latency experience
+      const curatedMatch = findClientCuratedTour(targetPlace, targetCity);
+      if (curatedMatch) {
+        setActiveTour(curatedMatch);
+        setActiveStopIndex(0);
+        setPlaceQuery(curatedMatch.placeName);
+        setSelectedCity(curatedMatch.cityName);
+        setChatMessages([
+          {
+            id: `welcome-${Date.now()}`,
+            role: 'assistant',
+            text: `¡Xin chào! Soy Nguyễn, tu guía local aquí en ${curatedMatch.placeName}. Tienes la audioguía completa y detallada lista. ¡Pregúntame cualquier cosa que veas a tu alrededor!`,
+            timestamp: Date.now(),
+          },
+        ]);
+        setIsLoadingTour(false);
+        showToast(`¡Tour de ${curatedMatch.placeName} listo!`);
+        return;
+      }
+
+      // 2. Fetch from backend API if online
+      if (isOnline) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 9000);
+
+          const response = await fetch('/api/free-tour', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              placeName: targetPlace,
+              cityName: targetCity,
+              userVibe: selectedVibe,
+            }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.success && data.tour) {
+              setActiveTour(data.tour);
+              setActiveStopIndex(0);
+              setChatMessages([
+                {
+                  id: `welcome-${Date.now()}`,
+                  role: 'assistant',
+                  text: `¡Xin chào! Soy Nguyễn, tu guía local en ${data.tour.placeName}. Disfruta del recorrido y pregúntame lo que necesites.`,
+                  timestamp: Date.now(),
+                },
+              ]);
+              setIsLoadingTour(false);
+              showToast('¡Free Tour generado con Gemini!');
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn('Network tour fetch fallback:', err);
+        }
+      }
+
+      // 3. Robust client-side fallback if offline or server timeout
+      const fallbackTour = createClientFallbackTour(targetPlace, targetCity);
+      setActiveTour(fallbackTour);
+      setActiveStopIndex(0);
+      setChatMessages([
+        {
+          id: `welcome-fb-${Date.now()}`,
+          role: 'assistant',
+          text: `¡Xin chào! Soy Nguyễn, tu guía local en ${fallbackTour.placeName}. He preparado esta guía para ti. ¡Pregúntame cualquier duda que tengas!`,
+          timestamp: Date.now(),
+        },
+      ]);
+      setIsLoadingTour(false);
+      showToast(`¡Tour cargado para ${targetPlace}!`);
+    },
+    [placeQuery, selectedCity, selectedVibe, isOnline, stopAudio, showToast]
+  );
+
+  // When opened with an initial POI, immediately start tour
+  useEffect(() => {
+    if (initialPoi) {
+      setPlaceQuery(initialPoi.nameEs);
+      setSelectedCity(initialPoi.city);
+      handleGenerateTour(initialPoi.nameEs, initialPoi.city);
+      if (onClearInitialPoi) {
+        onClearInitialPoi();
+      }
+    }
+  }, [initialPoi, handleGenerateTour, onClearInitialPoi]);
+
+  // Clean up audio on unmount
+  useEffect(() => {
+    return () => {
+      stopAudio();
+    };
+  }, [stopAudio]);
+
+  // Scroll chat to bottom
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
+
+  // Smart GPS detection with two-tier fallback and simulated testing
+  const handleDetectGps = async () => {
+    setIsLocatingGps(true);
+    setGpsNotice('Buscando satélites GPS y redes...');
+    setGpsError(null);
+    setGpsDetails(null);
+
+    const result = await getSmartGeolocation();
+    setIsLocatingGps(false);
+
+    if (result.success) {
+      setGpsDetails(result.data);
+      const { closestPoi, isInsideVietnam, distanceToVietnamKm, distanceToClosestPoiKm } = result.data;
+      setPlaceQuery(closestPoi.nameEs);
+      setSelectedCity(closestPoi.city);
+
+      if (isInsideVietnam) {
+        setGpsNotice(
+          `🎯 ¡Ubicación GPS en Vietnam! Estás a ~${
+            distanceToClosestPoiKm < 1 ? Math.round(distanceToClosestPoiKm * 1000) + ' m' : distanceToClosestPoiKm + ' km'
+          } de ${closestPoi.nameEs}. Cargando audioguía...`
+        );
+      } else {
+        setGpsNotice(
+          `📍 Señal GPS detectada (${result.data.coords.latitude.toFixed(2)}, ${result.data.coords.longitude.toFixed(2)} - a ~${distanceToVietnamKm.toLocaleString()} km de Vietnam). Como estás preparando el viaje desde fuera, te hemos situado en ${closestPoi.nameEs} (${closestPoi.city}) para explorar su Free Tour.`
+        );
+        setShowGpsHelper(true);
+      }
+      handleGenerateTour(closestPoi.nameEs, closestPoi.city);
+    } else {
+      setGpsError(result.error);
+      setGpsNotice(result.error.message);
+      setShowGpsHelper(true);
+    }
+  };
+
+  const handleSimulatePosition = (presetId: string) => {
+    const sim = createSimulatedResult(presetId);
+    setGpsDetails(sim);
+    setGpsError(null);
+    setShowGpsHelper(false);
+    setPlaceQuery(sim.closestPoi.nameEs);
+    setSelectedCity(sim.closestPoi.city);
+    setGpsNotice(`🧭 Ubicación situada en: ${sim.simulatedName}. ¡Audioguía lista!`);
+    handleGenerateTour(sim.closestPoi.nameEs, sim.closestPoi.city);
+    showToast(`Posicionado en ${sim.simulatedName}`);
   };
 
   // Save / Bookmark Tour
@@ -368,9 +568,9 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     ? savedTours.some((t) => t.placeName.toLowerCase() === activeTour.placeName.toLowerCase())
     : false;
 
-  // Ask tour guide a question (Live Q&A)
+  // Ask tour guide a question (Live Q&A with offline intelligence)
   const handleSendChatMessage = async (presetQuestion?: string) => {
-    const questionText = presetQuestion || chatInput.trim();
+    const questionText = (presetQuestion || chatInput).trim();
     if (!questionText || !activeTour || isSendingChat) return;
 
     const userMsg: TourChatMessage = {
@@ -384,58 +584,80 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     if (!presetQuestion) setChatInput('');
     setIsSendingChat(true);
 
-    try {
-      const res = await fetch('/api/tour-guide-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          placeName: activeTour.placeName,
-          cityName: activeTour.cityName,
-          question: questionText,
-          chatHistory: chatMessages.slice(-4),
-        }),
-      });
+    if (isOnline) {
+      try {
+        const res = await fetch('/api/tour-guide-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            placeName: activeTour.placeName,
+            cityName: activeTour.cityName,
+            question: questionText,
+            chatHistory: chatMessages.slice(-4),
+          }),
+        });
 
-      if (res.ok) {
-        const data = await res.json();
-        const guideMsg: TourChatMessage = {
-          id: `guide-${Date.now()}`,
-          role: 'assistant',
-          text: data.reply || '¡Qué curiosa observación! Ese detalle refleja la armonía entre la naturaleza y la arquitectura que tanto valoramos en Vietnam.',
-          timestamp: Date.now(),
-        };
-        setChatMessages((prev) => [...prev, guideMsg]);
-      } else {
-        throw new Error('Chat failed');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.reply) {
+            const guideMsg: TourChatMessage = {
+              id: `guide-${Date.now()}`,
+              role: 'assistant',
+              text: data.reply,
+              timestamp: Date.now(),
+            };
+            setChatMessages((prev) => [...prev, guideMsg]);
+            setIsSendingChat(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Tour guide online chat error:', e);
       }
-    } catch (e) {
-      console.warn('Tour guide chat error:', e);
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: `guide-err-${Date.now()}`,
-          role: 'assistant',
-          text: 'Disculpa viajero, la conexión con el templo es débil en este instante, pero recuerda disfrutar de los detalles arquitectónicos a tu alrededor.',
-          timestamp: Date.now(),
-        },
-      ]);
-    } finally {
-      setIsSendingChat(false);
     }
+
+    // Smart contextual reply if offline
+    let localAnswer = `¡Excelente pregunta sobre ${activeTour.placeName}! `;
+    const qLower = questionText.toLowerCase();
+
+    if (qLower.includes('leyenda') || qLower.includes('historia')) {
+      localAnswer += `La historia central de este monumento refleja la resiliencia de la cultura vietnamita. Durante siglos ha sido respetado por emperadores y monjes por igual. Si miras a los tejados, notarás cómo los artesanos usaban fragmentos de cerámica vidriada rota para crear dragones celestiales y fénix.`;
+    } else if (qLower.includes('color') || qLower.includes('amarillo') || qLower.includes('rojo')) {
+      localAnswer += `En Vietnam, el rojo simboliza la buena fortuna, la sangre vital y la alegría popular, mientras que el amarillo representa la tierra sagrada, la nobleza imperial y la prosperidad espiritual de Buda.`;
+    } else if (qLower.includes('plato') || qLower.includes('comer') || qLower.includes('comida')) {
+      localAnswer += `Te recomiendo probar ${activeTour.streetFoodReward?.dishNameVi || 'un buen Phở o Bún Chả'} en los puestos con taburetes bajos de las calles adyacentes. ¡El caldo fresco con hierbas aromáticas es insuperable!`;
+    } else {
+      localAnswer += `Aquí en ${activeTour.placeName}, los detalles que estás observando buscan la armonía entre el cielo, la tierra y el respeto a los antepasados. Tómate un minuto para contemplar el tallado de madera y respirar el aroma a incienso.`;
+    }
+
+    const offlineGuideMsg: TourChatMessage = {
+      id: `guide-offline-${Date.now()}`,
+      role: 'assistant',
+      text: localAnswer,
+      timestamp: Date.now(),
+    };
+    setChatMessages((prev) => [...prev, offlineGuideMsg]);
+    setIsSendingChat(false);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" id="free-tour-container">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-stone-700 text-sm flex items-center gap-2.5 animate-fade-in">
+        <div
+          id="free-tour-toast"
+          className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-stone-700 text-sm flex items-center gap-2.5 animate-fade-in"
+        >
           <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Top Banner & Mode Switcher */}
-      <div className="bg-gradient-to-r from-stone-900 via-stone-800 to-amber-950 text-stone-100 rounded-2xl p-5 sm:p-6 shadow-md border border-stone-700/60 relative overflow-hidden">
+      <div
+        id="free-tour-hero-banner"
+        className="bg-gradient-to-r from-stone-900 via-stone-800 to-amber-950 text-stone-100 rounded-2xl p-5 sm:p-6 shadow-md border border-stone-700/60 relative overflow-hidden"
+      >
         <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
@@ -446,53 +668,98 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
               <span className="text-stone-400">•</span>
               <span className="text-emerald-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Guía Local Inteligente
+                Guía Local Inteligente (Online & Offline)
               </span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-              Tu Guía Turístico Personal en Vietnam
+
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+              Audioguía & Free Tour en Directo
             </h1>
             <p className="text-stone-300 text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed">
-              Dile a Gemini dónde estás (o detecta tu ubicación GPS) y te guiará con anécdotas fascinantes, qué buscar exactamente con los ojos, rincones secretos para fotos y audio en español.
+              Ponte frente a cualquier templo, pagoda, lago o calle de Vietnam. Tu audioguía narrará
+              en español las leyendas, qué buscar con los ojos, ángulos fotográficos y responderá tus preguntas en vivo.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end shrink-0">
+          {/* Offline Saved Tours Toggle Button */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
+              id="btn-saved-tours-toggle"
               onClick={() => setShowSavedList(!showSavedList)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
-                showSavedList
-                  ? 'bg-amber-500 text-stone-950 font-semibold'
-                  : 'bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700'
-              }`}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-semibold transition-all"
             >
-              <Bookmark className="w-4 h-4" />
+              <Bookmark className="w-4 h-4 text-amber-400" />
               <span>Tours Guardados ({savedTours.length})</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Saved Tours Drawer/Modal */}
+      {/* Featured Famous Monuments Quick Switcher */}
+      <div id="quick-tours-carousel" className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs">
+        <div className="flex items-center justify-between gap-2 mb-2.5">
+          <span className="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
+            <Compass className="w-3.5 h-3.5 text-amber-600" />
+            <span>Tours destacados de Vietnam (Acceso Instantáneo 0s)</span>
+          </span>
+          <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+            ✓ Listos Offline
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+          {CURATED_CLIENT_TOURS.map((tour) => {
+            const isCurrent = activeTour?.placeName === tour.placeName;
+            return (
+              <button
+                key={tour.placeName}
+                id={`pill-tour-${tour.cityName.replace(/\s+/g, '-').toLowerCase()}`}
+                onClick={() => {
+                  stopAudio();
+                  setActiveTour(tour);
+                  setActiveStopIndex(0);
+                  setPlaceQuery(tour.placeName);
+                  setSelectedCity(tour.cityName);
+                  showToast(`Cargado tour: ${tour.placeName}`);
+                }}
+                className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 transition-all flex items-center gap-2 border ${
+                  isCurrent
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                    : 'bg-stone-50 hover:bg-amber-50 text-stone-800 hover:text-amber-900 border-stone-200 hover:border-amber-300'
+                }`}
+              >
+                <span>📍 {tour.placeName.split('(')[0].trim()}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${isCurrent ? 'bg-amber-700 text-amber-100' : 'bg-stone-200 text-stone-600'}`}>
+                  {tour.cityName}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Saved Tours List View Modal/Drawer */}
       {showSavedList && (
-        <div className="bg-white rounded-2xl p-5 border border-stone-200 shadow-sm animate-fade-in">
-          <div className="flex items-center justify-between pb-3 border-b border-stone-200 mb-4">
+        <div id="saved-tours-section" className="bg-white rounded-2xl p-5 border border-stone-200 shadow-sm space-y-4 animate-fade-in">
+          <div className="flex items-center justify-between pb-3 border-b border-stone-200">
             <div className="flex items-center gap-2">
               <Bookmark className="w-4 h-4 text-amber-600" />
-              <h2 className="text-sm font-bold text-stone-900">Tours Guardados para Uso Offline</h2>
+              <h3 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
+                Tours Descargados para Uso Offline
+              </h3>
             </div>
             <button
               onClick={() => setShowSavedList(false)}
-              className="text-xs text-stone-500 hover:text-stone-700 font-medium"
+              className="text-xs text-stone-500 hover:text-stone-800 font-semibold"
             >
-              Cerrar lista
+              Cerrar ✕
             </button>
           </div>
 
           {savedTours.length === 0 ? (
-            <p className="text-xs text-stone-500 py-3 text-center">
-              No tienes ningún tour guardado todavía. Cuando generes un tour, pulsa en "Guardar offline" para tenerlo disponible sin internet.
-            </p>
+            <div className="text-center py-6 text-stone-500 text-xs">
+              No tienes tours guardados todavía. Cuando visualices un tour, pulsa "Guardar para Viaje" para tenerlo disponible 100% sin internet.
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {savedTours.map((t) => (
@@ -511,6 +778,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                   <div className="flex items-center justify-between pt-2 border-t border-stone-200">
                     <button
                       onClick={() => {
+                        stopAudio();
                         setActiveTour(t);
                         setShowSavedList(false);
                         showToast(`Cargado tour offline: ${t.placeName}`);
@@ -539,26 +807,114 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
         </div>
       )}
 
-      {/* Search & Location Selection Section */}
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xs space-y-4">
+      {/* Search & Custom Place Selection Section */}
+      <div id="tour-search-box" className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <label className="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center gap-2">
             <MapPin className="w-4 h-4 text-amber-600" />
             <span>¿En qué monumento o lugar estás ahora?</span>
           </label>
 
-          <button
-            type="button"
-            onClick={handleDetectGps}
-            disabled={isLocatingGps}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold transition-all disabled:opacity-50"
-          >
-            <Navigation className={`w-3.5 h-3.5 ${isLocatingGps ? 'animate-spin' : 'text-amber-600'}`} />
-            <span>{isLocatingGps ? 'Detectando señal GPS...' : '📍 Detectar mi lugar exacto'}</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              id="btn-detect-gps"
+              onClick={handleDetectGps}
+              disabled={isLocatingGps}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
+            >
+              <Navigation className={`w-3.5 h-3.5 ${isLocatingGps ? 'animate-spin' : 'text-amber-600'}`} />
+              <span>{isLocatingGps ? 'Buscando satélites...' : '📍 Detectar mi lugar exacto'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowGpsHelper(!showGpsHelper)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
+                showGpsHelper
+                  ? 'bg-amber-600 text-white border-amber-600 font-bold'
+                  : 'bg-stone-100 hover:bg-amber-50 text-stone-700 hover:text-amber-900 border-stone-300'
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5 text-amber-600" />
+              <span>Simular Posición</span>
+            </button>
+          </div>
         </div>
 
-        {gpsNotice && (
+        {/* GPS Diagnostic & Simulation Assistant Card */}
+        {showGpsHelper && (
+          <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 text-xs text-amber-950 space-y-3 animate-fade-in shadow-xs">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Compass className="w-4 h-4 text-amber-700 shrink-0" />
+                <span className="font-bold text-amber-900 text-sm">
+                  {gpsError ? 'Diagnóstico de Señal GPS' : '🧭 Simulación de Posición en Vietnam'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGpsHelper(false)}
+                className="text-stone-500 hover:text-stone-800 text-xs font-bold p-1 cursor-pointer"
+              >
+                ✕ Cerrar
+              </button>
+            </div>
+
+            {gpsError ? (
+              <div className="space-y-2">
+                <p className="text-amber-900 leading-relaxed font-medium">
+                  {gpsError.message}
+                </p>
+                <p className="text-amber-800/80 leading-relaxed text-[11px]">
+                  {gpsError.userTip}
+                </p>
+                {gpsError.isIframeBlocked && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => window.open(window.location.href, '_blank')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Abrir app en ventana completa (Habilitar GPS nativo)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-amber-900 leading-relaxed">
+                Selecciona cualquier monumento para situarte virtualmente en él y escuchar su audioguía:
+              </p>
+            )}
+
+            <div>
+              <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider block mb-2">
+                O sitúate con 1 clic en un monumento emblemático de Vietnam:
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {VIETNAM_SIMULATION_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => handleSimulatePosition(preset.id)}
+                    className="p-2.5 rounded-xl bg-white hover:bg-amber-100/70 border border-amber-200 text-left transition cursor-pointer flex flex-col gap-0.5 shadow-2xs group"
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-stone-900 group-hover:text-amber-800 text-xs">
+                      <span>{preset.icon}</span>
+                      <span className="truncate">{preset.cityName}</span>
+                    </div>
+                    <span className="text-[11px] text-stone-600 truncate">
+                      {preset.poiName}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {gpsNotice && !showGpsHelper && (
           <div className="bg-amber-50 text-amber-900 px-3.5 py-2 rounded-xl text-xs border border-amber-200 flex items-center gap-2">
             <Info className="w-4 h-4 text-amber-600 shrink-0" />
             <span>{gpsNotice}</span>
@@ -570,15 +926,22 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
+              id="input-tour-place"
               type="text"
               value={placeQuery}
               onChange={(e) => setPlaceQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && placeQuery.trim()) {
+                  handleGenerateTour();
+                }
+              }}
               placeholder="Escribe el nombre del templo, calle, pagoda o monumento (ej. Templo de la Literatura)..."
               className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:bg-white text-stone-900 transition-all placeholder:text-stone-400"
             />
           </div>
 
           <select
+            id="select-tour-city"
             value={selectedCity}
             onChange={(e) => setSelectedCity(e.target.value)}
             aria-label="Seleccionar ciudad de Vietnam"
@@ -593,6 +956,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
           </select>
 
           <button
+            id="btn-start-tour"
             onClick={() => handleGenerateTour()}
             disabled={isLoadingTour || !placeQuery.trim()}
             className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-xl text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
@@ -600,7 +964,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
             {isLoadingTour ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                <span>Creando Tour con Gemini...</span>
+                <span>Generando Tour...</span>
               </>
             ) : (
               <>
@@ -612,7 +976,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
         </div>
 
         {/* Quick Monument Suggestions by selected City */}
-        <div className="pt-2">
+        <div className="pt-1">
           <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
             Lugares populares en {selectedCity}:
           </div>
@@ -645,10 +1009,11 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                 <button
                   key={v.id}
                   type="button"
+                  id={`btn-vibe-${v.id}`}
                   onClick={() => setSelectedVibe(v.id)}
                   className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
                     isSelected
-                      ? 'bg-amber-50 border-amber-500 shadow-xs'
+                      ? 'bg-amber-50 border-amber-500 shadow-xs ring-1 ring-amber-500'
                       : 'bg-stone-50 hover:bg-stone-100 border-stone-200'
                   }`}
                 >
@@ -675,7 +1040,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
 
       {/* Loading state indicator */}
       {isLoadingTour && (
-        <div className="bg-white rounded-2xl p-8 border border-stone-200 shadow-sm text-center space-y-4 animate-pulse">
+        <div id="tour-loading-card" className="bg-white rounded-2xl p-8 border border-stone-200 shadow-sm text-center space-y-4 animate-pulse">
           <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
             <Compass className="w-6 h-6 animate-spin" />
           </div>
@@ -684,7 +1049,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
               Conectando con tu guía local en {selectedCity}...
             </h3>
             <p className="text-xs text-stone-500 max-w-md mx-auto mt-1">
-              Gemini está recopilando las leyendas, el simbolismo de los altares, los mejores ángulos fotográficos y preparando el guion de audioguía para {placeQuery}.
+              Recopilando las leyendas, el simbolismo de los altares, los mejores ángulos fotográficos y preparando el guion de audioguía para {placeQuery}.
             </p>
           </div>
         </div>
@@ -692,7 +1057,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
 
       {/* ACTIVE TOUR VIEW */}
       {activeTour && !isLoadingTour && (
-        <div className="space-y-6 animate-fade-in">
+        <div id="active-tour-view" className="space-y-6 animate-fade-in">
           {/* Tour Header Banner */}
           <div className="bg-stone-900 text-white rounded-2xl p-5 sm:p-6 border border-stone-800 shadow-md">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -736,6 +1101,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
               {/* Action buttons: Save & Share */}
               <div className="flex items-center gap-2 shrink-0">
                 <button
+                  id="btn-save-tour-toggle"
                   onClick={handleToggleSaveTour}
                   className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
                     isCurrentTourSaved
@@ -757,6 +1123,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                 </button>
 
                 <button
+                  id="btn-copy-tour-text"
                   onClick={() => {
                     if (navigator.clipboard) {
                       navigator.clipboard.writeText(
@@ -777,13 +1144,14 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
             <div className="mt-5 pt-4 border-t border-stone-800 bg-stone-950/60 -mx-5 -mb-5 sm:-mx-6 sm:-mb-6 p-4 sm:px-6 rounded-b-2xl flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <button
+                  id="btn-toggle-audio-guide"
                   onClick={() => {
                     if (isPlayingAudio && !isPausedAudio) {
                       pauseAudio();
                     } else if (isPausedAudio) {
                       pauseAudio();
                     } else {
-                      playAudio(activeTour.audioGuideScript, `Introducción: ${activeTour.placeName}`);
+                      playAudio(activeTour.audioGuideScript, `Audioguía: ${activeTour.placeName}`);
                     }
                   }}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow-md transition-all active:scale-95"
@@ -803,6 +1171,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
 
                 {isPlayingAudio && (
                   <button
+                    id="btn-stop-audio"
                     onClick={stopAudio}
                     className="p-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-xl text-xs transition-all"
                     title="Detener audio"
@@ -812,6 +1181,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                 )}
 
                 <button
+                  id="btn-toggle-audio-speed"
                   onClick={toggleSpeed}
                   className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-amber-300 rounded-lg text-xs font-mono font-bold transition-all border border-stone-700"
                   title="Cambiar velocidad de reproducción"
@@ -820,7 +1190,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                 </button>
               </div>
 
-              {/* Sound wave visualizer when playing */}
+              {/* Sound wave visualizer / playback indicator */}
               <div className="flex items-center gap-2 text-xs text-stone-400">
                 {isPlayingAudio && !isPausedAudio ? (
                   <div className="flex items-center gap-1">
@@ -842,7 +1212,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
             </div>
           </div>
 
-          {/* Introductory Narrative Script Card */}
+          {/* Introductory Narrative Script Card with Synchronized Reading */}
           <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -853,15 +1223,34 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
               </div>
               <button
                 onClick={() => playAudio(activeTour.audioGuideScript, 'Narrativa del Guía')}
-                className="text-xs font-semibold text-amber-700 hover:text-amber-800 flex items-center gap-1"
+                className="text-xs font-semibold text-amber-700 hover:text-amber-800 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors"
               >
                 <Volume2 className="w-3.5 h-3.5" />
                 <span>Leer en voz alta</span>
               </button>
             </div>
-            <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-line font-serif">
-              {activeTour.audioGuideScript}
-            </p>
+
+            {/* If currently speaking this script, highlight active sentence */}
+            {isPlayingAudio && speakingTextTitle.includes('Narrativa') && audioSentences.length > 0 ? (
+              <div className="text-stone-700 text-sm leading-relaxed font-serif space-y-2">
+                {audioSentences.map((sent, sIdx) => (
+                  <span
+                    key={sIdx}
+                    className={`transition-all rounded-sm px-0.5 inline ${
+                      sIdx === currentSentenceIndex
+                        ? 'bg-amber-200 text-stone-950 font-medium'
+                        : 'text-stone-700'
+                    }`}
+                  >
+                    {sent}{' '}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-line font-serif">
+                {activeTour.audioGuideScript}
+              </p>
+            )}
           </div>
 
           {/* PARADAS DEL TOUR (Interactive Stops) */}
@@ -882,7 +1271,9 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                 return (
                   <div
                     key={stop.number}
-                    className={`rounded-2xl p-5 border transition-all ${
+                    id={`stop-card-${stop.number}`}
+                    onClick={() => setActiveStopIndex(idx)}
+                    className={`rounded-2xl p-5 border transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-amber-50/40 border-amber-300 shadow-xs'
                         : 'bg-white hover:bg-stone-50 border-stone-200'
@@ -901,12 +1292,13 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                       </div>
 
                       <button
-                        onClick={() =>
+                        onClick={(e) => {
+                          e.stopPropagation();
                           playAudio(
                             `${stop.title}. Qué mirar: ${stop.whatToLookAt}. Historia: ${stop.story}. Consejo de guía: ${stop.insiderTip}`,
                             `Parada ${stop.number}: ${stop.title}`
-                          )
-                        }
+                          );
+                        }}
                         className="p-1.5 bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-900 rounded-lg text-xs transition-colors shrink-0"
                         title="Escuchar esta parada"
                       >
@@ -947,7 +1339,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
             </div>
           </div>
 
-          {/* PHOTO SPOT & CULTURAL ETIQUETTE (Two columns) */}
+          {/* PHOTO SPOT & CULTURAL ETIQUETTE */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Photo spot */}
             <div className="bg-white rounded-2xl p-5 border border-stone-200 shadow-xs space-y-2">
@@ -957,17 +1349,17 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                   <span>El Rincón Fotográfico Secreto</span>
                 </div>
                 <span className="text-[11px] font-semibold bg-sky-50 text-sky-700 px-2 py-0.5 rounded-md border border-sky-200">
-                  {activeTour.photoSpot.bestLight}
+                  {activeTour.photoSpot?.bestLight || 'Hora dorada'}
                 </span>
               </div>
               <div className="text-xs text-stone-700 space-y-1.5 pt-1">
                 <div>
                   <strong className="text-stone-900">Dónde pararse: </strong>
-                  <span>{activeTour.photoSpot.location}</span>
+                  <span>{activeTour.photoSpot?.location || 'Frente a la puerta principal.'}</span>
                 </div>
                 <div>
                   <strong className="text-stone-900">Encuadre perfecto: </strong>
-                  <span>{activeTour.photoSpot.instruction}</span>
+                  <span>{activeTour.photoSpot?.instruction || 'Enfoca los aleros con luz diagonal.'}</span>
                 </div>
               </div>
             </div>
@@ -981,13 +1373,13 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
               <div className="text-xs text-stone-700 space-y-1.5 pt-1">
                 <div>
                   <strong className="text-stone-900">Vestimenta: </strong>
-                  <span>{activeTour.culturalEtiquette.dressCode}</span>
+                  <span>{activeTour.culturalEtiquette?.dressCode || 'Hombros y rodillas cubiertos.'}</span>
                 </div>
                 <div>
                   <strong className="text-stone-900">Evitar: </strong>
-                  <span>{activeTour.culturalEtiquette.whatNotToDo}</span>
+                  <span>{activeTour.culturalEtiquette?.whatNotToDo || 'No tocar altares sagrados ni hablar en tono alto.'}</span>
                 </div>
-                {activeTour.culturalEtiquette.scamWarning && (
+                {activeTour.culturalEtiquette?.scamWarning && (
                   <div className="text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200 mt-1">
                     <strong>Picaresca local: </strong>
                     <span>{activeTour.culturalEtiquette.scamWarning}</span>
@@ -1023,7 +1415,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
           )}
 
           {/* INTERACTIVE GUIDE CHAT (Pregúntale a tu guía Nguyễn) */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xs space-y-4">
+          <div id="guide-chat-card" className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-stone-200">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-xs">
@@ -1103,6 +1495,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
             {/* Chat Input Field */}
             <div className="flex gap-2 pt-2 border-t border-stone-100">
               <input
+                id="input-tour-chat"
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
@@ -1115,6 +1508,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                 className="flex-1 px-3.5 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:bg-white text-stone-900 placeholder:text-stone-400"
               />
               <button
+                id="btn-send-tour-chat"
                 onClick={() => handleSendChatMessage()}
                 disabled={!chatInput.trim() || isSendingChat}
                 className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
