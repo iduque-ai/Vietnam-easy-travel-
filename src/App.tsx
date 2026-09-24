@@ -11,6 +11,7 @@ import { RestaurantFinder } from './components/RestaurantFinder';
 import { DownloadableMaps } from './components/DownloadableMaps';
 import { ItineraryPlanner } from './components/ItineraryPlanner';
 import { FreeTourGuide } from './components/FreeTourGuide';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { ExchangeRatesData, ActiveTabType, PointOfInterest } from './types';
 import { getSavedRates, saveRates, isRatesStale } from './utils/storage';
 import { fetchLiveExchangeRates } from './utils/currencyApi';
@@ -20,7 +21,16 @@ import { Compass, Wifi, WifiOff, Clock, ShieldCheck, HelpCircle } from 'lucide-r
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTabType>('converter');
   const [translatorSubTab, setTranslatorSubTab] = useState<'conversation' | 'phrases' | 'food' | 'allergy' | undefined>(undefined);
-  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    try {
+      const override = localStorage.getItem('vietnam_travel_online_manual_override');
+      if (override === 'offline') return false;
+      if (override === 'online') return true;
+    } catch {
+      // fallback
+    }
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  });
   const [ratesData, setRatesData] = useState<ExchangeRatesData>(getSavedRates);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [offlineToast, setOfflineToast] = useState<string | null>(null);
@@ -149,13 +159,41 @@ export default function App() {
     setTimeout(() => setOfflineToast(null), 3500);
   }, []);
 
-  // Monitor online / offline state
+  // Manual Online / Offline Mode Toggle (triggered by top banner green dot)
+  const handleToggleOnlineMode = useCallback(() => {
+    setIsOnline((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('vietnam_travel_online_manual_override', next ? 'online' : 'offline');
+      } catch {
+        // ignore
+      }
+      setOfflineToast(
+        next
+          ? 'Modo Online activado: Búsqueda completa de restaurantes en tiempo real e IA activa.'
+          : 'Modo Offline activado: Funcionando 100% sin datos con catálogo y mapas guardados.'
+      );
+      setTimeout(() => setOfflineToast(null), 3500);
+      if (next) {
+        refreshRates(false, true);
+      }
+      return next;
+    });
+  }, [refreshRates]);
+
+  // Monitor online / offline state from browser network events
   useEffect(() => {
     const handleOnline = () => {
+      // Only auto-switch if no strict manual offline override was set
+      try {
+        const override = localStorage.getItem('vietnam_travel_online_manual_override');
+        if (override === 'offline') return;
+      } catch {
+        // ignore
+      }
       setIsOnline(true);
       setOfflineToast('Conexión reestablecida. Actualizando tasas online...');
       setTimeout(() => setOfflineToast(null), 3500);
-      // Automatically refresh rates when regaining network connectivity
       refreshRates(false, true);
     };
 
@@ -234,11 +272,12 @@ export default function App() {
         isRefreshing={isRefreshing}
         onRefreshRates={() => refreshRates(true, true)}
         onOpenConversationMode={handleOpenConversationMode}
+        onToggleOnlineMode={handleToggleOnlineMode}
       />
 
-      {/* Floating Offline Notification Toast */}
+      {/* Floating Offline Notification Toast (positioned above mobile bottom nav) */}
       {offlineToast && (
-        <div className="fixed bottom-4 right-4 z-50 max-w-sm bg-stone-900 text-white px-4 py-3 rounded-xl shadow-xl border border-stone-700 text-xs flex items-center gap-3 animate-fade-in">
+        <div className="fixed bottom-20 md:bottom-4 right-4 z-50 max-w-sm bg-stone-900 text-white px-4 py-3 rounded-xl shadow-xl border border-stone-700 text-xs flex items-center gap-3 animate-fade-in">
           {isOnline ? (
             <Wifi className="w-4 h-4 text-emerald-400 shrink-0" />
           ) : (
@@ -248,8 +287,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-4 py-6 sm:py-8 min-w-0 overflow-x-hidden">
+      {/* Main Content Area: with bottom padding for mobile navigation */}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-8 min-w-0 overflow-x-hidden pb-24 md:pb-8">
         {activeTab === 'converter' && (
           <CurrencyConverter
             ratesData={ratesData}
@@ -270,6 +309,7 @@ export default function App() {
             isOnline={isOnline}
             itineraryState={itineraryState}
             onNavigateToItinerary={() => setActiveTab('itinerary')}
+            onToggleOnlineMode={handleToggleOnlineMode}
           />
         )}
 
@@ -303,8 +343,11 @@ export default function App() {
         )}
       </main>
 
+      {/* Fixed Bottom Navigation for Mobile Devices */}
+      <MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+
       {/* Bottom Sticky Footer with Essential Vietnam Travel Facts */}
-      <footer className="bg-stone-900 text-stone-400 border-t border-stone-800 py-6 text-xs">
+      <footer className="bg-stone-900 text-stone-400 border-t border-stone-800 py-6 text-xs mb-16 md:mb-0">
         <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="text-base">🇻🇳</span>

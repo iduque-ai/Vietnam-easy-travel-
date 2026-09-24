@@ -1,29 +1,35 @@
-import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import {
+  Map as MapLibreMap,
+  Marker as MapLibreMarker,
+  Popup as MapLibrePopup,
+  AttributionControl as MapLibreAttributionControl,
+  LngLatBounds as MapLibreLngLatBounds,
+} from 'maplibre-gl';
+import '../utils/maplibreWorker';
 import { PointOfInterest } from '../types';
-import { Layers, Crosshair, ZoomIn, ZoomOut, Compass, Navigation2 } from 'lucide-react';
+import { Layers, Crosshair, ZoomIn, ZoomOut, Compass, Navigation2, Sparkles } from 'lucide-react';
 
-export type MapTileStyle = 'voyager' | 'osm' | 'satellite';
+export type VectorMapStyle = 'liberty' | 'positron' | 'bright';
 
-const TILE_SERVERS: Record<
-  MapTileStyle,
-  { url: string; attribution: string; subdomains?: string[]; maxZoom?: number }
+const VECTOR_STYLES: Record<
+  VectorMapStyle,
+  { name: string; url: string; description: string }
 > = {
-  voyager: {
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: ['a', 'b', 'c', 'd'],
-    maxZoom: 19,
+  liberty: {
+    name: 'Libre',
+    url: 'https://tiles.openfreemap.org/styles/liberty',
+    description: 'Estilo completo y detallado de OpenFreeMap',
   },
-  osm: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 19,
+  positron: {
+    name: 'Claro',
+    url: 'https://tiles.openfreemap.org/styles/positron',
+    description: 'Estilo minimalista de alto contraste',
   },
-  satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-    maxZoom: 18,
+  bright: {
+    name: 'Urbano',
+    url: 'https://tiles.openfreemap.org/styles/bright',
+    description: 'Estilo urbano con calles y edificios destacados',
   },
 };
 
@@ -54,127 +60,123 @@ export const InteractiveOpenStreetMap: React.FC<InteractiveOpenStreetMapProps> =
   selectedLocationTarget,
   poiInclusionLookup,
   selectedDayId,
-  className = 'h-[460px]',
+  className = 'h-[320px] sm:h-[460px]',
   routePolyline,
   routeCoordinates,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const markersRef = useRef<MapLibreMarker[]>([]);
+  const userMarkerRef = useRef<MapLibreMarker | null>(null);
 
-  const activeRoute = routePolyline || (routeCoordinates ? routeCoordinates.map((c, i) => ({
-    lat: c.lat,
-    lng: c.lng,
-    stopIndex: i + 1,
-    title: c.label,
-  })) : undefined);
-  const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const markersLayerRef = useRef<L.LayerGroup | null>(null);
-  const userMarkerRef = useRef<L.LayerGroup | null>(null);
-  const routeLayerRef = useRef<L.LayerGroup | null>(null);
-
-  const [tileStyle, setTileStyle] = useState<MapTileStyle>('voyager');
+  const [vectorStyle, setVectorStyle] = useState<VectorMapStyle>('liberty');
   const [currentZoom, setCurrentZoom] = useState<number>(zoom);
+  const [isStyleLoaded, setIsStyleLoaded] = useState<boolean>(false);
 
-  // Initialize Map
+  const activeRoute = useMemo(() => {
+    return routePolyline || (routeCoordinates ? routeCoordinates.map((c, i) => ({
+      lat: c.lat,
+      lng: c.lng,
+      stopIndex: i + 1,
+      title: c.label,
+    })) : undefined);
+  }, [routePolyline, routeCoordinates]);
+
+  // Initialize MapLibre GL Map with OpenFreeMap vector tiles
   useEffect(() => {
-    if (!containerRef.current || mapInstanceRef.current) return;
+    if (!containerRef.current || mapRef.current) return;
 
-    const map = L.map(containerRef.current, {
-      center: [center.lat, center.lng],
+    const map = new MapLibreMap({
+      container: containerRef.current,
+      style: VECTOR_STYLES[vectorStyle].url,
+      center: [center.lng, center.lat],
       zoom: zoom,
-      zoomControl: false, // Custom UI buttons
-      attributionControl: true,
+      cooperativeGestures: false,
+      attributionControl: false,
     });
 
-    mapInstanceRef.current = map;
+    mapRef.current = map;
 
-    // Base Tile Layer
-    const config = TILE_SERVERS[tileStyle];
-    const tileLayer = L.tileLayer(config.url, {
-      attribution: config.attribution,
-      subdomains: config.subdomains || 'abc',
-      maxZoom: config.maxZoom || 19,
-    }).addTo(map);
-    tileLayerRef.current = tileLayer;
+    // Add subtle attribution in bottom right
+    map.addControl(
+      new MapLibreAttributionControl({
+        compact: true,
+        customAttribution: '© <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OSM</a>',
+      }),
+      'bottom-right'
+    );
 
-    // Feature Layers
-    routeLayerRef.current = L.layerGroup().addTo(map);
-    markersLayerRef.current = L.layerGroup().addTo(map);
-    userMarkerRef.current = L.layerGroup().addTo(map);
+    map.on('style.load', () => {
+      setIsStyleLoaded(true);
+    });
 
-    // Zoom listener
     map.on('zoomend', () => {
-      setCurrentZoom(map.getZoom());
+      setCurrentZoom(Math.round(map.getZoom() * 10) / 10);
     });
-
-    // Invalidate size after layout completes
-    const timer = setTimeout(() => {
-      map.invalidateSize();
-    }, 150);
 
     return () => {
-      clearTimeout(timer);
+      markersRef.current.forEach((m) => m.remove());
+      markersRef.current = [];
+      if (userMarkerRef.current) {
+        userMarkerRef.current.remove();
+        userMarkerRef.current = null;
+      }
       map.remove();
-      mapInstanceRef.current = null;
+      mapRef.current = null;
     };
   }, []);
 
-  // Update Tile Style
+  // Handle Style Switching
   useEffect(() => {
-    const map = mapInstanceRef.current;
+    const map = mapRef.current;
     if (!map) return;
+    setIsStyleLoaded(false);
+    map.setStyle(VECTOR_STYLES[vectorStyle].url);
+  }, [vectorStyle]);
 
-    if (tileLayerRef.current) {
-      map.removeLayer(tileLayerRef.current);
-    }
-
-    const config = TILE_SERVERS[tileStyle];
-    const newLayer = L.tileLayer(config.url, {
-      attribution: config.attribution,
-      subdomains: config.subdomains || 'abc',
-      maxZoom: config.maxZoom || 19,
-    }).addTo(map);
-
-    // Ensure tile layer sits at bottom
-    newLayer.bringToBack();
-    tileLayerRef.current = newLayer;
-  }, [tileStyle]);
-
-  // Center on Region / Selected target change
+  // Handle Center / Target Location Pan
   useEffect(() => {
-    const map = mapInstanceRef.current;
+    const map = mapRef.current;
     if (!map) return;
 
     if (selectedLocationTarget) {
-      map.flyTo([selectedLocationTarget.lat, selectedLocationTarget.lng], Math.max(map.getZoom(), 15), {
-        duration: 1.0,
+      map.flyTo({
+        center: [selectedLocationTarget.lng, selectedLocationTarget.lat],
+        zoom: Math.max(map.getZoom(), 15),
+        duration: 1200,
+        essential: true,
       });
     } else {
-      map.panTo([center.lat, center.lng]);
+      map.easeTo({
+        center: [center.lng, center.lat],
+        zoom: zoom,
+        duration: 800,
+      });
     }
-  }, [center.lat, center.lng, selectedLocationTarget]);
+  }, [center.lat, center.lng, zoom, selectedLocationTarget]);
 
-  // Render POI Markers
+  // Render POI Markers with DOM elements
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    const markersLayer = markersLayerRef.current;
-    if (!map || !markersLayer) return;
+    const map = mapRef.current;
+    if (!map) return;
 
-    markersLayer.clearLayers();
+    // Remove existing markers
+    markersRef.current.forEach((m) => m.remove());
+    markersRef.current = [];
 
     pois.forEach((poi, idx) => {
       const isSelected = selectedPoiId === poi.id;
       const inclusion = poiInclusionLookup ? poiInclusionLookup(poi.id) : { inPlan: false, occurrences: [] };
       const inCurrentDay = selectedDayId && inclusion.occurrences.some((o) => o.dayId === selectedDayId);
 
-      // Determine colors & label
+      // Determine marker color and label
       let bgColor = '#ef4444'; // Red default
       let label = `${idx + 1}`;
       let ringClass = '';
 
       if (isSelected) {
         bgColor = '#f59e0b'; // Amber gold
-        ringClass = 'ring-4 ring-amber-400/60 shadow-xl scale-110 animate-bounce-short';
+        ringClass = 'ring-4 ring-amber-400/80 shadow-xl scale-115';
       } else if (inCurrentDay) {
         bgColor = '#059669'; // Emerald
         label = '✓';
@@ -183,258 +185,206 @@ export const InteractiveOpenStreetMap: React.FC<InteractiveOpenStreetMapProps> =
         label = `D${inclusion.occurrences[0]?.dayNumber || ''}`;
       }
 
-      const iconHtml = `
-        <div class="relative cursor-pointer transition-transform duration-200 transform hover:scale-115">
-          <div style="background-color: ${bgColor}" class="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs shadow-md border-2 border-white ${ringClass}">
-            ${label}
-          </div>
-          <div class="w-2 h-2 bg-stone-900 rotate-45 mx-auto -mt-1 shadow-xs border-r border-b border-white"></div>
+      // Marker element
+      const el = document.createElement('div');
+      el.className = 'cursor-pointer transition-transform duration-200 transform hover:scale-120 group';
+      el.innerHTML = `
+        <div style="background-color: ${bgColor}" class="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs shadow-md border-2 border-white ${ringClass}">
+          ${label}
         </div>
+        <div class="w-2 h-2 bg-stone-900 rotate-45 mx-auto -mt-1 shadow-xs border-r border-b border-white"></div>
       `;
 
-      const customIcon = L.divIcon({
-        html: iconHtml,
-        className: 'custom-poi-marker',
-        iconSize: [32, 38],
-        iconAnchor: [16, 36],
-        popupAnchor: [0, -36],
-      });
-
-      const marker = L.marker([poi.lat, poi.lng], { icon: customIcon });
-
-      marker.on('click', () => {
+      el.addEventListener('click', () => {
         onSelectPoi(poi);
-        map.panTo([poi.lat, poi.lng]);
+        map.easeTo({ center: [poi.lng, poi.lat], duration: 800 });
       });
 
-      marker.bindTooltip(
-        `<div class="font-sans px-1 py-0.5">
-          <div class="font-bold text-xs text-stone-900">${poi.nameEs}</div>
-          <div class="text-[10px] text-amber-800 font-semibold">${poi.nameVi}</div>
-          <div class="text-[10px] text-stone-500">${poi.ticketVnd > 0 ? (poi.ticketVnd / 1000).toLocaleString('es-ES') + 'k ₫' : 'Gratis'}</div>
-        </div>`,
-        { direction: 'top', offset: [0, -32], opacity: 0.95 }
-      );
+      // Tooltip popup
+      const popup = new MapLibrePopup({
+        offset: 20,
+        closeButton: false,
+        className: 'custom-maplibre-tooltip',
+      }).setHTML(`
+        <div style="font-family: inherit; padding: 2px 4px; color: #1c1917;">
+          <div style="font-weight: 700; font-size: 12px;">${poi.nameEs}</div>
+          <div style="font-size: 11px; color: #92400e; font-weight: 600;">${poi.nameVi}</div>
+          <div style="font-size: 10px; color: #78716c; margin-top: 2px;">${poi.ticketVnd > 0 ? (poi.ticketVnd / 1000).toLocaleString('es-ES') + 'k ₫' : 'Gratis'}</div>
+        </div>
+      `);
 
-      markersLayer.addLayer(marker);
+      const marker = new MapLibreMarker({ element: el, anchor: 'bottom' })
+        .setLngLat([poi.lng, poi.lat])
+        .setPopup(popup)
+        .addTo(map);
+
+      markersRef.current.push(marker);
     });
   }, [pois, selectedPoiId, selectedDayId, poiInclusionLookup, onSelectPoi]);
 
-  // Render User Location & Accuracy Radius
+  // Render User Location
   useEffect(() => {
-    const userLayer = userMarkerRef.current;
-    if (!userLayer) return;
+    const map = mapRef.current;
+    if (!map) return;
 
-    userLayer.clearLayers();
-
-    if (!userLocation) return;
-
-    // Precision Accuracy circle (GPS radius in meters)
-    if (userLocation.accuracy && userLocation.accuracy > 0 && userLocation.accuracy < 10000) {
-      const accuracyCircle = L.circle([userLocation.lat, userLocation.lng], {
-        radius: userLocation.accuracy,
-        color: '#0284c7',
-        fillColor: '#38bdf8',
-        fillOpacity: 0.15,
-        weight: 1.5,
-        dashArray: '3, 4',
-      });
-      userLayer.addLayer(accuracyCircle);
+    if (!userLocation) {
+      if (userMarkerRef.current) {
+        userMarkerRef.current.remove();
+        userMarkerRef.current = null;
+      }
+      return;
     }
 
-    // High-visibility animated Pulsing Radar GPS Dot
-    const userIconHtml = `
-      <div class="relative flex items-center justify-center">
+    if (!userMarkerRef.current) {
+      const userEl = document.createElement('div');
+      userEl.className = 'relative flex items-center justify-center pointer-events-none';
+      userEl.innerHTML = `
         <div class="absolute -inset-3 bg-sky-400/40 rounded-full animate-ping"></div>
         <div class="absolute -inset-1.5 bg-sky-500/30 rounded-full animate-pulse"></div>
         <div class="w-4 h-4 bg-sky-500 rounded-full border-2 border-white shadow-lg relative z-10 flex items-center justify-center">
           <div class="w-1.5 h-1.5 bg-white rounded-full"></div>
         </div>
-      </div>
-    `;
+      `;
 
-    const userIcon = L.divIcon({
-      html: userIconHtml,
-      className: 'user-gps-marker',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-    });
+      const marker = new MapLibreMarker({ element: userEl, anchor: 'center' })
+        .setLngLat([userLocation.lng, userLocation.lat])
+        .addTo(map);
 
-    const userMarker = L.marker([userLocation.lat, userLocation.lng], { icon: userIcon, zIndexOffset: 1000 });
+      userMarkerRef.current = marker;
+    } else {
+      userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
+    }
+  }, [userLocation]);
 
-    userMarker.bindTooltip(
-      `<div class="font-sans px-1 py-0.5">
-        <div class="font-bold text-xs text-sky-950 flex items-center gap-1">
-          <span class="w-2 h-2 rounded-full bg-sky-500 inline-block"></span>
-          ${userLocationLabel}
-        </div>
-        <div class="text-[10px] text-stone-500 font-mono mt-0.5">
-          ${userLocation.lat.toFixed(5)}°, ${userLocation.lng.toFixed(5)}°
-          ${userLocation.accuracy ? ` (±${Math.round(userLocation.accuracy)}m)` : ''}
-        </div>
-      </div>`,
-      { permanent: false, direction: 'top', offset: [0, -14] }
-    );
-
-    userLayer.addLayer(userMarker);
-  }, [userLocation, userLocationLabel]);
-
-  // Render Route Polyline (if provided for itinerary days)
+  // Render Route Polyline using Vector Line Layer
   useEffect(() => {
-    const routeLayer = routeLayerRef.current;
-    if (!routeLayer) return;
+    const map = mapRef.current;
+    if (!map || !isStyleLoaded) return;
 
-    routeLayer.clearLayers();
+    const sourceId = 'itinerary-route-source';
+    const layerId = 'itinerary-route-layer';
+    const casingLayerId = 'itinerary-route-casing';
+
+    // Remove existing layer and source if any
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (map.getLayer(casingLayerId)) map.removeLayer(casingLayerId);
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
 
     if (!activeRoute || activeRoute.length < 2) return;
 
-    const latLngs: L.LatLngExpression[] = activeRoute.map((pt) => [pt.lat, pt.lng]);
+    const coordinates = activeRoute.map((pt) => [pt.lng, pt.lat]);
 
-    // Outer glow casing
-    const glowLine = L.polyline(latLngs, {
-      color: '#0284c7',
-      weight: 6,
-      opacity: 0.35,
-      lineCap: 'round',
-      lineJoin: 'round',
+    map.addSource(sourceId, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: coordinates,
+        },
+      },
     });
-    routeLayer.addLayer(glowLine);
 
-    // Main route dashed path
-    const mainLine = L.polyline(latLngs, {
-      color: '#0369a1',
-      weight: 3.5,
-      opacity: 0.9,
-      dashArray: '6, 6',
-      lineCap: 'round',
-      lineJoin: 'round',
+    // Casing line
+    map.addLayer({
+      id: casingLayerId,
+      type: 'line',
+      source: sourceId,
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round',
+      },
+      paint: {
+        'line-color': '#0284c7',
+        'line-width': 6,
+        'line-opacity': 0.4,
+      },
     });
-    routeLayer.addLayer(mainLine);
-  }, [activeRoute]);
 
-  // Map Controls Helpers
+    // Dashed primary line
+    map.addLayer({
+      id: layerId,
+      type: 'line',
+      source: sourceId,
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round',
+      },
+      paint: {
+        'line-color': '#0369a1',
+        'line-width': 3.5,
+        'line-dasharray': [2, 2],
+      },
+    });
+  }, [activeRoute, isStyleLoaded]);
+
+  // Controls Handlers
   const handleZoomIn = () => {
-    mapInstanceRef.current?.zoomIn();
+    mapRef.current?.zoomIn();
   };
 
   const handleZoomOut = () => {
-    mapInstanceRef.current?.zoomOut();
+    mapRef.current?.zoomOut();
+  };
+
+  const handleResetBearing = () => {
+    mapRef.current?.resetNorthPitch({ duration: 600 });
   };
 
   const handleCenterOnUser = () => {
-    if (!userLocation || !mapInstanceRef.current) return;
-    mapInstanceRef.current.flyTo([userLocation.lat, userLocation.lng], 16, { duration: 1.0 });
+    if (!userLocation || !mapRef.current) return;
+    mapRef.current.flyTo({
+      center: [userLocation.lng, userLocation.lat],
+      zoom: 16,
+      duration: 1000,
+    });
   };
 
   const handleFitRegion = () => {
-    if (!mapInstanceRef.current || pois.length === 0) return;
-    const bounds = L.latLngBounds(pois.map((p) => [p.lat, p.lng]));
-    mapInstanceRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+    if (!mapRef.current || pois.length === 0) return;
+    const bounds = new MapLibreLngLatBounds();
+    pois.forEach((p) => bounds.extend([p.lng, p.lat]));
+    mapRef.current.fitBounds(bounds, { padding: 40, maxZoom: 15, duration: 800 });
   };
 
   return (
-    <div className={`relative w-full rounded-2xl overflow-hidden border border-stone-800 shadow-inner ${className}`}>
-      {/* Leaflet DOM container */}
-      <div ref={containerRef} className="w-full h-full z-0 bg-stone-900" />
+    <div className={`relative w-full rounded-2xl overflow-hidden border border-stone-800 shadow-inner bg-stone-900 ${className}`}>
+      {/* MapLibre WebGL DOM Container */}
+      <div ref={containerRef} className="w-full h-full z-0" />
 
-      {/* Floating Modern Floating Controls */}
-      <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
-        {/* Zoom controls */}
-        <div className="bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-stone-200/90 overflow-hidden flex flex-col">
-          <button
-            onClick={handleZoomIn}
-            className="p-2 hover:bg-stone-100 text-stone-700 transition cursor-pointer border-b border-stone-200/70"
-            title="Acercar mapa (+)"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleZoomOut}
-            className="p-2 hover:bg-stone-100 text-stone-700 transition cursor-pointer"
-            title="Alejar mapa (-)"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Fit Bounds */}
-        <button
-          onClick={handleFitRegion}
-          className="p-2 bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-stone-200/90 text-stone-700 hover:bg-stone-100 transition cursor-pointer flex items-center justify-center"
-          title="Ver todos los monumentos de la región"
-        >
-          <Compass className="w-4 h-4 text-amber-600" />
-        </button>
-
-        {/* Center on GPS (if available) */}
+      {/* Floating GPS and compass controls (minimal) */}
+      <div className="absolute top-3 right-3 z-10 flex flex-col gap-2">
         {userLocation && (
           <button
             onClick={handleCenterOnUser}
-            className="p-2 bg-sky-600 hover:bg-sky-500 rounded-xl shadow-lg border border-sky-400 text-white transition cursor-pointer flex items-center justify-center animate-pulse"
-            title="Centrar en mi ubicación GPS exacta"
+            className="p-2.5 bg-sky-600 hover:bg-sky-500 rounded-xl shadow-lg border border-sky-400 text-white transition cursor-pointer flex items-center justify-center animate-pulse"
+            title="Mi ubicación GPS"
           >
             <Crosshair className="w-4 h-4" />
           </button>
         )}
       </div>
 
-      {/* Top Left: Layer Selector Pill */}
+      {/* Subtle vector style toggle in corner */}
       <div className="absolute top-3 left-3 z-10">
-        <div className="bg-stone-900/90 backdrop-blur-md rounded-xl p-1 border border-stone-700/80 shadow-lg flex items-center gap-1 text-[11px]">
-          <span className="text-stone-400 pl-1 pr-0.5 flex items-center gap-1">
-            <Layers className="w-3 h-3 text-amber-400" />
-          </span>
-          <button
-            onClick={() => setTileStyle('voyager')}
-            className={`px-2 py-0.5 rounded-lg font-medium transition cursor-pointer ${
-              tileStyle === 'voyager'
-                ? 'bg-amber-500 text-stone-950 font-bold shadow-2xs'
-                : 'text-stone-300 hover:text-white'
-            }`}
-          >
-            Viajero
-          </button>
-          <button
-            onClick={() => setTileStyle('osm')}
-            className={`px-2 py-0.5 rounded-lg font-medium transition cursor-pointer ${
-              tileStyle === 'osm'
-                ? 'bg-amber-500 text-stone-950 font-bold shadow-2xs'
-                : 'text-stone-300 hover:text-white'
-            }`}
-          >
-            Calles OSM
-          </button>
-          <button
-            onClick={() => setTileStyle('satellite')}
-            className={`px-2 py-0.5 rounded-lg font-medium transition cursor-pointer ${
-              tileStyle === 'satellite'
-                ? 'bg-amber-500 text-stone-950 font-bold shadow-2xs'
-                : 'text-stone-300 hover:text-white'
-            }`}
-          >
-            Satélite
-          </button>
-        </div>
-      </div>
-
-      {/* Bottom Info Bar: GPS Status & Precision */}
-      <div className="absolute bottom-2 left-2 z-10 pointer-events-none">
-        <div className="bg-stone-900/90 backdrop-blur-md px-2.5 py-1 rounded-lg border border-stone-700/80 text-[10px] text-stone-300 shadow-md flex items-center gap-2">
-          {userLocation ? (
-            <span className="flex items-center gap-1.5 text-sky-400 font-medium">
-              <Navigation2 className="w-3 h-3 text-sky-400 rotate-45 shrink-0" />
-              <span>
-                GPS exacto: {userLocation.lat.toFixed(4)}°, {userLocation.lng.toFixed(4)}°
-                {userLocation.accuracy ? ` (±${Math.round(userLocation.accuracy)}m)` : ''}
-              </span>
-            </span>
-          ) : (
-            <span className="text-stone-400">
-              📍 Toca cualquier monumento para ver detalles e itinerario
-            </span>
-          )}
-          <span className="text-stone-600">|</span>
-          <span className="text-stone-400 font-mono">Zoom {currentZoom}x</span>
+        <div className="bg-stone-900/80 backdrop-blur-md rounded-xl p-0.5 border border-stone-700/60 shadow-md flex items-center gap-0.5 text-[10px]">
+          {(['liberty', 'positron', 'bright'] as VectorMapStyle[]).map((styleKey) => {
+            const isSelected = vectorStyle === styleKey;
+            return (
+              <button
+                key={styleKey}
+                onClick={() => setVectorStyle(styleKey)}
+                className={`px-2 py-0.5 rounded-lg font-medium transition cursor-pointer ${
+                  isSelected
+                    ? 'bg-amber-500 text-stone-950 font-bold'
+                    : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                {VECTOR_STYLES[styleKey].name}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -43,6 +43,56 @@ export interface RestaurantItem {
   isCashOnly: boolean;
   badgeLabel?: string;
   imageUrl?: string;
+  source?: 'google_live' | 'offline_curated';
+  menuData?: RestaurantMenuData;
+}
+
+export interface RestaurantMenuItem {
+  id: string;
+  nameVi: string;
+  nameEs: string;
+  phonetic?: string;
+  description: string;
+  priceVnd: number;
+  category: 'Platos Principales' | 'Entrantes & Frituras' | 'Bebidas & Cafés' | 'Postres & Extras';
+  dietary?: string[];
+  isSignature?: boolean;
+  portionSize?: string;
+  imageUrl?: string;
+}
+
+export interface RestaurantReviewPhoto {
+  id: string;
+  url: string;
+  width: number;
+  height: number;
+  caption: string;
+  category: 'menu_board' | 'dish' | 'atmosphere' | 'bill' | 'customer';
+  authorName?: string;
+  relativeTime?: string;
+  isLegibleMenu?: boolean;
+  reviewSnippet?: string;
+}
+
+export interface RestaurantReviewItem {
+  authorName: string;
+  rating: number;
+  relativeTime: string;
+  text: string;
+  profilePhotoUrl?: string;
+}
+
+export interface RestaurantMenuData {
+  restaurantId: string;
+  restaurantName: string;
+  restaurantNameVi?: string;
+  currencyBase: 'VND';
+  items: RestaurantMenuItem[];
+  photos: RestaurantReviewPhoto[];
+  recentReviews?: RestaurantReviewItem[];
+  tipsForOrdering?: string[];
+  lastUpdated?: string;
+  source: 'google_places_live' | 'curated_database' | 'ai_extracted';
 }
 
 export interface RestaurantScoreBreakdown {

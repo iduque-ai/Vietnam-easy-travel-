@@ -261,18 +261,11 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
           details: 'El mapa se ha centrado en tu posición exacta con radio de precisión azul. Si deseas explorar los monumentos de Vietnam o planificar tus visitas, usa los accesos directos abajo.',
           exactCoords: { lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy },
         });
-        setShowGpsHelper(true);
+        setTimeout(() => setLocationToast(null), 3000);
       }
     } else {
-      setGpsDiagnostic({
-        type: 'error',
-        title: 'No se detecta señal de satélites GPS',
-        description: result.error.message,
-        isIframeBlocked: result.error.isIframeBlocked,
-        details: result.error.userTip,
-      });
-      setShowGpsHelper(true);
-      setLocationToast('Sin señal GPS directa. Usa los accesos rápidos a Vietnam.');
+      setLocationToast('Señal GPS no disponible temporalmente.');
+      setTimeout(() => setLocationToast(null), 2500);
     }
   };
 
@@ -745,218 +738,73 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
       {/* Main Map Viewer & POIs Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT / TOP: Interactive Map Canvas & Highlights */}
-        <div className="lg:col-span-7 space-y-4">
-          {/* Interactive Google Map & Vector Map Container */}
-          <div className="bg-stone-900 text-stone-100 rounded-2xl p-4 sm:p-5 border border-stone-800 shadow-md relative overflow-hidden space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="lg:col-span-7 space-y-3">
+          {/* Interactive Map Container */}
+          <div className="bg-stone-900 text-stone-100 rounded-2xl p-3 sm:p-4 border border-stone-800 shadow-md relative overflow-hidden space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 text-[11px] text-amber-400 uppercase font-bold tracking-wider">
-                    <Globe className="w-3.5 h-3.5" />
-                    Google Maps Platform
-                  </span>
-                  <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700 px-2 py-0.5 rounded-full font-semibold">
-                    En vivo
-                  </span>
-                </div>
-                <h3 className="text-base sm:text-lg font-bold text-white mt-0.5">
-                  {currentRegion.name} ({currentRegion.vietnameseName})
+                <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
+                  {currentRegion.name}
                 </h3>
+                <span className="text-[11px] text-stone-400">
+                  {currentRegion.vietnameseName}
+                </span>
               </div>
 
-              {/* Map Mode Toggle & GPS Quick actions */}
-              <div className="flex flex-wrap items-center gap-1.5">
+              {/* Map Engine Toggle & GPS Action */}
+              <div className="flex items-center gap-1.5">
                 <div className="inline-flex p-0.5 bg-stone-950 rounded-xl border border-stone-800">
                   <button
                     onClick={() => setMapDisplayMode('google')}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${
                       mapDisplayMode === 'google'
-                        ? 'bg-amber-500 text-stone-950 shadow-xs font-bold'
+                        ? 'bg-amber-500 text-stone-950 font-bold'
                         : 'text-stone-400 hover:text-white'
                     }`}
                   >
                     <MapIcon className="w-3.5 h-3.5" />
-                    <span>Google Maps</span>
+                    <span>Google</span>
                   </button>
                   <button
                     onClick={() => setMapDisplayMode('osm')}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${
                       mapDisplayMode === 'osm'
-                        ? 'bg-amber-500 text-stone-950 shadow-xs font-bold'
+                        ? 'bg-amber-500 text-stone-950 font-bold'
                         : 'text-stone-400 hover:text-white'
                     }`}
                   >
                     <Layers className="w-3.5 h-3.5" />
-                    <span>OpenStreetMap</span>
+                    <span>Vector</span>
                   </button>
                 </div>
 
                 <button
                   onClick={handleLocateMe}
                   disabled={isLocating}
-                  className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl border border-stone-700 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-                  title="Detectar mi ubicación real con antena GPS de alta precisión"
+                  className="p-1.5 bg-stone-800 hover:bg-stone-700 text-sky-400 rounded-xl border border-stone-700 transition cursor-pointer disabled:opacity-50"
+                  title="Mi ubicación GPS"
                 >
-                  <Locate className={`w-3.5 h-3.5 text-sky-400 ${isLocating ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">
-                    {isLocating ? 'Fijando GPS...' : 'Mi Ubicación GPS'}
-                  </span>
-                </button>
-
-                <button
-                  onClick={toggleLiveTracking}
-                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
-                    isLiveTracking
-                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/60 font-bold ring-1 ring-rose-400/40'
-                      : 'bg-stone-800 hover:bg-stone-700 text-stone-300 border-stone-700'
-                  }`}
-                  title="Seguimiento GPS continuo en tiempo real (mientras caminas o viajas en Grab)"
-                >
-                  <Radio className={`w-3.5 h-3.5 ${isLiveTracking ? 'text-rose-400 animate-pulse' : 'text-stone-400'}`} />
-                  <span className="hidden sm:inline">
-                    {isLiveTracking ? 'En Marcha (GPS Vivo)' : 'Modo en Marcha'}
-                  </span>
-                </button>
-
-                <button
-                  onClick={() => setShowGpsHelper(!showGpsHelper)}
-                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
-                    showGpsHelper
-                      ? 'bg-amber-500 text-stone-950 border-amber-500 font-bold'
-                      : 'bg-stone-800 hover:bg-stone-700 text-amber-300 border-amber-500/40'
-                  }`}
-                  title="Simular estar en cualquier ciudad de Vietnam"
-                >
-                  <Compass className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Simular Posición</span>
-                </button>
-
-                <button
-                  onClick={handleRecenterRegion}
-                  className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl border border-stone-700 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
-                  title="Recentrar en esta región"
-                >
-                  <Crosshair className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Recentrar</span>
+                  <Locate className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />
                 </button>
               </div>
             </div>
 
-            {/* GPS Diagnostic & Simulation Assistant Panel */}
-            {showGpsHelper && (
-              <div className="bg-stone-900 border border-stone-700 rounded-2xl p-4 text-xs text-stone-200 space-y-3 animate-fade-in shadow-md">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Compass className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span className="font-bold text-white text-sm">
-                      {gpsDiagnostic ? gpsDiagnostic.title : '🧭 Posicionamiento y Prueba en Vietnam'}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setShowGpsHelper(false)}
-                    className="text-stone-400 hover:text-white text-xs font-bold p-1 cursor-pointer"
-                  >
-                    ✕ Cerrar
-                  </button>
-                </div>
-
-                {gpsDiagnostic && (
-                  <div className="space-y-2">
-                    <p className="text-stone-300 leading-relaxed">
-                      {gpsDiagnostic.description}
-                    </p>
-                    {gpsDiagnostic.details && (
-                      <p className="text-[11px] text-stone-400 bg-stone-950/60 p-2 rounded-lg border border-stone-800">
-                        {gpsDiagnostic.details}
-                      </p>
-                    )}
-                    {gpsDiagnostic.type === 'success_abroad' && gpsDiagnostic.exactCoords && (
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <button
-                          onClick={() => {
-                            if (gpsDiagnostic.exactCoords) {
-                              setSelectedLocationTarget({
-                                lat: gpsDiagnostic.exactCoords.lat,
-                                lng: gpsDiagnostic.exactCoords.lng,
-                              });
-                              setLocationToast('🎯 Centrado en tus coordenadas exactas');
-                              setShowGpsHelper(false);
-                            }
-                          }}
-                          className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
-                        >
-                          <Locate className="w-3.5 h-3.5" />
-                          <span>Ver mi posición exacta en el mapa</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedRegionId('reg-hanoi-north');
-                            setSelectedLocationTarget({ lat: 21.0285, lng: 105.8542 });
-                            setShowGpsHelper(false);
-                          }}
-                          className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-lg font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
-                        >
-                          <Compass className="w-3.5 h-3.5" />
-                          <span>Explorar Vietnam (Hanói)</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {gpsDiagnostic?.isIframeBlocked && (
-                  <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-700/60 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span className="text-[11px] leading-tight">
-                        Los navegadores bloquean la señal GPS dentro de ventanas incrustadas (iframes).
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => window.open(window.location.href, '_blank')}
-                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-[11px] rounded-lg shrink-0 flex items-center gap-1 cursor-pointer"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      <span>Abrir en Pestaña Completa</span>
-                    </button>
-                  </div>
-                )}
-
-                <div>
-                  <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider block mb-2">
-                    ¿Preparando el viaje desde casa? Sitúa tu GPS en Vietnam con 1 clic:
-                  </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {VIETNAM_SIMULATION_PRESETS.map((preset) => (
-                      <button
-                        key={preset.id}
-                        onClick={() => handleSimulateLocation(preset.id)}
-                        className="p-2 rounded-xl bg-stone-800/80 hover:bg-amber-900/30 border border-stone-700 hover:border-amber-500/50 text-left transition cursor-pointer flex flex-col gap-0.5 group"
-                      >
-                        <div className="flex items-center gap-1.5 font-bold text-white group-hover:text-amber-300 text-xs">
-                          <span>{preset.icon}</span>
-                          <span className="truncate">{preset.cityName}</span>
-                        </div>
-                        <span className="text-[10px] text-stone-400 truncate">
-                          {preset.poiName}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {locationToast && !showGpsHelper && (
-              <div className="bg-sky-950/80 border border-sky-700 text-sky-200 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 animate-fade-in">
-                <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+            {/* Subtle temporary toast if user taps GPS */}
+            {locationToast && (
+              <div className="bg-stone-800/90 border border-stone-700 text-stone-200 px-3 py-1 rounded-lg text-xs flex items-center justify-between gap-2 animate-fade-in">
                 <span>{locationToast}</span>
+                <button
+                  onClick={() => setLocationToast(null)}
+                  className="text-stone-400 hover:text-white text-xs cursor-pointer font-bold"
+                >
+                  ✕
+                </button>
               </div>
             )}
 
             {/* Map Canvas: Google Maps OR Vector Map */}
             {mapDisplayMode === 'google' ? (
-              <div className="relative w-full h-[450px] rounded-xl overflow-hidden border border-stone-800 bg-stone-950 shadow-inner">
+              <div className="relative w-full h-[320px] sm:h-[450px] rounded-xl overflow-hidden border border-stone-800 bg-stone-950 shadow-inner">
                 <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['marker']}>
                   <Map
                     mapId="DEMO_MAP_ID"
@@ -1078,66 +926,40 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
               </div>
             )}
 
-            {/* Map Pins Filter: All vs Itinerary vs Day */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-stone-800 text-xs">
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                <span className="text-stone-400 text-xs flex items-center gap-1 shrink-0">
-                  <ListFilter className="w-3.5 h-3.5" /> Pines:
-                </span>
-                <button
-                  onClick={() => setMapPinsFilter('all')}
-                  className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition cursor-pointer ${
-                    mapPinsFilter === 'all'
-                      ? 'bg-amber-500 text-stone-950 font-bold'
-                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                  }`}
-                >
-                  Todos los lugares
-                </button>
-                <button
-                  onClick={() => setMapPinsFilter('itinerary')}
-                  className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
-                    mapPinsFilter === 'itinerary'
-                      ? 'bg-amber-500 text-stone-950 font-bold'
-                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                  }`}
-                >
-                  <span>★ Mi Itinerario</span>
-                </button>
-                <button
-                  onClick={() => setMapPinsFilter('day')}
-                  className={`px-2.5 py-1 rounded-lg text-xs whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
-                    mapPinsFilter === 'day'
-                      ? 'bg-amber-500 text-stone-950 font-bold'
-                      : 'bg-stone-800 text-stone-300 hover:bg-stone-700'
-                  }`}
-                >
-                  <span>Día {currentDay?.dayNumber || 1}</span>
-                </button>
-              </div>
+            {/* Clean Single-Row Filter Bar */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 border-t border-stone-800 text-xs">
+              <button
+                onClick={() => setMapPinsFilter(mapPinsFilter === 'itinerary' ? 'all' : 'itinerary')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                  mapPinsFilter === 'itinerary'
+                    ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                    : 'bg-stone-800 text-stone-300 hover:text-white'
+                }`}
+              >
+                <span>★ Mi Itinerario</span>
+              </button>
 
-              {/* Category Filter Chips */}
-              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-                {[
-                  { id: 'todas', label: 'Todo' },
-                  { id: 'Monumento', label: 'Monumentos' },
-                  { id: 'Cultura', label: 'Cultura' },
-                  { id: 'Naturaleza', label: 'Naturaleza' },
-                  { id: 'Mercado', label: 'Mercados' },
-                ].map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCategoryFilter(cat.id)}
-                    className={`px-2 py-0.5 rounded-md text-[11px] whitespace-nowrap transition cursor-pointer ${
-                      activeCategoryFilter === cat.id
-                        ? 'bg-stone-100 text-stone-950 font-bold'
-                        : 'text-stone-400 hover:text-white'
-                    }`}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
+              <div className="h-4 w-px bg-stone-700 shrink-0 mx-0.5" />
+
+              {[
+                { id: 'todas', label: 'Todo' },
+                { id: 'Monumento', label: 'Monumentos' },
+                { id: 'Cultura', label: 'Cultura' },
+                { id: 'Naturaleza', label: 'Naturaleza' },
+                { id: 'Mercado', label: 'Mercados' },
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategoryFilter(cat.id)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition cursor-pointer shrink-0 font-medium ${
+                    activeCategoryFilter === cat.id
+                      ? 'bg-white text-stone-950 font-bold'
+                      : 'bg-stone-800/80 text-stone-400 hover:text-white hover:bg-stone-800'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
             </div>
           </div>
 

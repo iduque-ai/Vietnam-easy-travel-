@@ -1435,7 +1435,13 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
 
       {/* 5. FULLSCREEN DISPLAY MODAL (For showing the phone to vendors) */}
       {isFullscreenOutput && (
-        <div className="fixed inset-0 z-50 bg-stone-950/95 backdrop-blur-sm flex flex-col justify-between p-6 sm:p-10 text-white animate-fade-in">
+        <div
+          className="fixed inset-0 z-50 bg-stone-950/95 backdrop-blur-sm flex flex-col justify-between p-4 sm:p-10 text-white animate-fade-in"
+          style={{
+            paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))',
+            paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',
+          }}
+        >
           {/* Top Bar */}
           <div className="flex items-center justify-between border-b border-stone-800 pb-4">
             <div className="flex items-center gap-2">

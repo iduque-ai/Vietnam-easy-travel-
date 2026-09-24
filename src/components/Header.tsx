@@ -24,6 +24,7 @@ interface HeaderProps {
   isRefreshing: boolean;
   onRefreshRates: () => void;
   onOpenConversationMode?: () => void;
+  onToggleOnlineMode?: () => void;
 }
 
 const NAV_ITEMS: {
@@ -85,6 +86,7 @@ export const Header: React.FC<HeaderProps> = ({
   isRefreshing,
   onRefreshRates,
   onOpenConversationMode,
+  onToggleOnlineMode,
 }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -134,15 +136,34 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="max-w-6xl mx-auto px-3 sm:px-5">
           {/* Desktop Navigation Row (md and above) - Slightly larger and more spacious */}
           <div className="hidden md:flex items-center justify-between h-16 gap-4">
-            {/* Brand Identity */}
+            {/* Brand Identity with interactive Online/Offline mode toggle */}
             <div className="flex items-center gap-2.5 shrink-0">
               <span className="text-xl leading-none" role="img" aria-label="Vietnam">🇻🇳</span>
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-center gap-2">
                 <span className="font-bold tracking-tight text-stone-100 text-base">Vietnam Travel</span>
-                <span
-                  className={`w-2 h-2 rounded-full inline-block ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`}
-                  title={isOnline ? `En línea • ${formattedDate}` : `Modo sin conexión • Tasa guardada`}
-                />
+                <button
+                  type="button"
+                  onClick={onToggleOnlineMode}
+                  className={`group inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer border shadow-2xs select-none ${
+                    isOnline
+                      ? 'bg-emerald-950/80 border-emerald-600/70 text-emerald-300 hover:bg-emerald-900 hover:border-emerald-400'
+                      : 'bg-amber-950/80 border-amber-600/70 text-amber-300 hover:bg-amber-900 hover:border-amber-400'
+                  }`}
+                  title={
+                    isOnline
+                      ? 'Modo Online activo (Google Maps y búsqueda completa en vivo). Haz clic para cambiar a Modo Offline.'
+                      : 'Modo Offline activo (Sin consumo de datos, catálogo guardado). Haz clic para cambiar a Modo Online.'
+                  }
+                  aria-label={isOnline ? 'Cambiar a modo offline' : 'Cambiar a modo online'}
+                >
+                  <span className="relative flex h-2 w-2">
+                    {isOnline && (
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    )}
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                  </span>
+                  <span>{isOnline ? 'Online' : 'Offline'}</span>
+                </button>
               </div>
             </div>
 
@@ -203,66 +224,61 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Mobile Header (< md) */}
-          <div className="md:hidden py-2.5 space-y-2">
-            {/* Top Bar with Brand, Rate & Hamburger Menu */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-lg leading-none">🇻🇳</span>
-                <span className="font-bold text-sm text-stone-100">Vietnam Travel</span>
-                <span
-                  className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`}
-                  title={isOnline ? 'En línea' : 'Sin conexión'}
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="px-2.5 py-1 rounded-lg bg-stone-800 border border-stone-700 font-mono text-xs text-stone-200 flex items-center gap-1">
-                  <span className="text-amber-400 font-semibold">1 € =</span>
-                  <span>{eurToVnd.toLocaleString('es-ES')} ₫</span>
-                  <button
-                    onClick={onRefreshRates}
-                    disabled={isRefreshing || !isOnline}
-                    aria-label="Actualizar"
-                    className="ml-1 text-stone-400 hover:text-amber-300 transition"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-                  </button>
-                </div>
-
-                {/* Hamburger button */}
-                <button
-                  id="btn-open-mobile-drawer"
-                  onClick={() => setIsDrawerOpen(true)}
-                  className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 flex items-center justify-center cursor-pointer"
-                  aria-label="Abrir menú lateral"
-                >
-                  <Menu className="w-5 h-5 text-stone-200" />
-                </button>
-              </div>
+          <div className="md:hidden py-2 flex items-center justify-between gap-2">
+            {/* Top Bar with Brand & Mode toggle */}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-lg leading-none shrink-0">🇻🇳</span>
+              <span className="font-bold text-sm text-stone-100 truncate">Vietnam Travel</span>
+              <button
+                type="button"
+                onClick={onToggleOnlineMode}
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer border shadow-2xs select-none shrink-0 ${
+                  isOnline
+                    ? 'bg-emerald-950/80 border-emerald-600/70 text-emerald-300 active:scale-95'
+                    : 'bg-amber-950/80 border-amber-600/70 text-amber-300 active:scale-95'
+                }`}
+                title={
+                  isOnline
+                    ? 'Modo Online activo (Google Maps en vivo). Toca para cambiar a Modo Offline.'
+                    : 'Modo Offline activo (Sin consumo de datos). Toca para cambiar a Modo Online.'
+                }
+                aria-label={isOnline ? 'Cambiar a modo offline' : 'Cambiar a modo online'}
+              >
+                <span className="relative flex h-2 w-2 shrink-0">
+                  {isOnline && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  )}
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                </span>
+                <span>{isOnline ? 'Online' : 'Offline'}</span>
+              </button>
             </div>
 
-            {/* Quick Larger Options Bar on Mobile */}
-            <nav className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar" aria-label="Tabs">
-              {NAV_ITEMS.map((item) => {
-                const IconComponent = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    id={`tab-mobile-${item.id}`}
-                    onClick={() => setActiveTab(item.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
-                      isActive
-                        ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
-                        : 'text-stone-300 bg-stone-800/90 hover:bg-stone-700/80 border border-stone-700/50'
-                    }`}
-                  >
-                    <IconComponent className="w-3.5 h-3.5" />
-                    <span>{item.shortLabel}</span>
-                  </button>
-                );
-              })}
-            </nav>
+            {/* Quick Currency Rate & Drawer Toggle */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <div className="px-2 py-1 rounded-lg bg-stone-800 border border-stone-700 font-mono text-xs text-stone-200 flex items-center gap-1">
+                <span className="text-amber-400 font-semibold">1€≈</span>
+                <span>{eurToVnd >= 1000 ? `${Math.round(eurToVnd / 1000)}k` : eurToVnd}₫</span>
+                <button
+                  onClick={onRefreshRates}
+                  disabled={isRefreshing || !isOnline}
+                  aria-label="Actualizar tipo de cambio"
+                  className="ml-0.5 p-0.5 text-stone-400 hover:text-amber-300 transition"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+                </button>
+              </div>
+
+              {/* Hamburger button */}
+              <button
+                id="btn-open-mobile-drawer"
+                onClick={() => setIsDrawerOpen(true)}
+                className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 flex items-center justify-center cursor-pointer active:scale-95"
+                aria-label="Abrir menú lateral"
+              >
+                <Menu className="w-5 h-5 text-stone-200" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -291,12 +307,20 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-2xl leading-none">🇻🇳</span>
                 <div>
                   <h3 className="font-bold text-base text-stone-100">Vietnam Travel</h3>
-                  <div className="flex items-center gap-1.5 text-[11px] text-stone-400">
-                    <span
-                      className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`}
-                    />
-                    <span>{isOnline ? 'Conectado a la red' : 'Modo sin conexión'}</span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={onToggleOnlineMode}
+                    className={`mt-0.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border transition cursor-pointer ${
+                      isOnline
+                        ? 'bg-emerald-950/60 border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/60'
+                        : 'bg-amber-950/60 border-amber-600/60 text-amber-300 hover:bg-amber-900/60'
+                    }`}
+                    title="Tocar para cambiar entre modo online y offline"
+                  >
+                    <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                    <span>{isOnline ? 'En línea (Modo Online)' : 'Sin datos (Modo Offline)'}</span>
+                    <span className="text-[10px] opacity-70 underline ml-0.5">cambiar</span>
+                  </button>
                 </div>
               </div>
 
