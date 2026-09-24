@@ -59,8 +59,7 @@ import { ItineraryState } from '../utils/useItineraryState';
 import { MapItineraryPanel } from './MapItineraryPanel';
 
 const GOOGLE_MAPS_API_KEY =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) ||
-  'AIzaSyDBPIkdp1W4Z9iTjNZaNfS3DMCje7TM4tU';
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) || '';
 
 // Camera controller component to smoothly pan/zoom map on region/poi change
 const MapCameraController: React.FC<{
@@ -120,7 +119,9 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Google Maps state
-  const [mapDisplayMode, setMapDisplayMode] = useState<'google' | 'vector'>('google');
+  const [mapDisplayMode, setMapDisplayMode] = useState<'google' | 'vector'>(() => {
+    return GOOGLE_MAPS_API_KEY ? 'google' : 'vector';
+  });
   const [infoWindowOpen, setInfoWindowOpen] = useState<boolean>(true);
   const [selectedLocationTarget, setSelectedLocationTarget] = useState<{ lat: number; lng: number } | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);

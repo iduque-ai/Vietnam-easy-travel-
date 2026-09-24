@@ -13,8 +13,7 @@ import { Navigation, MapPin, X, ExternalLink, Route, Volume2 } from 'lucide-reac
 import { speakVietnamese } from '../utils/storage';
 
 const GOOGLE_MAPS_API_KEY =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) ||
-  'AIzaSyDBPIkdp1W4Z9iTjNZaNfS3DMCje7TM4tU';
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) || '';
 
 interface ItineraryDayMapProps {
   day: ItineraryDay;
@@ -171,6 +170,30 @@ export const ItineraryDayMap: React.FC<ItineraryDayMapProps> = ({ day, onClose }
           <p className="text-[11px] text-stone-500">
             Añade puntos de interés desde los mapas descargables para visualizarlos aquí en ruta.
           </p>
+        </div>
+      ) : !GOOGLE_MAPS_API_KEY ? (
+        <div className="relative w-full p-6 rounded-xl border border-stone-800 bg-stone-900/90 text-center space-y-3">
+          <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+            <Route className="w-5 h-5" />
+          </div>
+          <div>
+            <h5 className="font-bold text-white text-sm">Ruta del Día {day.dayNumber} lista</h5>
+            <p className="text-xs text-stone-400 mt-1 max-w-md mx-auto">
+              {mappedStops.length} paradas con coordenadas. Puedes abrir la ruta completa paso a paso directamente en Google Maps.
+            </p>
+          </div>
+          {googleRouteUrl && (
+            <a
+              href={googleRouteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs transition shadow-md"
+            >
+              <Navigation className="w-3.5 h-3.5" />
+              <span>Abrir Navegación en Google Maps</span>
+              <ExternalLink className="w-3 h-3 ml-0.5" />
+            </a>
+          )}
         </div>
       ) : (
         <div className="relative w-full h-80 rounded-xl overflow-hidden border border-stone-800 bg-stone-900">
