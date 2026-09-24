@@ -227,8 +227,8 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
     setSelectedLocationTarget(null);
   };
 
-  const usdVndRate = ratesData.rates['VND'] || 25450;
-  const eurRate = ratesData.rates['EUR'] || 0.92;
+  const usdVndRate = ratesData.rates['VND'] || 26000;
+  const eurRate = ratesData.rates['EUR'] || 0.8965;
   const eurToVnd = usdVndRate / eurRate;
 
   const currentRegion = useMemo(() => {

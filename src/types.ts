@@ -7,7 +7,7 @@ export interface ExchangeRatesData {
   date: string;
   base: string;
   rates: Record<string, number>;
-  source: 'live_network' | 'server_cache' | 'offline_fallback' | 'local_storage';
+  source: 'live_network' | 'server_cache' | 'offline_fallback' | 'local_storage' | 'manual_custom';
 }
 
 export interface PhraseItem {

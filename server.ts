@@ -22,19 +22,19 @@ interface RatesCache {
   rates: Record<string, number>;
 }
 
-// Solid approximate default rates as fallback
+// Solid approximate default rates as fallback (updated to ~29k VND / 1 EUR)
 const DEFAULT_RATES: Record<string, number> = {
-  VND: 25450, // 1 USD = ~25,450 VND
-  EUR: 0.92,  // 1 USD = 0.92 EUR -> 1 EUR = ~27,663 VND
+  VND: 26000, // 1 USD = ~26,000 VND
+  EUR: 0.8965, // 1 USD = 0.8965 EUR -> 1 EUR = ~29,001 VND
   USD: 1.0,
-  GBP: 0.78,  // 1 USD = 0.78 GBP -> 1 GBP = ~32,600 VND
-  AUD: 1.55,
-  CAD: 1.38,
-  JPY: 153.5,
-  CHF: 0.88,
-  MXN: 19.5,
-  SGD: 1.34,
-  THB: 35.8,
+  GBP: 0.76,  // 1 USD = 0.76 GBP -> 1 GBP = ~34,200 VND
+  AUD: 1.51,
+  CAD: 1.36,
+  JPY: 151.0,
+  CHF: 0.86,
+  MXN: 19.3,
+  SGD: 1.31,
+  THB: 34.5,
 };
 
 let cachedRates: RatesCache = {

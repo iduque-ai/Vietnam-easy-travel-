@@ -1,11 +1,25 @@
 import React, { useState } from 'react';
-import { Calculator, Clock, HelpCircle, AlertTriangle, Sparkles, TrendingDown, RefreshCw } from 'lucide-react';
+import {
+  Calculator,
+  Clock,
+  HelpCircle,
+  AlertTriangle,
+  Sparkles,
+  TrendingDown,
+  RefreshCw,
+  Sliders,
+  Check,
+  RotateCcw,
+  Globe,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { CurrencyCode, ExchangeRatesData } from '../types';
 
 interface CurrencyConverterProps {
   ratesData: ExchangeRatesData;
   isOnline: boolean;
   onRefreshRates: () => void;
+  onSaveCustomRates?: (newRates: ExchangeRatesData) => void;
   isRefreshing: boolean;
 }
 
@@ -26,18 +40,23 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
   ratesData,
   isOnline,
   onRefreshRates,
+  onSaveCustomRates,
   isRefreshing,
 }) => {
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('EUR');
   const [vndAmount, setVndAmount] = useState<string>('50000');
 
+  // Custom rate editor state
+  const [isCustomEditorOpen, setIsCustomEditorOpen] = useState<boolean>(false);
+  const [customRateInput, setCustomRateInput] = useState<string>('');
+
   // Calculate rate: Rates are relative to USD base
-  const usdVndRate = ratesData.rates['VND'] || 25450;
-  const foreignUsdRate = ratesData.rates[selectedCurrency] || (selectedCurrency === 'USD' ? 1 : 0.92);
+  const usdVndRate = ratesData.rates['VND'] || 26000;
+  const foreignUsdRate = ratesData.rates[selectedCurrency] || (selectedCurrency === 'USD' ? 1 : 0.8965);
   const foreignToVndRate = usdVndRate / foreignUsdRate;
 
-  // Initialize with exact 2 decimals in euros
-  const [foreignAmount, setForeignAmount] = useState<string>(() => (50000 / (25450 / 0.92)).toFixed(2));
+  // Initialize with exact 2 decimals in foreign currency
+  const [foreignAmount, setForeignAmount] = useState<string>(() => (50000 / (26000 / 0.8965)).toFixed(2));
 
   // Bargaining tool state
   const [quotedVnd, setQuotedVnd] = useState<string>('300000');
@@ -122,52 +141,240 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
     minute: '2-digit',
   });
 
+  const handleOpenCustomEditor = () => {
+    setCustomRateInput(Math.round(foreignToVndRate).toString());
+    setIsCustomEditorOpen(!isCustomEditorOpen);
+  };
+
+  const handleApplyCustomRate = (targetRate: number) => {
+    if (!targetRate || targetRate <= 0) return;
+    const baseForeignUsd = ratesData.rates[selectedCurrency] || (selectedCurrency === 'USD' ? 1 : 0.8965);
+    const newUsdVnd = Math.round(targetRate * baseForeignUsd);
+
+    const updatedRates: ExchangeRatesData = {
+      ...ratesData,
+      timestamp: Date.now(),
+      date: new Date().toISOString().split('T')[0],
+      rates: {
+        ...ratesData.rates,
+        VND: newUsdVnd,
+      },
+      source: 'manual_custom',
+    };
+
+    if (onSaveCustomRates) {
+      onSaveCustomRates(updatedRates);
+    }
+    setIsCustomEditorOpen(false);
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Rate Status Card */}
-      <div className="bg-stone-900 text-stone-100 rounded-xl p-4 border border-stone-800 shadow-sm flex items-center justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 mt-0.5">
-            <Clock className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">Tasa de conversión</span>
-              <div className="flex items-center gap-1.5">
+      <div className="bg-stone-900 text-stone-100 rounded-2xl p-4 sm:p-5 border border-stone-800 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0 mt-0.5">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-sm">Tasa de conversión</span>
                 <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                  className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium flex items-center gap-1 ${
                     ratesData.source === 'live_network'
-                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
+                      : ratesData.source === 'manual_custom'
+                      ? 'bg-amber-950/80 text-amber-300 border border-amber-800'
                       : ratesData.source === 'server_cache'
-                      ? 'bg-sky-950 text-sky-300 border border-sky-800'
-                      : 'bg-amber-950 text-amber-300 border border-amber-800'
+                      ? 'bg-sky-950/80 text-sky-300 border border-sky-800'
+                      : 'bg-stone-800 text-stone-300 border border-stone-700'
                   }`}
                 >
-                  {ratesData.source === 'live_network' && 'Online'}
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    ratesData.source === 'live_network'
+                      ? 'bg-emerald-400'
+                      : ratesData.source === 'manual_custom'
+                      ? 'bg-amber-400'
+                      : ratesData.source === 'server_cache'
+                      ? 'bg-sky-400'
+                      : 'bg-stone-400'
+                  }`} />
+                  {ratesData.source === 'live_network' && 'Online en directo'}
+                  {ratesData.source === 'manual_custom' && 'Personalizada por ti'}
                   {ratesData.source === 'server_cache' && 'Al día'}
-                  {ratesData.source === 'offline_fallback' && 'Offline'}
-                  {ratesData.source === 'local_storage' && 'En caché'}
+                  {ratesData.source === 'offline_fallback' && 'Estimación offline'}
+                  {ratesData.source === 'local_storage' && 'Guardada en dispositivo'}
                 </span>
-
-                <button
-                  id="btn-force-refresh"
-                  onClick={onRefreshRates}
-                  disabled={isRefreshing || !isOnline}
-                  title={isOnline ? 'Actualizar tasa de cambio online' : 'Sin conexión a internet'}
-                  aria-label="Actualizar tasa de cambio"
-                  className="p-1 rounded-md text-stone-400 hover:text-amber-300 hover:bg-stone-800 active:scale-95 disabled:opacity-30 transition cursor-pointer flex items-center justify-center"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-                </button>
               </div>
+              <p className="text-xs text-stone-300 mt-1">
+                1 {selectedCurrency} = <strong className="text-amber-300 font-mono text-sm">{formatVND(foreignToVndRate)}</strong>
+                <span className="mx-2 text-stone-500">•</span>
+                <span className="text-stone-400">Última tasa: {dateFormatted}</span>
+              </p>
             </div>
-            <p className="text-xs text-stone-400 mt-0.5">
-              1 {selectedCurrency} = <strong className="text-amber-300 font-mono">{formatVND(foreignToVndRate)}</strong>
-              <span className="mx-2">•</span>
-              Actualizado: {dateFormatted}
-            </p>
+          </div>
+
+          {/* Action buttons: Direct Live Refresh & Custom Manual Adjust */}
+          <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+            <button
+              id="btn-force-refresh"
+              onClick={onRefreshRates}
+              disabled={isRefreshing || !isOnline}
+              title={isOnline ? 'Consultar tipo de cambio en directo' : 'Sin conexión a internet'}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white border border-stone-700 active:scale-95 disabled:opacity-40 text-xs font-medium transition cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : 'text-stone-400'}`} />
+              <span>{isRefreshing ? 'Consultando...' : 'Actualizar online'}</span>
+            </button>
+
+            <button
+              id="btn-toggle-custom-rate"
+              onClick={handleOpenCustomEditor}
+              title="Ajustar manualmente la tasa de cambio"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                isCustomEditorOpen || ratesData.source === 'manual_custom'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                  : 'bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white border-stone-700'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+              <span>{ratesData.source === 'manual_custom' ? 'Tasa propia' : 'Fijar tasa'}</span>
+            </button>
           </div>
         </div>
+
+        {/* Expandable Manual Rate Editor */}
+        {isCustomEditorOpen && (
+          <div className="pt-3 border-t border-stone-800 space-y-3 animate-fade-in">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h4 className="text-xs font-semibold text-white">Personalizar tasa para 1 {selectedCurrency}</h4>
+                <p className="text-[11px] text-stone-400">
+                  Introduce el tipo de cambio que te aplican en tu casa de cambio, cajero o tarjeta (se guardará de forma permanente en tu dispositivo).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-44">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={customRateInput ? parseInt(customRateInput, 10).toLocaleString('es-ES') : ''}
+                  onChange={(e) => setCustomRateInput(e.target.value.replace(/\D/g, ''))}
+                  placeholder="29000"
+                  className="w-full bg-stone-950 border border-stone-700 rounded-lg px-3 py-1.5 text-sm font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-400 pr-8"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-500">₫</span>
+              </div>
+
+              <button
+                onClick={() => handleApplyCustomRate(Number(customRateInput) || 0)}
+                disabled={!customRateInput || Number(customRateInput) <= 0}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Guardar tasa fija</span>
+              </button>
+
+              <button
+                onClick={() => setIsCustomEditorOpen(false)}
+                className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-stone-200 text-xs transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+
+              {ratesData.source === 'manual_custom' && (
+                <button
+                  onClick={() => {
+                    onRefreshRates();
+                    setIsCustomEditorOpen(false);
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-stone-800/80 hover:bg-stone-700 text-amber-300 text-xs flex items-center gap-1 transition cursor-pointer ml-auto"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Restaurar tasa oficial</span>
+                </button>
+              )}
+            </div>
+
+            {/* Quick preset chips */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+              <span className="text-[11px] text-stone-500">Accesos rápidos:</span>
+              {selectedCurrency === 'EUR' ? (
+                <>
+                  <button
+                    onClick={() => {
+                      setCustomRateInput('28500');
+                      handleApplyCustomRate(28500);
+                    }}
+                    className="px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-[11px] font-mono text-stone-300 transition"
+                  >
+                    28.500 ₫
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCustomRateInput('29000');
+                      handleApplyCustomRate(29000);
+                    }}
+                    className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-[11px] font-mono font-bold text-amber-300 border border-amber-500/30 transition"
+                  >
+                    29.000 ₫ (29k)
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCustomRateInput('29500');
+                      handleApplyCustomRate(29500);
+                    }}
+                    className="px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-[11px] font-mono text-stone-300 transition"
+                  >
+                    29.500 ₫
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCustomRateInput('30000');
+                      handleApplyCustomRate(30000);
+                    }}
+                    className="px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-[11px] font-mono text-stone-300 transition"
+                  >
+                    30.000 ₫ (30k)
+                  </button>
+                </>
+              ) : selectedCurrency === 'USD' ? (
+                <>
+                  <button
+                    onClick={() => {
+                      setCustomRateInput('25500');
+                      handleApplyCustomRate(25500);
+                    }}
+                    className="px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-[11px] font-mono text-stone-300 transition"
+                  >
+                    25.500 ₫
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCustomRateInput('26000');
+                      handleApplyCustomRate(26000);
+                    }}
+                    className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-[11px] font-mono font-bold text-amber-300 border border-amber-500/30 transition"
+                  >
+                    26.000 ₫ (26k)
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCustomRateInput('26500');
+                      handleApplyCustomRate(26500);
+                    }}
+                    className="px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-[11px] font-mono text-stone-300 transition"
+                  >
+                    26.500 ₫
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Converter Card */}

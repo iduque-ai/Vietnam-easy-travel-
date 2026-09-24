@@ -12,6 +12,7 @@ import { ItineraryPlanner } from './components/ItineraryPlanner';
 import { FreeTourGuide } from './components/FreeTourGuide';
 import { ExchangeRatesData, ActiveTabType, PointOfInterest } from './types';
 import { getSavedRates, saveRates, isRatesStale } from './utils/storage';
+import { fetchLiveExchangeRates } from './utils/currencyApi';
 import { useItineraryState } from './utils/useItineraryState';
 import { Compass, Wifi, WifiOff, Clock, ShieldCheck, HelpCircle } from 'lucide-react';
 
@@ -103,34 +104,48 @@ export default function App() {
     }
   }, []);
 
-  // Fetch exchange rates once a day (or on demand)
-  const refreshRates = useCallback(async (force = false) => {
+  // Fetch exchange rates from live providers with fallback and user feedback
+  const refreshRates = useCallback(async (force = false, showFeedbackToast = false) => {
     if (!navigator.onLine && !force) {
+      if (showFeedbackToast) {
+        setOfflineToast('Sin conexión a internet. Manteniendo última tasa guardada.');
+        setTimeout(() => setOfflineToast(null), 3500);
+      }
       return;
     }
 
     setIsRefreshing(true);
     try {
-      const res = await fetch(`/api/rates${force ? '?force=true' : ''}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.rates && data.rates.VND) {
-          const freshData: ExchangeRatesData = {
-            timestamp: data.lastUpdated || Date.now(),
-            date: data.date || new Date().toISOString().split('T')[0],
-            base: data.base || 'USD',
-            rates: data.rates,
-            source: data.source || 'live_network',
-          };
-          setRatesData(freshData);
-          saveRates(freshData);
+      const freshData = await fetchLiveExchangeRates();
+      if (freshData && freshData.rates && freshData.rates.VND) {
+        setRatesData(freshData);
+        saveRates(freshData);
+        if (showFeedbackToast) {
+          const eurVnd = Math.round(freshData.rates.VND / (freshData.rates.EUR || 0.8965));
+          setOfflineToast(`¡Tasa actualizada en directo! 1 € ≈ ${eurVnd.toLocaleString('es-ES')} ₫`);
+          setTimeout(() => setOfflineToast(null), 3500);
         }
+      } else if (showFeedbackToast) {
+        setOfflineToast('No se pudo conectar a los servidores de divisas. Manteniendo última tasa guardada.');
+        setTimeout(() => setOfflineToast(null), 3500);
       }
     } catch (err) {
-      console.warn('Could not refresh exchange rates from server, using cached/fallback:', err);
+      console.warn('Could not refresh exchange rates:', err);
+      if (showFeedbackToast) {
+        setOfflineToast('Error de red al actualizar tasa. Se mantiene la última guardada.');
+        setTimeout(() => setOfflineToast(null), 3500);
+      }
     } finally {
       setIsRefreshing(false);
     }
+  }, []);
+
+  const handleUpdateCustomRates = useCallback((newRates: ExchangeRatesData) => {
+    setRatesData(newRates);
+    saveRates(newRates);
+    const eurVnd = Math.round(newRates.rates.VND / (newRates.rates.EUR || 0.8965));
+    setOfflineToast(`Tasa personalizada guardada: 1 € = ${eurVnd.toLocaleString('es-ES')} ₫`);
+    setTimeout(() => setOfflineToast(null), 3500);
   }, []);
 
   // Monitor online / offline state
@@ -140,7 +155,7 @@ export default function App() {
       setOfflineToast('Conexión reestablecida. Actualizando tasas online...');
       setTimeout(() => setOfflineToast(null), 3500);
       // Automatically refresh rates when regaining network connectivity
-      refreshRates();
+      refreshRates(false, true);
     };
 
     const handleOffline = () => {
@@ -165,7 +180,7 @@ export default function App() {
 
     // Automatically update the exchange rate upon entering the web if network is available
     if (navigator.onLine) {
-      refreshRates();
+      refreshRates(false, false);
     }
   }, [refreshRates]);
 
@@ -216,7 +231,7 @@ export default function App() {
         ratesData={ratesData}
         isOnline={isOnline}
         isRefreshing={isRefreshing}
-        onRefreshRates={() => refreshRates(true)}
+        onRefreshRates={() => refreshRates(true, true)}
         onOpenConversationMode={handleOpenConversationMode}
       />
 
@@ -238,7 +253,8 @@ export default function App() {
           <CurrencyConverter
             ratesData={ratesData}
             isOnline={isOnline}
-            onRefreshRates={() => refreshRates(true)}
+            onRefreshRates={() => refreshRates(true, true)}
+            onSaveCustomRates={handleUpdateCustomRates}
             isRefreshing={isRefreshing}
           />
         )}

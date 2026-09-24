@@ -133,8 +133,8 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
   // Toast feedback banner
   const [notification, setNotification] = useState<string | null>(null);
 
-  const usdVndRate = ratesData.rates['VND'] || 25450;
-  const eurRate = ratesData.rates['EUR'] || 0.92;
+  const usdVndRate = ratesData.rates['VND'] || 26000;
+  const eurRate = ratesData.rates['EUR'] || 0.8965;
   const eurToVnd = usdVndRate / eurRate;
 
   // Active plan memo

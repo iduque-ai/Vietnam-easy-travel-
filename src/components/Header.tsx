@@ -103,9 +103,9 @@ export const Header: React.FC<HeaderProps> = ({
     };
   }, [isDrawerOpen]);
 
-  // Format rate sample
-  const usdToVnd = ratesData.rates['VND'] || 25450;
-  const eurRate = ratesData.rates['EUR'] || 0.92;
+  // Format rate sample (~29k EUR)
+  const usdToVnd = ratesData.rates['VND'] || 26000;
+  const eurRate = ratesData.rates['EUR'] || 0.8965;
   const eurToVnd = Math.round(usdToVnd / eurRate);
 
   const formattedDate = new Date(ratesData.timestamp).toLocaleDateString('es-ES', {

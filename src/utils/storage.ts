@@ -9,23 +9,23 @@ const ALLERGY_CARDS_KEY = 'vietnam_travel_allergy_cards_v1';
 const ITINERARIES_KEY = 'vietnam_travel_itineraries_v1';
 const ACTIVE_ITINERARY_ID_KEY = 'vietnam_travel_active_itinerary_id_v1';
 
-// Default solid baseline rates if device has never been online
+// Default solid baseline rates (updated to current ~29k VND / 1 EUR and ~26k / 1 USD)
 export const DEFAULT_FALLBACK_RATES: ExchangeRatesData = {
   timestamp: Date.now(),
   date: new Date().toISOString().split('T')[0],
   base: 'USD',
   rates: {
-    VND: 25450,
-    EUR: 0.92,
-    USD: 1.0,
-    GBP: 0.78,
-    AUD: 1.55,
-    CAD: 1.38,
-    JPY: 153.5,
-    CHF: 0.88,
-    MXN: 19.5,
-    SGD: 1.34,
-    THB: 35.8,
+    VND: 26000,
+    EUR: 0.8965, // 26000 / 0.8965 = ~29001 ₫ por 1 €
+    USD: 1.0,    // 26000 ₫ por 1 $
+    GBP: 0.76,   // ~34200 ₫ por 1 £
+    AUD: 1.51,   // ~17200 ₫ por 1 A$
+    CAD: 1.36,   // ~19100 ₫ por 1 C$
+    JPY: 151.0,
+    CHF: 0.86,
+    MXN: 19.3,
+    SGD: 1.31,
+    THB: 34.5,
   },
   source: 'offline_fallback',
 };
@@ -37,6 +37,12 @@ export function getSavedRates(): ExchangeRatesData {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.rates && parsed.rates.VND) {
+        // Upgrade check: If user had the old 27k offline fallback cached, update to 29k baseline
+        const effectiveEurRate = parsed.rates.VND / (parsed.rates.EUR || 1);
+        if (parsed.source === 'offline_fallback' && effectiveEurRate < 28200) {
+          saveRates(DEFAULT_FALLBACK_RATES);
+          return DEFAULT_FALLBACK_RATES;
+        }
         return parsed;
       }
     }
