@@ -12,6 +12,7 @@ import {
   X,
   ChevronRight,
   Sparkles,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { ExchangeRatesData, ActiveTabType } from '../types';
 
@@ -45,6 +46,13 @@ const NAV_ITEMS: {
     shortLabel: 'Traductor',
     description: 'Conversación directa inglés-vietnamita, frases clave y platos',
     icon: Languages,
+  },
+  {
+    id: 'restaurants',
+    label: 'Dónde Comer & Restaurantes',
+    shortLabel: 'Dónde Comer',
+    description: 'Restaurantes verificados >4.5★, mapa interactivo y algoritmo según presupuesto',
+    icon: UtensilsCrossed,
   },
   {
     id: 'maps',

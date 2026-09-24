@@ -5,6 +5,9 @@ export interface GeoCoords {
   latitude: number;
   longitude: number;
   accuracy?: number;
+  altitude?: number | null;
+  heading?: number | null;
+  speed?: number | null;
 }
 
 export interface SmartGeoResult {
@@ -16,6 +19,8 @@ export interface SmartGeoResult {
   recommendedRegionId: string;
   isSimulated?: boolean;
   simulatedName?: string;
+  provider: 'gps_high_accuracy' | 'network' | 'simulated';
+  timestamp: number;
 }
 
 export interface SmartGeoError {
@@ -191,10 +196,42 @@ function queryBrowserPosition(options: PositionOptions): Promise<GeolocationPosi
   });
 }
 
+// Helper to convert GeolocationPosition to SmartGeoResult
+export function processGeolocationPosition(
+  position: GeolocationPosition,
+  provider: 'gps_high_accuracy' | 'network' = 'gps_high_accuracy'
+): SmartGeoResult {
+  const { latitude, longitude, accuracy, altitude, heading, speed } = position.coords;
+  const inVietnam = isPointInVietnam(latitude, longitude);
+  const { closestPoi, distanceKm, recommendedRegionId } = findClosestPoi(latitude, longitude);
+
+  const distanceToVietnamKm = inVietnam
+    ? 0
+    : Math.round(calculateDistanceKm(latitude, longitude, 16.05, 108.2));
+
+  return {
+    coords: {
+      latitude,
+      longitude,
+      accuracy: accuracy ? Math.round(accuracy * 10) / 10 : undefined,
+      altitude,
+      heading,
+      speed,
+    },
+    isInsideVietnam: inVietnam,
+    distanceToVietnamKm,
+    closestPoi,
+    distanceToClosestPoiKm: Math.round(distanceKm * 10) / 10,
+    recommendedRegionId,
+    provider,
+    timestamp: position.timestamp || Date.now(),
+  };
+}
+
 /**
- * Attempts geolocation with two phases:
- * Phase 1: Fast cache/WiFi query (low accuracy, 4s timeout) - works instantly on most laptops/phones
- * Phase 2: High accuracy GPS satellite query (6s timeout)
+ * Attempts geolocation prioritizing HIGH ACCURACY (hardware GPS / true mobile antenna):
+ * Phase 1: High accuracy GPS query (enableHighAccuracy: true, maximumAge: 0, 10s timeout).
+ * Phase 2: If Phase 1 times out or is unavailable (e.g. desktop indoors), fallback to network WiFi/cellular.
  */
 export async function getSmartGeolocation(): Promise<{
   success: true;
@@ -216,26 +253,30 @@ export async function getSmartGeolocation(): Promise<{
 
   let position: GeolocationPosition | null = null;
   let lastError: any = null;
+  let providerUsed: 'gps_high_accuracy' | 'network' = 'gps_high_accuracy';
 
-  // Phase 1: Fast low accuracy
+  // Phase 1: High accuracy hardware GPS first (no stale cache)
   try {
     position = await queryBrowserPosition({
-      enableHighAccuracy: false,
-      maximumAge: 120000, // use cache up to 2 mins
-      timeout: 4000,
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 10000,
     });
+    providerUsed = 'gps_high_accuracy';
   } catch (err: any) {
     lastError = err;
   }
 
-  // Phase 2: If Phase 1 failed, try with high accuracy if it wasn't a PERMISSION_DENIED
+  // Phase 2: If Phase 1 failed because of timeout or position unavailable (not permission denied),
+  // fallback to network/WiFi triangulation
   if (!position && lastError && lastError.code !== 1) {
     try {
       position = await queryBrowserPosition({
-        enableHighAccuracy: true,
-        maximumAge: 30000,
-        timeout: 7000,
+        enableHighAccuracy: false,
+        maximumAge: 10000,
+        timeout: 6000,
       });
+      providerUsed = 'network';
     } catch (err: any) {
       lastError = err;
     }
@@ -260,8 +301,8 @@ export async function getSmartGeolocation(): Promise<{
       userTip = 'Si estás en interiores o en un ordenador sin antena GPS, usa la simulación de ubicación.';
     } else if (lastError?.code === 3) {
       code = 'TIMEOUT';
-      message = 'Tiempo de espera agotado buscando señal GPS.';
-      userTip = 'La búsqueda de satélites tardó demasiado. Puedes seleccionar tu monumento manualmente.';
+      message = 'Tiempo de espera agotado buscando satélites GPS.';
+      userTip = 'Verifica que la antena de ubicación esté activa en los ajustes de tu móvil.';
     }
 
     return {
@@ -275,25 +316,48 @@ export async function getSmartGeolocation(): Promise<{
     };
   }
 
-  const { latitude, longitude, accuracy } = position.coords;
-  const inVietnam = isPointInVietnam(latitude, longitude);
-  const { closestPoi, distanceKm, recommendedRegionId } = findClosestPoi(latitude, longitude);
-
-  // Approximate distance to Vietnam center (Danang ~ 16.0, 108.2) if outside
-  const distanceToVietnamKm = inVietnam
-    ? 0
-    : Math.round(calculateDistanceKm(latitude, longitude, 16.05, 108.2));
-
   return {
     success: true,
-    data: {
-      coords: { latitude, longitude, accuracy },
-      isInsideVietnam: inVietnam,
-      distanceToVietnamKm,
-      closestPoi,
-      distanceToClosestPoiKm: Math.round(distanceKm * 10) / 10,
-      recommendedRegionId,
+    data: processGeolocationPosition(position, providerUsed),
+  };
+}
+
+/**
+ * Starts continuous GPS live watch (updates as traveler walks or rides Grab)
+ */
+export function watchSmartGeolocation(
+  onUpdate: (result: SmartGeoResult) => void,
+  onError: (error: SmartGeoError) => void
+): () => void {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    onError({
+      code: 'NOT_SUPPORTED',
+      message: 'Geolocalización no soportada',
+      userTip: 'Selecciona la ciudad manualmente',
+    });
+    return () => {};
+  }
+
+  const watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      onUpdate(processGeolocationPosition(pos, 'gps_high_accuracy'));
     },
+    (err) => {
+      onError({
+        code: err.code === 1 ? 'PERMISSION_DENIED' : err.code === 2 ? 'POSITION_UNAVAILABLE' : 'TIMEOUT',
+        message: err.message,
+        userTip: 'Verifica la señal GPS',
+      });
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 3000,
+      timeout: 15000,
+    }
+  );
+
+  return () => {
+    navigator.geolocation.clearWatch(watchId);
   };
 }
 
@@ -323,5 +387,7 @@ export function createSimulatedResult(presetId: string): SmartGeoResult {
     recommendedRegionId: preset.regionId,
     isSimulated: true,
     simulatedName: preset.name,
+    provider: 'simulated',
+    timestamp: Date.now(),
   };
 }

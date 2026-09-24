@@ -100,6 +100,51 @@ export function useItineraryState() {
     [plans, updatePlans]
   );
 
+  const addCustomStopToDay = useCallback(
+    (
+      planId: string,
+      dayId: string,
+      name: string,
+      timeSlot: string = 'Almuerzo 13:00',
+      estimatedCostVnd: number = 0,
+      notes?: string
+    ): { success: boolean; stopId?: string } => {
+      try {
+        const currentPlans = [...plans];
+        const planIndex = currentPlans.findIndex((p) => p.id === planId);
+        if (planIndex === -1) return { success: false };
+
+        const plan = { ...currentPlans[planIndex] };
+        const dayIndex = plan.days.findIndex((d) => d.id === dayId);
+        if (dayIndex === -1) return { success: false };
+
+        const day = { ...plan.days[dayIndex] };
+        const newStopId = `stop-custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
+        const newStop: ItineraryStop = {
+          id: newStopId,
+          customName: name,
+          timeSlot: timeSlot || 'Almuerzo',
+          ticketVnd: estimatedCostVnd,
+          notes: notes || '',
+          isVisited: false,
+        };
+
+        const updatedStops = [...day.stops, newStop];
+        plan.days[dayIndex] = { ...day, stops: updatedStops };
+        plan.updatedAt = Date.now();
+        currentPlans[planIndex] = plan;
+
+        updatePlans(currentPlans);
+        return { success: true, stopId: newStopId };
+      } catch (err) {
+        console.error('Failed to add custom stop to itinerary:', err);
+        return { success: false };
+      }
+    },
+    [plans, updatePlans]
+  );
+
   const removeStopFromDay = useCallback(
     (planId: string, dayId: string, stopId: string): boolean => {
       try {
@@ -154,6 +199,25 @@ export function useItineraryState() {
     [plans, updatePlans]
   );
 
+  const reorderStopsInDay = useCallback(
+    (planId: string, dayId: string, newStops: ItineraryStop[]) => {
+      const currentPlans = [...plans];
+      const planIndex = currentPlans.findIndex((p) => p.id === planId);
+      if (planIndex === -1) return;
+
+      const plan = { ...currentPlans[planIndex] };
+      const dayIndex = plan.days.findIndex((d) => d.id === dayId);
+      if (dayIndex === -1) return;
+
+      plan.days[dayIndex] = { ...plan.days[dayIndex], stops: newStops };
+      plan.updatedAt = Date.now();
+      currentPlans[planIndex] = plan;
+
+      updatePlans(currentPlans);
+    },
+    [plans, updatePlans]
+  );
+
   const getPoiInclusionStatus = useCallback(
     (poiId: string): PoiInclusionStatus => {
       if (!activePlan) return { inPlan: false, occurrences: [] };
@@ -194,8 +258,10 @@ export function useItineraryState() {
     setActivePlanId,
     updatePlans,
     addPoiToDay,
+    addCustomStopToDay,
     removeStopFromDay,
     toggleStopVisited,
+    reorderStopsInDay,
     getPoiInclusionStatus,
   };
 }

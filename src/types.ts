@@ -1,6 +1,58 @@
-export type ActiveTabType = 'converter' | 'translator' | 'maps' | 'itinerary' | 'freetour';
+export type ActiveTabType = 'converter' | 'translator' | 'restaurants' | 'maps' | 'itinerary' | 'freetour';
 
 export type CurrencyCode = 'EUR' | 'USD' | 'GBP' | 'AUD' | 'CAD' | 'JPY' | 'CHF' | 'MXN' | 'SGD' | 'THB';
+
+export type BudgetPreference = 'all' | 'budget' | 'moderate' | 'fine';
+
+export type RestaurantSortOption =
+  | 'algorithm' // Algoritmo inteligente (puntuación + volumen + presupuesto)
+  | 'rating' // Mayor puntuación bayesiana
+  | 'reviews' // Mayor número de reseñas verificadas
+  | 'distance' // Más cercano (GPS / centro seleccionado)
+  | 'value' // Mejor relación calidad/precio
+  | 'price_asc'; // Precio más económico primero
+
+export interface RestaurantItem {
+  id: string;
+  name: string;
+  nameVi: string;
+  city: string; // e.g. "Hà Nội", "Huế", "Đà Nẵng", "Hội An", "TP. Hồ Chí Minh", "Ninh Bình"
+  district: string;
+  address: string;
+  lat: number;
+  lng: number;
+  rating: number; // e.g. 4.8
+  reviewsCount: number; // e.g. 2450
+  priceTier: 1 | 2 | 3 | 4; // 1: <60k VND, 2: 60k-180k VND, 3: 180k-400k VND, 4: >400k VND
+  avgPriceVnd: number; // e.g. 45000, 120000
+  category:
+    | 'Street Food / Puesto Callejero'
+    | 'Restaurante Tradicional'
+    | 'Bocadillos & Bánh Mì'
+    | 'Café de Especialidad'
+    | 'Bistró / Fusión'
+    | 'Alta Cocina / Michelin';
+  specialties: string[];
+  mustOrderDish: string;
+  description: string;
+  travelerTips: string;
+  openingHours: string;
+  hasAirConditioning: boolean;
+  michelinGuide?: '1 Star' | 'Bib Gourmand' | 'Selected';
+  grabFoodDelivery: boolean;
+  isCashOnly: boolean;
+  badgeLabel?: string;
+  imageUrl?: string;
+}
+
+export interface RestaurantScoreBreakdown {
+  bayesianRating: number; // Puntuación ponderada amortiguada
+  volumeBonus: number; // Multiplicador de confianza por volumen
+  budgetMatchMultiplier: number; // Factor de encaje de presupuesto
+  valueScore: number; // Relación calidad/precio
+  distanceKm?: number; // Distancia en km desde el usuario
+  finalScore: number; // Puntuación final calculada
+}
 
 export interface ExchangeRatesData {
   timestamp: number;

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Download,
   Check,
@@ -29,14 +29,16 @@ import {
   Calendar,
   CheckCircle2,
   ArrowRight,
-  ListFilter
+  ListFilter,
+  Volume2,
+  Info,
+  Radio,
 } from 'lucide-react';
 import {
   APIProvider,
   Map,
   AdvancedMarker,
   Pin,
-  InfoWindow,
   useMap,
 } from '@vis.gl/react-google-maps';
 import { PointOfInterest, RegionMapPack, ExchangeRatesData } from '../types';
@@ -50,6 +52,7 @@ import {
 } from '../utils/storage';
 import {
   getSmartGeolocation,
+  watchSmartGeolocation,
   createSimulatedResult,
   VIETNAM_SIMULATION_PRESETS,
   SmartGeoResult,
@@ -57,6 +60,7 @@ import {
 } from '../utils/geolocation';
 import { ItineraryState } from '../utils/useItineraryState';
 import { MapItineraryPanel } from './MapItineraryPanel';
+import { InteractiveOpenStreetMap } from './InteractiveOpenStreetMap';
 
 const GOOGLE_MAPS_API_KEY =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) || '';
@@ -118,15 +122,23 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
   const [targetTimeSlot, setTargetTimeSlot] = useState<string>('Mañana 09:30');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Google Maps state
-  const [mapDisplayMode, setMapDisplayMode] = useState<'google' | 'vector'>(() => {
-    return GOOGLE_MAPS_API_KEY ? 'google' : 'vector';
+  // Map engine state (Google Maps Platform vs Leaflet OpenStreetMap)
+  const [mapDisplayMode, setMapDisplayMode] = useState<'google' | 'osm'>(() => {
+    return GOOGLE_MAPS_API_KEY ? 'google' : 'osm';
   });
-  const [infoWindowOpen, setInfoWindowOpen] = useState<boolean>(true);
+  const [showPoiCard, setShowPoiCard] = useState<boolean>(false);
   const [selectedLocationTarget, setSelectedLocationTarget] = useState<{ lat: number; lng: number } | null>(null);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{
+    lat: number;
+    lng: number;
+    accuracy?: number;
+    provider?: string;
+  } | null>(null);
   const [userLocationLabel, setUserLocationLabel] = useState<string>('Tu ubicación actual');
   const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [isLiveTracking, setIsLiveTracking] = useState<boolean>(false);
+  const stopLiveWatchRef = useRef<(() => void) | null>(null);
+
   const [locationToast, setLocationToast] = useState<string | null>(null);
   const [gpsDiagnostic, setGpsDiagnostic] = useState<{
     type: 'success_vietnam' | 'success_abroad' | 'error';
@@ -134,10 +146,21 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
     description: string;
     isIframeBlocked?: boolean;
     details?: string;
+    exactCoords?: { lat: number; lng: number; accuracy?: number };
   } | null>(null);
   const [showGpsHelper, setShowGpsHelper] = useState<boolean>(false);
 
   const { activePlan, currentDay, selectedDayId, addPoiToDay, removeStopFromDay, getPoiInclusionStatus } = itineraryState;
+
+  // Cleanup live tracking on unmount
+  useEffect(() => {
+    return () => {
+      if (stopLiveWatchRef.current) {
+        stopLiveWatchRef.current();
+        stopLiveWatchRef.current = null;
+      }
+    };
+  }, []);
 
   // Sync region if prop changes
   useEffect(() => {
@@ -155,41 +178,88 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
     }
   }, [selectedDayId, activePlan]);
 
+  const toggleLiveTracking = () => {
+    if (isLiveTracking) {
+      if (stopLiveWatchRef.current) {
+        stopLiveWatchRef.current();
+        stopLiveWatchRef.current = null;
+      }
+      setIsLiveTracking(false);
+      setLocationToast('Seguimiento GPS en vivo pausado');
+      setTimeout(() => setLocationToast(null), 3000);
+    } else {
+      setIsLiveTracking(true);
+      setLocationToast('🔴 Modo en marcha activado: el GPS actualiza tu posición continuamente');
+      stopLiveWatchRef.current = watchSmartGeolocation(
+        (result) => {
+          const { coords, isInsideVietnam, closestPoi, distanceToClosestPoiKm, recommendedRegionId } = result;
+          const accuracyStr = coords.accuracy ? `±${Math.round(coords.accuracy)}m` : '±8m';
+          const loc = {
+            lat: coords.latitude,
+            lng: coords.longitude,
+            accuracy: coords.accuracy,
+            provider: 'gps_high_accuracy',
+          };
+          setUserLocation(loc);
+          if (isInsideVietnam) {
+            setUserLocationLabel(`GPS en vivo (${accuracyStr})`);
+            setSelectedRegionId(recommendedRegionId);
+            setSelectedLocationTarget(loc);
+          } else {
+            setUserLocationLabel(`GPS (${coords.latitude.toFixed(4)}°, ${coords.longitude.toFixed(4)}°)`);
+          }
+        },
+        (err) => {
+          setIsLiveTracking(false);
+          setLocationToast(`Aviso GPS: ${err.message}`);
+        }
+      );
+    }
+  };
+
   const handleLocateMe = async () => {
     setIsLocating(true);
-    setLocationToast('Buscando satélites GPS y redes...');
+    setLocationToast('🛰️ Fijando satélites GPS con antena de alta precisión...');
     setGpsDiagnostic(null);
 
     const result = await getSmartGeolocation();
     setIsLocating(false);
 
     if (result.success) {
-      const { coords, isInsideVietnam, distanceToVietnamKm, closestPoi, distanceToClosestPoiKm, recommendedRegionId } = result.data;
-      const loc = { lat: coords.latitude, lng: coords.longitude };
+      const { coords, isInsideVietnam, distanceToVietnamKm, closestPoi, distanceToClosestPoiKm, recommendedRegionId, provider } = result.data;
+      const accuracyStr = coords.accuracy ? `±${Math.round(coords.accuracy)}m` : 'alta precisión';
+      const loc = {
+        lat: coords.latitude,
+        lng: coords.longitude,
+        accuracy: coords.accuracy,
+        provider,
+      };
       setUserLocation(loc);
 
       if (isInsideVietnam) {
-        setUserLocationLabel('Tu ubicación GPS (Vietnam)');
+        setUserLocationLabel(`Tu GPS en Vietnam (${accuracyStr})`);
         setSelectedRegionId(recommendedRegionId);
         setSelectedLocationTarget(loc);
-        setLocationToast(`🎯 ¡Ubicación en Vietnam! Cerca de ${closestPoi.nameEs} (${distanceToClosestPoiKm} km)`);
+        setLocationToast(`🎯 Posición exacta fijada (${accuracyStr}) • Cerca de ${closestPoi.nameEs} (${distanceToClosestPoiKm} km)`);
         setGpsDiagnostic({
           type: 'success_vietnam',
-          title: '¡Señal GPS fijada en Vietnam!',
-          description: `Estás en la región de ${closestPoi.city}, a ~${distanceToClosestPoiKm < 1 ? Math.round(distanceToClosestPoiKm * 1000) + ' m' : distanceToClosestPoiKm + ' km'} de ${closestPoi.nameEs}.`,
+          title: `¡Señal GPS fijada con precisión ${accuracyStr}!`,
+          description: `Estás en la región de ${closestPoi.city} (${coords.latitude.toFixed(5)}° N, ${coords.longitude.toFixed(5)}° E), a ~${distanceToClosestPoiKm < 1 ? Math.round(distanceToClosestPoiKm * 1000) + ' m' : distanceToClosestPoiKm + ' km'} de ${closestPoi.nameEs}.`,
+          exactCoords: { lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy },
         });
-        setTimeout(() => setLocationToast(null), 4000);
+        setTimeout(() => setLocationToast(null), 5000);
       } else {
-        // Detected real location, but traveler is testing from abroad (Spain, Americas, etc.)
-        setUserLocationLabel(`Tu GPS real (~${distanceToVietnamKm.toLocaleString()} km de Vietnam)`);
-        setSelectedRegionId(recommendedRegionId);
-        setSelectedLocationTarget({ lat: closestPoi.lat, lng: closestPoi.lng });
-        setLocationToast(`📍 GPS detectado fuera de Vietnam. Centrado en ${closestPoi.city}.`);
+        // Traveler is testing from abroad (Spain, Latin America, Europe, etc.)
+        setUserLocationLabel(`Tu GPS real: ${coords.latitude.toFixed(4)}°, ${coords.longitude.toFixed(4)}° (${accuracyStr})`);
+        // Center directly on their EXACT detected coordinates
+        setSelectedLocationTarget(loc);
+        setLocationToast(`🎯 Ubicación exacta detectada: ${coords.latitude.toFixed(4)}°, ${coords.longitude.toFixed(4)}° (${accuracyStr})`);
         setGpsDiagnostic({
           type: 'success_abroad',
-          title: `GPS detectado a ~${distanceToVietnamKm.toLocaleString()} km de Vietnam`,
-          description: `Tus satélites te sitúan en tus coordenadas reales (${coords.latitude.toFixed(2)}, ${coords.longitude.toFixed(2)}). Para que el mapa de Vietnam sea 100% interactivo mientras planificas el viaje, te hemos situado en ${closestPoi.city} (${closestPoi.nameEs}).`,
-          details: 'Puedes elegir cualquier otra ciudad con 1 clic en el selector inferior.',
+          title: `🎯 Ubicación exacta detectada (${accuracyStr})`,
+          description: `Tus satélites te sitúan en tus coordenadas exactas: ${coords.latitude.toFixed(5)}° N, ${coords.longitude.toFixed(5)}° E con precisión de ${accuracyStr} (${provider === 'gps_high_accuracy' ? 'Antena GPS directa' : 'Red/WiFi'}). Estás a ~${distanceToVietnamKm.toLocaleString()} km de Vietnam.`,
+          details: 'El mapa se ha centrado en tu posición exacta con radio de precisión azul. Si deseas explorar los monumentos de Vietnam o planificar tus visitas, usa los accesos directos abajo.',
+          exactCoords: { lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy },
         });
         setShowGpsHelper(true);
       }
@@ -208,9 +278,9 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
 
   const handleSimulateLocation = (presetId: string) => {
     const sim = createSimulatedResult(presetId);
-    const loc = { lat: sim.coords.latitude, lng: sim.coords.longitude };
+    const loc = { lat: sim.coords.latitude, lng: sim.coords.longitude, accuracy: sim.coords.accuracy, provider: 'simulated' };
     setUserLocation(loc);
-    setUserLocationLabel(`📍 Simulando posición: ${sim.simulatedName}`);
+    setUserLocationLabel(`📍 Posición en Vietnam: ${sim.simulatedName}`);
     setSelectedRegionId(sim.recommendedRegionId);
     setSelectedLocationTarget(loc);
     setShowGpsHelper(false);
@@ -218,6 +288,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
       type: 'success_vietnam',
       title: `Ubicación situada en: ${sim.simulatedName}`,
       description: `Marcador situado en ${sim.closestPoi.city}. Todos los cálculos de distancia y monumentos se muestran desde este punto.`,
+      exactCoords: { lat: sim.coords.latitude, lng: sim.coords.longitude, accuracy: 15 },
     });
     setLocationToast(`📍 Situado en ${sim.simulatedName}`);
     setTimeout(() => setLocationToast(null), 3500);
@@ -373,6 +444,171 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
   // Selected POI inclusion state
   const selectedPoiInclusion = selectedPoi ? getPoiInclusionStatus(selectedPoi.id) : null;
 
+  // Render modern docked Floating POI Card on top of Map (replaces cramped in-canvas InfoWindow)
+  const renderFloatingPoiCard = () => {
+    if (!showPoiCard || !selectedPoi) return null;
+
+    const poiStatus = getPoiInclusionStatus(selectedPoi.id);
+
+    return (
+      <div className="absolute bottom-2 left-2 right-2 sm:bottom-3 sm:left-3 sm:right-auto sm:max-w-md bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-200/90 p-3.5 sm:p-4 z-20 animate-fade-in transition-all">
+        {/* Header: Category Badge + Price + Close Button */}
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-950 border border-amber-200">
+              {selectedPoi.city} • {selectedPoi.category}
+            </span>
+            <span className="text-xs font-bold text-emerald-700">
+              {selectedPoi.ticketVnd > 0
+                ? `${(selectedPoi.ticketVnd / 1000).toLocaleString('es-ES')}k ₫`
+                : 'Entrada gratis'}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowPoiCard(false)}
+            className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition cursor-pointer shrink-0"
+            title="Cerrar panel de lugar"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Title & Vietnamese Pronunciation */}
+        <div className="mb-2">
+          <h4 className="font-bold text-sm sm:text-base text-stone-900 leading-snug">
+            {selectedPoi.nameEs}
+          </h4>
+          <div className="flex items-center gap-2 text-xs text-amber-900 font-medium mt-0.5">
+            <span>🇻🇳 {selectedPoi.nameVi}</span>
+            <button
+              onClick={() => speakVietnamese(selectedPoi.nameVi)}
+              className="p-0.5 px-1.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 transition cursor-pointer flex items-center gap-1 text-[11px]"
+              title="Escuchar pronunciación para el conductor"
+            >
+              <Volume2 className="w-3.5 h-3.5" />
+              <span>Pronunciar</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Description */}
+        <p className="text-xs text-stone-600 line-clamp-2 leading-relaxed mb-3">
+          {selectedPoi.description}
+        </p>
+
+        {/* Itinerary Status & Quick Add */}
+        <div className="mb-3">
+          {poiStatus.inPlan ? (
+            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-emerald-900 flex items-center gap-1.5 text-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    En tu itinerario: Día {poiStatus.occurrences[0].dayNumber} ({poiStatus.occurrences[0].dayCity})
+                  </span>
+                </span>
+                <button
+                  onClick={() => handleQuickRemovePoiFromItinerary(selectedPoi.id)}
+                  className="text-[11px] text-rose-700 hover:text-rose-900 font-semibold underline cursor-pointer ml-2"
+                >
+                  Quitar
+                </button>
+              </div>
+              {activePlan && activePlan.days.length > 1 && (
+                <div className="flex items-center gap-1.5 pt-1.5 border-t border-emerald-200/70 text-[11px]">
+                  <span className="text-emerald-900 font-medium shrink-0">Sumar a otro día:</span>
+                  <select
+                    value={targetQuickDayId}
+                    onChange={(e) => {
+                      setTargetQuickDayId(e.target.value);
+                      handleQuickAddPoiToItinerary(selectedPoi, e.target.value);
+                    }}
+                    className="bg-white border border-emerald-300 rounded-lg px-2 py-0.5 text-emerald-950 font-medium text-xs focus:outline-none cursor-pointer flex-1"
+                  >
+                    {activePlan.days.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        Día {d.dayNumber}: {d.destinationCity}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <button
+                onClick={() => handleQuickAddPoiToItinerary(selectedPoi, targetQuickDayId)}
+                className="flex-1 py-2 px-3 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer active:scale-98"
+              >
+                <Plus className="w-4 h-4" />
+                <span>
+                  Añadir a Día {currentDay?.dayNumber || 1} ({currentDay?.destinationCity || 'Itinerario'})
+                </span>
+              </button>
+
+              {activePlan && activePlan.days.length > 1 && (
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] text-stone-500 shrink-0">O en:</span>
+                  <select
+                    value={targetQuickDayId}
+                    onChange={(e) => {
+                      setTargetQuickDayId(e.target.value);
+                      handleQuickAddPoiToItinerary(selectedPoi, e.target.value);
+                    }}
+                    className="text-xs bg-stone-100 hover:bg-stone-200 border border-stone-300 rounded-lg px-2 py-1.5 text-stone-800 focus:outline-none cursor-pointer font-medium"
+                  >
+                    {activePlan.days.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        Día {d.dayNumber}: {d.destinationCity}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Action buttons row */}
+        <div className="flex items-center gap-1.5 pt-2 border-t border-stone-100 flex-wrap">
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${selectedPoi.lat},${selectedPoi.lng}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs flex items-center gap-1 transition"
+          >
+            <Navigation className="w-3.5 h-3.5 text-sky-600" />
+            <span>Cómo llegar</span>
+            <ExternalLink className="w-3 h-3 text-stone-400" />
+          </a>
+
+          <button
+            onClick={() => {
+              document.getElementById('poi-detail-inspector')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium text-xs flex items-center gap-1 transition cursor-pointer"
+          >
+            <Info className="w-3.5 h-3.5 text-stone-500" />
+            <span>Ver consejos & estafas</span>
+          </button>
+
+          {onStartFreeTour && (
+            <button
+              onClick={() => {
+                setShowPoiCard(false);
+                onStartFreeTour(selectedPoi);
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border border-amber-500/30 ml-auto"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Free Tour con IA</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Region Selector & Offline Pack Status */}
@@ -495,7 +731,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
           onLocatePoi={(poi) => {
             setSelectedPoi(poi);
             setSelectedLocationTarget({ lat: poi.lat, lng: poi.lng });
-            setInfoWindowOpen(true);
+            setShowPoiCard(true);
             if (poi.regionId !== selectedRegionId) {
               setSelectedRegionId(poi.regionId);
             }
@@ -535,7 +771,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     onClick={() => setMapDisplayMode('google')}
                     className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                       mapDisplayMode === 'google'
-                        ? 'bg-amber-500 text-stone-950 shadow-xs'
+                        ? 'bg-amber-500 text-stone-950 shadow-xs font-bold'
                         : 'text-stone-400 hover:text-white'
                     }`}
                   >
@@ -543,15 +779,15 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     <span>Google Maps</span>
                   </button>
                   <button
-                    onClick={() => setMapDisplayMode('vector')}
+                    onClick={() => setMapDisplayMode('osm')}
                     className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                      mapDisplayMode === 'vector'
-                        ? 'bg-amber-500 text-stone-950 shadow-xs'
+                      mapDisplayMode === 'osm'
+                        ? 'bg-amber-500 text-stone-950 shadow-xs font-bold'
                         : 'text-stone-400 hover:text-white'
                     }`}
                   >
                     <Layers className="w-3.5 h-3.5" />
-                    <span>Esquemático</span>
+                    <span>OpenStreetMap</span>
                   </button>
                 </div>
 
@@ -559,11 +795,26 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                   onClick={handleLocateMe}
                   disabled={isLocating}
                   className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl border border-stone-700 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-                  title="Detectar mi ubicación real con satélites GPS"
+                  title="Detectar mi ubicación real con antena GPS de alta precisión"
                 >
                   <Locate className={`w-3.5 h-3.5 text-sky-400 ${isLocating ? 'animate-spin' : ''}`} />
                   <span className="hidden sm:inline">
-                    {isLocating ? 'Buscando satélites...' : 'Mi Ubicación GPS'}
+                    {isLocating ? 'Fijando GPS...' : 'Mi Ubicación GPS'}
+                  </span>
+                </button>
+
+                <button
+                  onClick={toggleLiveTracking}
+                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition cursor-pointer ${
+                    isLiveTracking
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/60 font-bold ring-1 ring-rose-400/40'
+                      : 'bg-stone-800 hover:bg-stone-700 text-stone-300 border-stone-700'
+                  }`}
+                  title="Seguimiento GPS continuo en tiempo real (mientras caminas o viajas en Grab)"
+                >
+                  <Radio className={`w-3.5 h-3.5 ${isLiveTracking ? 'text-rose-400 animate-pulse' : 'text-stone-400'}`} />
+                  <span className="hidden sm:inline">
+                    {isLiveTracking ? 'En Marcha (GPS Vivo)' : 'Modo en Marcha'}
                   </span>
                 </button>
 
@@ -610,9 +861,47 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                 </div>
 
                 {gpsDiagnostic && (
-                  <p className="text-stone-300 leading-relaxed">
-                    {gpsDiagnostic.description}
-                  </p>
+                  <div className="space-y-2">
+                    <p className="text-stone-300 leading-relaxed">
+                      {gpsDiagnostic.description}
+                    </p>
+                    {gpsDiagnostic.details && (
+                      <p className="text-[11px] text-stone-400 bg-stone-950/60 p-2 rounded-lg border border-stone-800">
+                        {gpsDiagnostic.details}
+                      </p>
+                    )}
+                    {gpsDiagnostic.type === 'success_abroad' && gpsDiagnostic.exactCoords && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          onClick={() => {
+                            if (gpsDiagnostic.exactCoords) {
+                              setSelectedLocationTarget({
+                                lat: gpsDiagnostic.exactCoords.lat,
+                                lng: gpsDiagnostic.exactCoords.lng,
+                              });
+                              setLocationToast('🎯 Centrado en tus coordenadas exactas');
+                              setShowGpsHelper(false);
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                        >
+                          <Locate className="w-3.5 h-3.5" />
+                          <span>Ver mi posición exacta en el mapa</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedRegionId('reg-hanoi-north');
+                            setSelectedLocationTarget({ lat: 21.0285, lng: 105.8542 });
+                            setShowGpsHelper(false);
+                          }}
+                          className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-lg font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                        >
+                          <Compass className="w-3.5 h-3.5" />
+                          <span>Explorar Vietnam (Hanói)</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {gpsDiagnostic?.isIframeBlocked && (
@@ -718,7 +1007,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                           onClick={() => {
                             setSelectedPoi(poi);
                             setSelectedLocationTarget({ lat: poi.lat, lng: poi.lng });
-                            setInfoWindowOpen(true);
+                            setShowPoiCard(true);
                           }}
                         >
                           <Pin
@@ -739,247 +1028,53 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     {userLocation && (
                       <AdvancedMarker position={userLocation} title={userLocationLabel}>
                         <div className="relative flex items-center justify-center">
-                          <div className="w-4 h-4 bg-sky-500 rounded-full border-2 border-white shadow-lg z-10" />
-                          <div className="absolute -inset-2 bg-sky-400 rounded-full opacity-40 animate-ping" />
+                          <div className="w-5 h-5 bg-sky-500 rounded-full border-2 border-white shadow-xl z-10 flex items-center justify-center">
+                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                          </div>
+                          <div className="absolute -inset-3 bg-sky-400/40 rounded-full animate-ping" />
+                          <div className="absolute -inset-2 bg-sky-500/30 rounded-full animate-pulse" />
                         </div>
                       </AdvancedMarker>
-                    )}
-
-                    {/* InfoWindow for the selected POI with direct Add-to-Itinerary actions */}
-                    {infoWindowOpen && selectedPoi && (
-                      <InfoWindow
-                        position={{ lat: selectedPoi.lat, lng: selectedPoi.lng }}
-                        onCloseClick={() => setInfoWindowOpen(false)}
-                        pixelOffset={[0, -38]}
-                      >
-                        <div className="p-1 min-w-[240px] max-w-[290px] text-stone-900 font-sans space-y-2">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">
-                              {selectedPoi.city} • {selectedPoi.category}
-                            </span>
-                            <span className="text-[10px] font-semibold text-emerald-700">
-                              {selectedPoi.ticketVnd > 0
-                                ? `${(selectedPoi.ticketVnd / 1000).toLocaleString('es-ES')}k ₫`
-                                : 'Gratis'}
-                            </span>
-                          </div>
-
-                          <div>
-                            <h4 className="font-bold text-xs text-stone-900 line-clamp-1">
-                              {selectedPoi.nameEs}
-                            </h4>
-                            <div className="text-[11px] text-amber-800 font-medium line-clamp-1">
-                              {selectedPoi.nameVi}
-                            </div>
-                          </div>
-
-                          <p className="text-[11px] text-stone-600 line-clamp-2 leading-tight">
-                            {selectedPoi.description}
-                          </p>
-
-                          {/* Direct Itinerary Selection Action on the Pin */}
-                          {(() => {
-                            const status = getPoiInclusionStatus(selectedPoi.id);
-                            const matchingOcc = status.occurrences.find(
-                              (o) => o.dayId === selectedDayId
-                            );
-
-                            if (status.inPlan) {
-                              return (
-                                <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs space-y-1.5">
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-bold text-emerald-900 flex items-center gap-1 text-[11px]">
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                      <span>
-                                        Programado en Día {status.occurrences[0].dayNumber} ({status.occurrences[0].dayCity})
-                                      </span>
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between pt-1 border-t border-emerald-200/60">
-                                    <button
-                                      onClick={() => handleQuickRemovePoiFromItinerary(selectedPoi.id)}
-                                      className="text-[10px] text-rose-700 hover:text-rose-900 font-semibold underline cursor-pointer"
-                                    >
-                                      Quitar de este día
-                                    </button>
-                                    {activePlan && activePlan.days.length > 1 && (
-                                      <button
-                                        onClick={() => handleQuickAddPoiToItinerary(selectedPoi)}
-                                        className="text-[10px] text-amber-800 hover:text-amber-950 font-bold cursor-pointer"
-                                      >
-                                        + Sumar a otro día
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div className="space-y-1.5 pt-1 border-t border-stone-200">
-                                <button
-                                  onClick={() => handleQuickAddPoiToItinerary(selectedPoi)}
-                                  className="w-full py-1.5 px-2 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                  <span>
-                                    Añadir a Día {currentDay?.dayNumber || 1} ({currentDay?.destinationCity || 'Itinerario'})
-                                  </span>
-                                </button>
-
-                                {activePlan && activePlan.days.length > 1 && (
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-[10px] text-stone-500 shrink-0">O en:</span>
-                                    <select
-                                      value={targetQuickDayId}
-                                      onChange={(e) => {
-                                        setTargetQuickDayId(e.target.value);
-                                        handleQuickAddPoiToItinerary(selectedPoi, e.target.value);
-                                      }}
-                                      className="text-[10px] bg-stone-100 border border-stone-300 rounded px-1.5 py-0.5 w-full text-stone-800 focus:outline-none cursor-pointer"
-                                    >
-                                      {activePlan.days.map((d) => (
-                                        <option key={d.id} value={d.id}>
-                                          Día {d.dayNumber}: {d.destinationCity}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-
-                          <div className="pt-1.5 border-t border-stone-100 flex items-center justify-between text-[11px]">
-                            <a
-                              href={`https://www.google.com/maps/dir/?api=1&destination=${selectedPoi.lat},${selectedPoi.lng}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-bold text-sky-700 hover:text-sky-900 flex items-center gap-1"
-                            >
-                              <Navigation className="w-3 h-3" />
-                              <span>Ruta</span>
-                            </a>
-                            <button
-                              onClick={() => speakVietnamese(selectedPoi.nameVi)}
-                              className="text-stone-500 hover:text-stone-900 font-medium flex items-center gap-1 cursor-pointer"
-                            >
-                              <span>Pronunciar</span>
-                            </button>
-                          </div>
-
-                          {onStartFreeTour && (
-                            <button
-                              onClick={() => {
-                                setInfoWindowOpen(false);
-                                onStartFreeTour(selectedPoi);
-                              }}
-                              className="w-full py-1.5 px-2 bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-[11px] rounded-lg flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer border border-amber-500/30 mt-1.5"
-                            >
-                              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                              <span>Hacer Free Tour con Gemini</span>
-                            </button>
-                          )}
-                        </div>
-                      </InfoWindow>
                     )}
                   </Map>
                 </APIProvider>
 
-                {/* Floating map helper overlay */}
-                <div className="absolute bottom-2 left-2 bg-stone-900/90 backdrop-blur-xs px-2.5 py-1 rounded-md text-[10px] text-stone-300 border border-stone-800 shadow-sm pointer-events-none z-10 flex items-center gap-1.5">
-                  <MapPin className="w-3 h-3 text-amber-400 shrink-0" />
-                  <span>
-                    Verde: En día activo • Ámbar: En itinerario • Rojo: Por explorar
-                  </span>
-                </div>
+                {/* Floating Docked POI Card */}
+                {renderFloatingPoiCard()}
+
+                {/* Floating map helper overlay (hidden when POI card is open to prevent overlap) */}
+                {!showPoiCard && (
+                  <div className="absolute bottom-2 left-2 bg-stone-900/90 backdrop-blur-xs px-2.5 py-1 rounded-md text-[10px] text-stone-300 border border-stone-800 shadow-sm pointer-events-none z-10 flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span>
+                      Verde: En día activo • Ámbar: En itinerario • Rojo: Por explorar
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
-              /* Stylized Vector Map representation for offline fallback */
-              <div className="relative w-full h-[450px] bg-stone-950/80 rounded-xl border border-stone-800 p-2 overflow-hidden flex items-center justify-center">
-                <svg viewBox="0 0 500 400" className="w-full h-full">
-                  <path
-                    d="M 120,40 Q 200,60 260,80 T 320,130 Q 340,180 320,240 T 260,320 Q 220,380 160,390"
-                    fill="none"
-                    stroke="#334155"
-                    strokeWidth="24"
-                    strokeLinecap="round"
-                    opacity="0.4"
-                  />
-                  <path
-                    d="M 140,50 L 220,50 L 260,85 L 230,115 L 260,140 L 290,175 L 300,210 L 270,260 L 240,310 L 210,360 L 160,380 L 170,350 L 210,320 L 240,260 L 260,210 L 240,165 L 200,125 L 140,90 Z"
-                    fill="#1c1917"
-                    stroke="#d97706"
-                    strokeWidth="2"
-                    strokeDasharray="4 2"
-                  />
+              /* High Performance Leaflet OpenStreetMap Engine */
+              <div className="relative w-full h-[460px] rounded-xl overflow-hidden border border-stone-800 bg-stone-950 shadow-inner">
+                <InteractiveOpenStreetMap
+                  center={{ lat: currentRegion.centerLat, lng: currentRegion.centerLng }}
+                  zoom={currentRegion.zoom}
+                  pois={regionPois}
+                  selectedPoiId={selectedPoi?.id}
+                  onSelectPoi={(poi) => {
+                    setSelectedPoi(poi);
+                    setSelectedLocationTarget({ lat: poi.lat, lng: poi.lng });
+                    setShowPoiCard(true);
+                  }}
+                  userLocation={userLocation}
+                  userLocationLabel={userLocationLabel}
+                  selectedLocationTarget={selectedLocationTarget}
+                  poiInclusionLookup={getPoiInclusionStatus}
+                  selectedDayId={selectedDayId}
+                  className="h-[460px]"
+                />
 
-                  {regionPois.map((poi, idx) => {
-                    let cx = 200 + (idx % 3) * 35 - 35;
-                    let cy = 80 + Math.floor(idx / 3) * 25 - 20;
-
-                    if (selectedRegionId === 'reg-central') {
-                      cx = 270 + (idx % 3) * 25 - 20;
-                      cy = 175 + Math.floor(idx / 3) * 20 - 15;
-                    } else if (selectedRegionId === 'reg-saigon-south') {
-                      cx = 205 + (idx % 3) * 30 - 25;
-                      cy = 325 + Math.floor(idx / 3) * 22 - 15;
-                    } else if (selectedRegionId === 'reg-nature') {
-                      cx = 245 + (idx % 2) * 40 - 20;
-                      cy = 135 + Math.floor(idx / 2) * 30 - 15;
-                    }
-
-                    const isSelected = selectedPoi?.id === poi.id;
-                    const inclusion = getPoiInclusionStatus(poi.id);
-                    const inCurrentDay = inclusion.occurrences.some(
-                      (o) => o.dayId === selectedDayId
-                    );
-
-                    let fillColor = '#ef4444';
-                    if (inCurrentDay) fillColor = '#059669';
-                    else if (inclusion.inPlan) fillColor = '#d97706';
-
-                    return (
-                      <g
-                        key={poi.id}
-                        onClick={() => setSelectedPoi(poi)}
-                        className="cursor-pointer transition-all duration-200"
-                      >
-                        {isSelected && (
-                          <circle
-                            cx={cx}
-                            cy={cy}
-                            r="16"
-                            fill="rgba(245, 158, 11, 0.3)"
-                            className="animate-ping"
-                          />
-                        )}
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r={isSelected ? '9' : '6'}
-                          fill={isSelected ? '#f59e0b' : fillColor}
-                          stroke="#ffffff"
-                          strokeWidth="2"
-                        />
-                        <text
-                          x={cx}
-                          y={cy - 11}
-                          textAnchor="middle"
-                          fill={isSelected ? '#fbbf24' : '#e2e8f0'}
-                          fontSize="9"
-                          fontWeight="bold"
-                        >
-                          {inCurrentDay ? '✓' : idx + 1}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
-
-                <div className="absolute bottom-2 left-2 bg-stone-900/90 backdrop-blur-xs px-2.5 py-1 rounded-md text-[10px] text-stone-400 border border-stone-800">
-                  📍 Modo esquemático activo • Toca pines para añadir a tu itinerario
-                </div>
+                {/* Floating Docked POI Card for OpenStreetMap */}
+                {renderFloatingPoiCard()}
               </div>
             )}
 
@@ -1068,7 +1163,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                     onClick={() => {
                       setSelectedPoi(poi);
                       setSelectedLocationTarget({ lat: poi.lat, lng: poi.lng });
-                      setInfoWindowOpen(true);
+                      setShowPoiCard(true);
                     }}
                     className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
                       isSelected
@@ -1163,7 +1258,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
         {/* RIGHT: Selected Point of Interest Detailed Inspector Card */}
         <div className="lg:col-span-5">
           {selectedPoi ? (
-            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-sm space-y-4 sticky top-24">
+            <div id="poi-detail-inspector" className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-sm space-y-4 sticky top-24">
               {/* Header with Title and Speech */}
               <div>
                 <div className="flex items-start justify-between gap-2">

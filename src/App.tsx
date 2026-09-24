@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { CurrencyConverter } from './components/CurrencyConverter';
 import { VietnameseTranslator } from './components/VietnameseTranslator';
+import { RestaurantFinder } from './components/RestaurantFinder';
 import { DownloadableMaps } from './components/DownloadableMaps';
 import { ItineraryPlanner } from './components/ItineraryPlanner';
 import { FreeTourGuide } from './components/FreeTourGuide';
@@ -261,6 +262,15 @@ export default function App() {
 
         {activeTab === 'translator' && (
           <VietnameseTranslator isOnline={isOnline} initialSubTab={translatorSubTab} />
+        )}
+
+        {activeTab === 'restaurants' && (
+          <RestaurantFinder
+            ratesData={ratesData}
+            isOnline={isOnline}
+            itineraryState={itineraryState}
+            onNavigateToItinerary={() => setActiveTab('itinerary')}
+          />
         )}
 
         {activeTab === 'maps' && (

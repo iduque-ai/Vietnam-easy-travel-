@@ -170,78 +170,60 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Rate Status Card */}
-      <div className="bg-stone-900 text-stone-100 rounded-2xl p-4 sm:p-5 border border-stone-800 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0 mt-0.5">
-              <Clock className="w-5 h-5" />
+      {/* Rate Status Bar */}
+      <div className="bg-stone-900 text-stone-100 rounded-2xl px-4 py-3.5 border border-stone-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 shrink-0">
+            <Clock className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-stone-400">Tipo de cambio actual:</span>
+              <strong className="text-amber-300 font-mono text-sm">
+                1 {selectedCurrency} = {formatVND(foreignToVndRate)}
+              </strong>
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-sm">Tasa de conversión</span>
-                <span
-                  className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium flex items-center gap-1 ${
-                    ratesData.source === 'live_network'
-                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
-                      : ratesData.source === 'manual_custom'
-                      ? 'bg-amber-950/80 text-amber-300 border border-amber-800'
-                      : ratesData.source === 'server_cache'
-                      ? 'bg-sky-950/80 text-sky-300 border border-sky-800'
-                      : 'bg-stone-800 text-stone-300 border border-stone-700'
-                  }`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    ratesData.source === 'live_network'
-                      ? 'bg-emerald-400'
-                      : ratesData.source === 'manual_custom'
-                      ? 'bg-amber-400'
-                      : ratesData.source === 'server_cache'
-                      ? 'bg-sky-400'
-                      : 'bg-stone-400'
-                  }`} />
-                  {ratesData.source === 'live_network' && 'Online en directo'}
-                  {ratesData.source === 'manual_custom' && 'Personalizada por ti'}
-                  {ratesData.source === 'server_cache' && 'Al día'}
-                  {ratesData.source === 'offline_fallback' && 'Estimación offline'}
-                  {ratesData.source === 'local_storage' && 'Guardada en dispositivo'}
-                </span>
-              </div>
-              <p className="text-xs text-stone-300 mt-1">
-                1 {selectedCurrency} = <strong className="text-amber-300 font-mono text-sm">{formatVND(foreignToVndRate)}</strong>
-                <span className="mx-2 text-stone-500">•</span>
-                <span className="text-stone-400">Última tasa: {dateFormatted}</span>
-              </p>
+            <div className="text-[11px] text-stone-400 flex items-center gap-1.5 mt-0.5">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  ratesData.source === 'live_network'
+                    ? 'bg-emerald-400'
+                    : ratesData.source === 'manual_custom'
+                    ? 'bg-amber-400'
+                    : 'bg-sky-400'
+                }`}
+              />
+              <span>{ratesData.source === 'manual_custom' ? 'Tasa personalizada' : 'Actualizado: ' + dateFormatted}</span>
             </div>
           </div>
+        </div>
 
-          {/* Action buttons: Direct Live Refresh & Custom Manual Adjust */}
-          <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
-            <button
-              id="btn-force-refresh"
-              onClick={onRefreshRates}
-              disabled={isRefreshing || !isOnline}
-              title={isOnline ? 'Consultar tipo de cambio en directo' : 'Sin conexión a internet'}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white border border-stone-700 active:scale-95 disabled:opacity-40 text-xs font-medium transition cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : 'text-stone-400'}`} />
-              <span>{isRefreshing ? 'Consultando...' : 'Actualizar online'}</span>
-            </button>
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            id="btn-force-refresh"
+            onClick={onRefreshRates}
+            disabled={isRefreshing || !isOnline}
+            title={isOnline ? 'Consultar tipo de cambio en directo' : 'Sin conexión a internet'}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white border border-stone-700 active:scale-95 disabled:opacity-40 text-xs font-medium transition cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : 'text-stone-400'}`} />
+            <span>{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
+          </button>
 
-            <button
-              id="btn-toggle-custom-rate"
-              onClick={handleOpenCustomEditor}
-              title="Ajustar manualmente la tasa de cambio"
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
-                isCustomEditorOpen || ratesData.source === 'manual_custom'
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
-                  : 'bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white border-stone-700'
-              }`}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
-              <span>{ratesData.source === 'manual_custom' ? 'Tasa propia' : 'Fijar tasa'}</span>
-            </button>
-          </div>
+          <button
+            id="btn-toggle-custom-rate"
+            onClick={handleOpenCustomEditor}
+            title="Ajustar manualmente la tasa de cambio"
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+              isCustomEditorOpen || ratesData.source === 'manual_custom'
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                : 'bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white border-stone-700'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+            <span>{ratesData.source === 'manual_custom' ? 'Tasa propia' : 'Fijar tasa'}</span>
+          </button>
         </div>
 
         {/* Expandable Manual Rate Editor */}

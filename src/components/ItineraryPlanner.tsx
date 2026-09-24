@@ -32,7 +32,10 @@ import {
   Layers,
   Printer,
   Upload,
-  FileDown
+  FileDown,
+  Wand2,
+  Car,
+  Compass,
 } from 'lucide-react';
 import { ItineraryPlan, ItineraryDay, ItineraryStop, PointOfInterest, ExchangeRatesData } from '../types';
 import { POINTS_OF_INTEREST } from '../data/pois';
@@ -46,6 +49,11 @@ import {
 } from '../utils/storage';
 import { ItineraryDayMap } from './ItineraryDayMap';
 import { ItineraryState } from '../utils/useItineraryState';
+import {
+  optimizeStopsOrder,
+  buildMultiStopGoogleMapsUrl,
+  calculateDistanceMeters,
+} from '../utils/routeOptimizer';
 
 interface ItineraryPlannerProps {
   ratesData: ExchangeRatesData;
@@ -133,6 +141,12 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
   // Toast feedback banner
   const [notification, setNotification] = useState<string | null>(null);
 
+  // Unified View Mode: 'day_by_day' (split interactive view with synchronized map) vs 'all_days' (classic accordion)
+  const [viewMode, setViewMode] = useState<'day_by_day' | 'all_days'>('day_by_day');
+  const [selectedDayTabId, setSelectedDayTabId] = useState<string>('');
+  const [activeMapStopId, setActiveMapStopId] = useState<string | undefined>(undefined);
+  const [copiedGrabStopId, setCopiedGrabStopId] = useState<string | null>(null);
+
   const usdVndRate = ratesData.rates['VND'] || 26000;
   const eurRate = ratesData.rates['EUR'] || 0.8965;
   const eurToVnd = usdVndRate / eurRate;
@@ -142,9 +156,79 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
     return plans.find((p) => p.id === activePlanId) || plans[0] || null;
   }, [plans, activePlanId]);
 
+  // Selected Day for day_by_day view
+  const currentSelectedDay = useMemo(() => {
+    if (!activePlan || activePlan.days.length === 0) return null;
+    if (selectedDayTabId) {
+      const found = activePlan.days.find((d) => d.id === selectedDayTabId);
+      if (found) return found;
+    }
+    if (itineraryState?.currentDay) {
+      return itineraryState.currentDay;
+    }
+    return activePlan.days[0];
+  }, [activePlan, selectedDayTabId, itineraryState?.currentDay]);
+
   const showNotification = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 3500);
+  };
+
+  const handleSelectDayTab = (dayId: string) => {
+    setSelectedDayTabId(dayId);
+    setActiveMapStopId(undefined);
+    if (itineraryState) {
+      itineraryState.setSelectedDayId(dayId);
+    }
+  };
+
+  // Optimize route sequence for a day based on GPS coordinates
+  const handleOptimizeDayRoute = (dayId: string) => {
+    if (!activePlan) return;
+    const day = activePlan.days.find((d) => d.id === dayId);
+    if (!day || day.stops.length <= 1) {
+      showNotification('Se necesitan al menos 2 paradas para optimizar la ruta.');
+      return;
+    }
+
+    const { orderedStops, savedDistanceKm, totalDistanceKm } = optimizeStopsOrder(day.stops);
+
+    if (itineraryState && itineraryState.reorderStopsInDay) {
+      itineraryState.reorderStopsInDay(activePlan.id, dayId, orderedStops);
+    } else {
+      const updatedDays = activePlan.days.map((d) =>
+        d.id === dayId ? { ...d, stops: orderedStops } : d
+      );
+      const updatedPlan: ItineraryPlan = {
+        ...activePlan,
+        updatedAt: Date.now(),
+        days: updatedDays,
+      };
+      updatePlansState(plans.map((p) => (p.id === activePlan.id ? updatedPlan : p)));
+    }
+
+    if (savedDistanceKm > 0) {
+      showNotification(
+        `✨ ¡Ruta optimizada! Ahorras ≈ ${savedDistanceKm} km de trayecto sin rodeos (total: ${totalDistanceKm} km).`
+      );
+    } else {
+      showNotification(`✨ ¡Ruta secuencial lista! Las paradas están ordenadas lógicamente.`);
+    }
+  };
+
+  // Copy destination info formatted for Grab / Taxi
+  const handleCopyGrabDestination = (stop: ItineraryStop) => {
+    const poi = stop.poiId ? POINTS_OF_INTEREST.find((p) => p.id === stop.poiId) : null;
+    const textToCopy = poi
+      ? `${poi.nameVi}, ${poi.city}`
+      : (stop.customName || '');
+
+    if (textToCopy) {
+      navigator.clipboard?.writeText(textToCopy);
+    }
+    setCopiedGrabStopId(stop.id);
+    showNotification(`📋 Destino copiado para Grab: "${textToCopy}"`);
+    setTimeout(() => setCopiedGrabStopId(null), 2500);
   };
 
   const handleSelectPlan = (id: string) => {
@@ -1095,55 +1179,601 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
             )}
           </div>
 
-          {/* Search bar & Controls row */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            {/* Search Input */}
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar por ciudad, templo, parada o nota..."
-                className="w-full pl-9 pr-8 py-2 bg-white border border-stone-200 rounded-xl text-xs text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+          {/* View Mode Switcher & Controls */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-stone-200 pb-3">
+            {/* Tabs for View Mode */}
+            <div className="inline-flex p-1 rounded-xl bg-stone-100 border border-stone-200 text-xs font-semibold self-start sm:self-auto">
+              <button
+                id="btn-view-day-by-day"
+                onClick={() => setViewMode('day_by_day')}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer ${
+                  viewMode === 'day_by_day'
+                    ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <Compass className="w-3.5 h-3.5" />
+                <span>Día a Día + Mapa</span>
+              </button>
+              <button
+                id="btn-view-all-days"
+                onClick={() => setViewMode('all_days')}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer ${
+                  viewMode === 'all_days'
+                    ? 'bg-white text-stone-900 font-bold shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Lista Completa ({activePlan.days.length} Días)</span>
+              </button>
             </div>
 
-            {/* Action buttons (Expand all, Collapse all, Add Day) */}
-            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
-              <button
-                onClick={expandAllDays}
-                className="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium text-xs transition cursor-pointer"
-              >
-                Expandir Todo
-              </button>
-              <button
-                onClick={collapseAllDays}
-                className="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium text-xs transition cursor-pointer"
-              >
-                Colapsar Todo
-              </button>
+            {/* Quick Actions */}
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              {viewMode === 'all_days' && (
+                <>
+                  <button
+                    onClick={expandAllDays}
+                    className="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium text-xs transition cursor-pointer"
+                  >
+                    Expandir Todo
+                  </button>
+                  <button
+                    onClick={collapseAllDays}
+                    className="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium text-xs transition cursor-pointer"
+                  >
+                    Colapsar Todo
+                  </button>
+                </>
+              )}
               <button
                 id="btn-add-day"
                 onClick={() => {
                   setEditingDayData({ isNew: true });
                   setIsDayModalOpen(true);
                 }}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs flex items-center gap-1 transition cursor-pointer shadow-2xs"
+                className="px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5 text-amber-400" />
                 <span>Añadir Día</span>
               </button>
             </div>
           </div>
+
+          {/* ========================================================================= */}
+          {/* VIEW 1: UNIFIED DAY-BY-DAY WITH INTEGRATED MAP & ON-ROUTE ASSISTANT       */}
+          {/* ========================================================================= */}
+          {viewMode === 'day_by_day' && currentSelectedDay && (
+            <div className="space-y-4 animate-fade-in">
+              {/* Horizontal Day Tabs Carousel */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 pt-1 no-scrollbar -mx-1 px-1">
+                {activePlan.days.map((d) => {
+                  const isSelected = d.id === currentSelectedDay.id;
+                  const visitedCount = d.stops.filter((s) => s.isVisited).length;
+                  const isAllVisited = d.stops.length > 0 && visitedCount === d.stops.length;
+
+                  return (
+                    <button
+                      key={d.id}
+                      onClick={() => handleSelectDayTab(d.id)}
+                      className={`px-3.5 py-2 rounded-xl text-left shrink-0 transition cursor-pointer border flex items-center gap-2.5 ${
+                        isSelected
+                          ? 'bg-amber-500 text-stone-950 border-amber-600 shadow-sm ring-2 ring-amber-500/20'
+                          : 'bg-white hover:bg-stone-50 border-stone-200 text-stone-700'
+                      }`}
+                    >
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xs font-black ${isSelected ? 'text-stone-950' : 'text-stone-900'}`}>
+                            Día {d.dayNumber}
+                          </span>
+                          {isAllVisited ? (
+                            <CheckCircle2 className={`w-3 h-3 ${isSelected ? 'text-stone-950' : 'text-emerald-600'}`} />
+                          ) : null}
+                        </div>
+                        <span className={`text-[11px] truncate max-w-[110px] ${isSelected ? 'text-amber-950 font-medium' : 'text-stone-500'}`}>
+                          {d.destinationCity}
+                        </span>
+                      </div>
+
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full font-bold ${
+                          isSelected
+                            ? 'bg-amber-950/20 text-stone-950'
+                            : 'bg-stone-100 text-stone-600'
+                        }`}
+                      >
+                        {d.stops.length}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Day Header Info Bar */}
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-xs space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 border border-amber-200">
+                        Día {currentSelectedDay.dayNumber} • {currentSelectedDay.destinationCity}
+                      </span>
+                      {currentSelectedDay.date && (
+                        <span className="text-xs text-stone-500 font-medium flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-stone-400" />
+                          {currentSelectedDay.date}
+                        </span>
+                      )}
+                      <span className="text-xs text-stone-500">
+                        {currentSelectedDay.stops.filter((s) => s.isVisited).length} de {currentSelectedDay.stops.length} paradas visitadas
+                      </span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-bold text-stone-900 mt-1">
+                      {currentSelectedDay.title}
+                    </h3>
+                  </div>
+
+                  {/* Day Route Actions */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Multi-stop Google Maps Link */}
+                    {buildMultiStopGoogleMapsUrl(currentSelectedDay.stops) && (
+                      <a
+                        href={buildMultiStopGoogleMapsUrl(currentSelectedDay.stops)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                        title="Abrir la ruta completa del día en Google Maps para navegar en coche o a pie"
+                      >
+                        <Navigation className="w-3.5 h-3.5" />
+                        <span>Ruta en Google Maps</span>
+                      </a>
+                    )}
+
+                    {/* Optimize Route Button */}
+                    {currentSelectedDay.stops.length >= 3 && (
+                      <button
+                        onClick={() => handleOptimizeDayRoute(currentSelectedDay.id)}
+                        className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border border-stone-200"
+                        title="Reordenar automáticamente las paradas por cercanía geográfica"
+                      >
+                        <Wand2 className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Optimizar ruta</span>
+                      </button>
+                    )}
+
+                    {/* Add Stop Button */}
+                    <button
+                      onClick={() => handleOpenAddStopModal(currentSelectedDay.id)}
+                      className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Añadir Parada</span>
+                    </button>
+
+                    {/* Edit Day Button */}
+                    <button
+                      onClick={() => {
+                        setEditingDayData({ day: currentSelectedDay });
+                        setIsDayModalOpen(true);
+                      }}
+                      className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition"
+                      title="Editar notas y título de este día"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Day Notes & Transportation */}
+                {currentSelectedDay.notes && (
+                  <div className="bg-stone-50 border border-stone-200/80 rounded-xl p-3 text-xs text-stone-700 flex items-start gap-2.5">
+                    <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <span className="font-semibold text-stone-900 block mb-0.5">
+                        Consejos & Traslados del Día:
+                      </span>
+                      <p className="text-stone-600 leading-relaxed whitespace-pre-line">{currentSelectedDay.notes}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ================= MODO "EN RUTA / ASISTENTE ACTIVO" ================= */}
+              {(() => {
+                const pendingStop = currentSelectedDay.stops.find((s) => !s.isVisited);
+                const allDone = currentSelectedDay.stops.length > 0 && !pendingStop;
+                const poi = pendingStop?.poiId ? POINTS_OF_INTEREST.find((p) => p.id === pendingStop.poiId) : null;
+
+                if (pendingStop) {
+                  const stopIndex = currentSelectedDay.stops.findIndex((s) => s.id === pendingStop.id);
+                  const isCopied = copiedGrabStopId === pendingStop.id;
+
+                  return (
+                    <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border-2 border-amber-400/50 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-2.5 w-2.5 relative">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                          </span>
+                          <span className="text-xs font-black uppercase tracking-wider text-amber-900">
+                            Modo En Ruta • Próxima Parada (#{stopIndex + 1})
+                          </span>
+                        </div>
+                        {pendingStop.timeSlot && (
+                          <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-amber-100 text-amber-950 font-bold border border-amber-300">
+                            {pendingStop.timeSlot}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <h4 className="text-base sm:text-lg font-black text-stone-900">
+                            {pendingStop.customName || (poi ? poi.nameEs : 'Próxima parada')}
+                          </h4>
+                          {poi && (
+                            <div className="flex items-center gap-2 mt-1 text-xs text-amber-900 font-medium">
+                              <span>🇻🇳 {poi.nameVi}</span>
+                              <button
+                                onClick={() => speakVietnamese(poi.nameVi)}
+                                className="p-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 transition cursor-pointer"
+                                title="Pronunciar nombre para el conductor"
+                              >
+                                <Volume2 className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="text-stone-400">•</span>
+                              <span className="text-stone-600 truncate max-w-xs">{poi.city} ({poi.howToGet})</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* On-Route Fast Buttons */}
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                          {/* Navigate with Google Maps */}
+                          {poi ? (
+                            <a
+                              href={`https://www.google.com/maps/dir/?api=1&destination=${poi.lat},${poi.lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer active:scale-95"
+                            >
+                              <Navigation className="w-4 h-4" />
+                              <span>Cómo llegar (Maps)</span>
+                            </a>
+                          ) : (
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pendingStop.customName + ' ' + currentSelectedDay.destinationCity)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer active:scale-95"
+                            >
+                              <Navigation className="w-4 h-4" />
+                              <span>Buscar en Maps</span>
+                            </a>
+                          )}
+
+                          {/* Copy Grab Address */}
+                          <button
+                            onClick={() => handleCopyGrabDestination(pendingStop)}
+                            className="px-3 py-2 rounded-xl bg-white hover:bg-stone-100 border border-stone-300 text-stone-800 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                            title="Copiar nombre y dirección exacta en vietnamita para pegar en la app de Grab o mostrar al taxista"
+                          >
+                            <Car className="w-4 h-4 text-emerald-600" />
+                            <span>{isCopied ? '¡Copiado!' : 'Copiar para Grab'}</span>
+                          </button>
+
+                          {/* Complete Stop */}
+                          <button
+                            onClick={() => handleToggleStopVisited(currentSelectedDay.id, pendingStop.id)}
+                            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
+                            title="Marcar como visitado y pasar a la siguiente parada"
+                          >
+                            <Check className="w-4 h-4" />
+                            <span>Hecho ✓</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (allDone) {
+                  return (
+                    <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-4 text-center space-y-1">
+                      <div className="text-emerald-800 font-black text-sm flex items-center justify-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        <span>¡Todas las paradas del Día {currentSelectedDay.dayNumber} completadas!</span>
+                      </div>
+                      <p className="text-xs text-emerald-700">
+                        Has visitado todos los puntos programados en {currentSelectedDay.destinationCity}. ¡Buen descanso y disfruta de la gastronomía nocturna!
+                      </p>
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
+
+              {/* Day Route Map Component */}
+              <ItineraryDayMap
+                day={currentSelectedDay}
+                activeStopId={activeMapStopId}
+                onSelectStop={(stopId) => setActiveMapStopId(stopId)}
+                onOptimizeRoute={() => handleOptimizeDayRoute(currentSelectedDay.id)}
+              />
+
+              {/* Stops Detailed List */}
+              <div className="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 shadow-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-stone-500">
+                      Paradas del Día ({currentSelectedDay.stops.length}):
+                    </span>
+                    <span className="text-[11px] text-stone-400">
+                      (Toca una parada para enfocarla en el mapa)
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => handleOpenAddStopModal(currentSelectedDay.id)}
+                    className="text-xs text-amber-800 hover:text-amber-950 font-bold flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Añadir Lugar</span>
+                  </button>
+                </div>
+
+                {currentSelectedDay.stops.length === 0 ? (
+                  <div className="p-8 rounded-xl border-2 border-dashed border-stone-200 text-center space-y-2">
+                    <MapPin className="w-8 h-8 text-stone-400 mx-auto" />
+                    <p className="text-xs text-stone-500">
+                      Aún no has añadido paradas a este día.
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                      <button
+                        onClick={() => handleOpenAddStopModal(currentSelectedDay.id)}
+                        className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs inline-flex items-center gap-1.5 transition cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Añadir desde Catálogo o Personalizado</span>
+                      </button>
+                      {onNavigateToMaps && (
+                        <button
+                          onClick={() => onNavigateToMaps(currentSelectedDay.id)}
+                          className="px-3.5 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs inline-flex items-center gap-1.5 transition cursor-pointer"
+                        >
+                          <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Explorar en Mapas</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {currentSelectedDay.stops.map((stop, sIdx) => {
+                      const poi = stop.poiId ? POINTS_OF_INTEREST.find((p) => p.id === stop.poiId) : null;
+                      const isActiveStop = activeMapStopId === stop.id;
+                      const isCopied = copiedGrabStopId === stop.id;
+
+                      return (
+                        <div
+                          key={stop.id}
+                          onClick={() => setActiveMapStopId(stop.id)}
+                          className={`rounded-xl p-3 sm:p-3.5 border transition cursor-pointer ${
+                            isActiveStop
+                              ? 'bg-amber-50/70 border-amber-400 shadow-sm ring-1 ring-amber-400'
+                              : stop.isVisited
+                              ? 'bg-emerald-50/30 border-emerald-200 text-stone-500'
+                              : 'bg-stone-50/60 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            {/* Left: Reorder buttons + Sequence Number + Checkbox */}
+                            <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
+                              <div className="flex flex-col items-center justify-center shrink-0 -mt-0.5">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveStopUp(currentSelectedDay.id, sIdx);
+                                  }}
+                                  disabled={sIdx === 0}
+                                  className="p-1 text-stone-400 hover:text-stone-700 disabled:opacity-20 disabled:hover:text-stone-400 transition cursor-pointer"
+                                  title="Subir parada"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                </button>
+                                <span
+                                  className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center ${
+                                    stop.isVisited
+                                      ? 'bg-emerald-200 text-emerald-900'
+                                      : isActiveStop
+                                      ? 'bg-amber-500 text-stone-950'
+                                      : 'bg-stone-200 text-stone-800'
+                                  }`}
+                                >
+                                  {sIdx + 1}
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveStopDown(currentSelectedDay.id, sIdx);
+                                  }}
+                                  disabled={sIdx === currentSelectedDay.stops.length - 1}
+                                  className="p-1 text-stone-400 hover:text-stone-700 disabled:opacity-20 disabled:hover:text-stone-400 transition cursor-pointer"
+                                  title="Bajar parada"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                </button>
+                              </div>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleStopVisited(currentSelectedDay.id, stop.id);
+                                }}
+                                className="mt-1 text-stone-400 hover:text-emerald-600 transition cursor-pointer shrink-0"
+                                title={stop.isVisited ? 'Marcar como pendiente' : 'Marcar como visitado'}
+                              >
+                                {stop.isVisited ? (
+                                  <CheckCircle2 className="w-5 h-5 text-emerald-600 fill-emerald-100" />
+                                ) : (
+                                  <Circle className="w-5 h-5 text-stone-400 hover:text-stone-600" />
+                                )}
+                              </button>
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {stop.timeSlot && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-950">
+                                      ⏱️ {stop.timeSlot}
+                                    </span>
+                                  )}
+                                  {poi && (
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-stone-200/80 text-stone-700">
+                                      📍 {poi.category}
+                                    </span>
+                                  )}
+                                  {stop.ticketVnd !== undefined && (
+                                    <span className="text-[10px] font-mono font-semibold text-stone-600">
+                                      🎟️ {stop.ticketVnd > 0 ? `${(stop.ticketVnd / 1000).toLocaleString('es-ES')}k ₫` : 'Gratis'}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <h4
+                                  className={`font-bold text-sm mt-1 leading-snug ${
+                                    stop.isVisited ? 'line-through text-stone-400' : 'text-stone-900'
+                                  }`}
+                                >
+                                  {poi ? poi.nameEs : stop.customName}
+                                </h4>
+
+                                {poi && (
+                                  <div className="flex items-center gap-1.5 text-xs text-amber-900 font-medium mt-0.5">
+                                    <span>{poi.nameVi}</span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        speakVietnamese(poi.nameVi);
+                                      }}
+                                      className="p-0.5 hover:bg-amber-100 rounded text-amber-800"
+                                      title="Pronunciar en vietnamita"
+                                    >
+                                      <Volume2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+
+                                {stop.notes && (
+                                  <p className="text-xs text-stone-600 mt-1.5 leading-relaxed bg-white/70 p-2 rounded-lg border border-stone-200/60">
+                                    {stop.notes}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Right: Action Buttons */}
+                            <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                              {/* Grab copy button */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopyGrabDestination(stop);
+                                }}
+                                className="p-1.5 text-stone-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+                                title="Copiar nombre y dirección en vietnamita para Grab"
+                              >
+                                <Car className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Google Maps link */}
+                              {poi ? (
+                                <a
+                                  href={`https://www.google.com/maps/dir/?api=1&destination=${poi.lat},${poi.lng}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="p-1.5 text-stone-500 hover:text-sky-700 hover:bg-sky-50 rounded-lg transition"
+                                  title="Abrir cómo llegar en Google Maps"
+                                >
+                                  <Navigation className="w-3.5 h-3.5" />
+                                </a>
+                              ) : (
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stop.customName + ' ' + currentSelectedDay.destinationCity)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition"
+                                  title="Buscar en Google Maps"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              )}
+
+                              {/* Edit stop */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEditStopModal(currentSelectedDay.id, stop, sIdx);
+                                }}
+                                className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition cursor-pointer"
+                                title="Editar parada"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Delete stop */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteStop(currentSelectedDay.id, stop.id);
+                                }}
+                                className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                title="Eliminar parada"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* VIEW 2: CLASSIC ALL DAYS ACCORDION LIST                                    */}
+          {/* ========================================================================= */}
+          {viewMode === 'all_days' && (
+            <div className="space-y-4 animate-fade-in">
+              {/* Search bar & Controls row */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                {/* Search Input */}
+                <div className="relative w-full sm:w-80">
+                  <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar por ciudad, templo, parada o nota..."
+                    className="w-full pl-9 pr-8 py-2 bg-white border border-stone-200 rounded-xl text-xs text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
 
           {/* Days Accordion List */}
           <div className="space-y-4">
@@ -1550,6 +2180,8 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
               );
             })}
           </div>
+        </div>
+      )}
 
           {/* Delete plan option at very bottom */}
           <div className="pt-6 border-t border-stone-200 flex items-center justify-between text-xs text-stone-500">
