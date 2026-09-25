@@ -347,29 +347,29 @@ export default function App() {
       <MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {/* Bottom Sticky Footer with Essential Vietnam Travel Facts */}
-      <footer className="bg-stone-900 text-stone-400 border-t border-stone-800 py-6 text-xs mb-16 md:mb-0">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="bg-stone-900 text-stone-400 border-t border-stone-800 py-4 text-xs mb-16 md:mb-0">
+        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
           <div className="flex items-center gap-2">
-            <span className="text-base">🇻🇳</span>
+            <span className="text-base" role="img" aria-label="Vietnam">🇻🇳</span>
             <span className="font-semibold text-stone-200">Vietnam Travel Companion</span>
-            <span className="text-stone-500">•</span>
-            <span className="text-stone-400">Diseñado para funcionar 100% sin conexión en todo Vietnam</span>
+            <span className="text-stone-600 hidden sm:inline">·</span>
+            <span className="text-stone-400 text-[11px] hidden sm:inline">100% funcional sin conexión</span>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-stone-300">
-            <div className="flex items-center gap-1.5 bg-stone-800/80 px-2.5 py-1 rounded-md border border-stone-700">
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
-              <span>Hora en Vietnam (UTC+7): </span>
+          <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-stone-300">
+            <div className="flex items-center gap-1.5 bg-stone-800/80 px-2.5 py-1 rounded-lg border border-stone-700/80">
+              <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>Vietnam (UTC+7): </span>
               <strong className="font-mono text-amber-300">{vietnamTime || '--:--:--'}</strong>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-stone-800/80 px-2.5 py-1 rounded-md border border-stone-700">
-              <span>🔌 Enchufes: Tipo A, C y G (220V)</span>
+            <div className="flex items-center gap-1 bg-stone-800/80 px-2.5 py-1 rounded-lg border border-stone-700/80">
+              <span>🔌 220V (A, C, G)</span>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-stone-800/80 px-2.5 py-1 rounded-md border border-stone-700">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Policía Turística: 113</span>
+            <div className="flex items-center gap-1 bg-stone-800/80 px-2.5 py-1 rounded-lg border border-stone-700/80">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>Policía: 113</span>
             </div>
           </div>
         </div>

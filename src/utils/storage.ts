@@ -222,6 +222,27 @@ export function setDefaultTranslatorSubTab(subTab: string): void {
 }
 
 // ================= ITINERARY STORAGE =================
+export const BLANK_INITIAL_PLAN: ItineraryPlan = {
+  id: 'plan-blank-' + Date.now(),
+  title: 'Mi Viaje a Vietnam (Desde cero)',
+  description: 'Planifica tu ruta paso a paso de menos a más (ciudades, días, bloques horarios y paradas).',
+  startDate: new Date().toISOString().split('T')[0],
+  endDate: '',
+  destinations: ['Hà Nội'],
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  days: [
+    {
+      id: 'day-1',
+      dayNumber: 1,
+      destinationCity: 'Hà Nội',
+      title: 'Día 1: Llegada y primer contacto',
+      notes: 'Añade paradas o lugares de interés.',
+      stops: [],
+    },
+  ],
+};
+
 export function getItineraryPlans(): ItineraryPlan[] {
   try {
     const raw = localStorage.getItem(ITINERARIES_KEY);
@@ -234,11 +255,11 @@ export function getItineraryPlans(): ItineraryPlan[] {
   } catch (e) {
     console.error('Failed reading itineraries from localStorage:', e);
   }
-  // Initialize with curated defaults
+  // Initialize with blank starting plan
   try {
-    localStorage.setItem(ITINERARIES_KEY, JSON.stringify(DEFAULT_ITINERARIES));
+    localStorage.setItem(ITINERARIES_KEY, JSON.stringify([BLANK_INITIAL_PLAN]));
   } catch {}
-  return DEFAULT_ITINERARIES;
+  return [BLANK_INITIAL_PLAN];
 }
 
 export function saveItineraryPlans(plans: ItineraryPlan[]): void {

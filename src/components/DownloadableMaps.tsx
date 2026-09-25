@@ -605,31 +605,25 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Region Selector & Offline Pack Status */}
-      <div className="bg-white rounded-2xl p-5 border border-stone-200 shadow-xs space-y-4">
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-stone-200 shadow-xs space-y-3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                Vista Unificada: Mapa + Itinerario
-              </span>
-            </div>
-            <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2 mt-1">
+            <h2 className="text-lg sm:text-xl font-bold text-stone-900 flex items-center gap-2">
               <Compass className="w-5 h-5 text-amber-600" />
-              <span>Mapas & Selección Directa de Paradas</span>
+              <span>Mapas & Lugares de Vietnam</span>
             </h2>
             <p className="text-xs text-stone-500 mt-0.5">
-              Haz clic en cualquier pin del mapa para sumarlo en un solo toque a tu itinerario activo.
+              Toca cualquier pin del mapa para ver detalles y añadir a tu itinerario.
             </p>
           </div>
 
           {/* Download & View Controls */}
-          <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
+          <div className="flex items-center gap-2 self-stretch sm:self-auto">
             <button
               onClick={() =>
                 setUnifiedViewMode(unifiedViewMode === 'split' ? 'map-only' : 'split')
               }
-              className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border ${
+              className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border min-h-[40px] ${
                 unifiedViewMode === 'split'
                   ? 'bg-amber-50 text-amber-950 border-amber-300 shadow-2xs'
                   : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
@@ -638,14 +632,14 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
             >
               <Calendar className="w-3.5 h-3.5 text-amber-600" />
               <span>
-                {unifiedViewMode === 'split' ? 'Itinerario Acoplado' : 'Mostrar Itinerario'}
+                {unifiedViewMode === 'split' ? 'Ocultar Itinerario' : 'Ver Itinerario'}
               </span>
             </button>
 
             <button
               onClick={() => handleToggleDownloadPack(selectedRegionId)}
               disabled={isDownloadingPack !== null}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${
+              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs min-h-[40px] ${
                 isCurrentPackDownloaded
                   ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 hover:bg-emerald-100'
                   : 'bg-amber-500 hover:bg-amber-600 text-stone-950'
@@ -659,12 +653,12 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
               ) : isCurrentPackDownloaded ? (
                 <>
                   <Check className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>Descargado ({currentRegion.sizeMb})</span>
+                  <span>Guardado ({currentRegion.sizeMb})</span>
                 </>
               ) : (
                 <>
                   <Download className="w-3.5 h-3.5" />
-                  <span>Guardar Offline ({currentRegion.sizeMb})</span>
+                  <span>Descargar ({currentRegion.sizeMb})</span>
                 </>
               )}
             </button>
@@ -672,7 +666,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
         </div>
 
         {/* Region Pills */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
           {REGION_PACKS.map((pack) => {
             const isSelected = selectedRegionId === pack.id;
             const isDownloaded = downloadedPacks.includes(pack.id);
@@ -685,31 +679,19 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                   const firstPoi = POINTS_OF_INTEREST.find((p) => p.regionId === pack.id);
                   if (firstPoi) setSelectedPoi(firstPoi);
                 }}
-                className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                className={`px-3 py-2 rounded-xl border text-left transition cursor-pointer shrink-0 min-h-[42px] flex items-center gap-2 ${
                   isSelected
-                    ? 'border-amber-500 bg-amber-50/70 ring-1 ring-amber-500 shadow-2xs'
-                    : 'border-stone-200 bg-stone-50/60 hover:bg-white hover:border-stone-300'
+                    ? 'border-amber-500 bg-amber-500 text-stone-950 font-bold shadow-xs'
+                    : 'border-stone-200 bg-stone-50 hover:bg-white text-stone-700'
                 }`}
               >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold font-mono text-stone-500">
-                      {pack.vietnameseName}
-                    </span>
-                    {isDownloaded && (
-                      <span
-                        className="w-2 h-2 rounded-full bg-emerald-500"
-                        title="Guardado sin conexión"
-                      />
-                    )}
-                  </div>
-                  <div className="font-bold text-sm text-stone-900 mt-1 line-clamp-1">
-                    {pack.name}
-                  </div>
-                </div>
-                <div className="text-[10px] text-stone-500 mt-2">
-                  {pack.poiIds.length} Puntos clave • {pack.sizeMb}
-                </div>
+                <span>{pack.name}</span>
+                {isDownloaded && (
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-stone-950' : 'bg-emerald-500'}`}
+                    title="Guardado offline"
+                  />
+                )}
               </button>
             );
           })}

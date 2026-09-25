@@ -11,7 +11,7 @@ export const REGION_PACKS: RegionMapPack[] = [
     centerLat: 21.0285,
     centerLng: 105.8542,
     zoom: 13,
-    poiIds: ['poi-hn-1', 'poi-hn-2', 'poi-hn-3', 'poi-hn-4', 'poi-hn-5', 'poi-hn-6', 'poi-hn-7', 'poi-hl-1', 'poi-nb-1', 'poi-nb-2', 'poi-nb-3', 'poi-sp-1'],
+    poiIds: ['poi-hn-1', 'poi-hn-2', 'poi-hn-3', 'poi-hn-4', 'poi-hn-5', 'poi-hn-6', 'poi-hn-7', 'poi-hl-1', 'poi-nb-1', 'poi-nb-2', 'poi-nb-3', 'poi-sp-1', 'poi-sp-2'],
     highlights: ['Lago Hoàn Kiếm de noche', 'Calle del Tren (Phố Đường Tàu)', 'Crucero en Bahía de Ha Long', 'Barca en Trang An (Ninh Binh)']
   },
   {
@@ -304,6 +304,26 @@ export const POINTS_OF_INTEREST: PointOfInterest[] = [
     grabFriendly: false,
     isIconic: true,
     badgeLabel: '⭐ Techo de Indochina'
+  },
+  {
+    id: 'poi-sp-2',
+    regionId: 'reg-hanoi-north',
+    nameVi: 'Nhà Thờ Đá & Quảng Trường Sa Pa',
+    nameEs: 'Iglesia de Piedra y Plaza Central de Sa Pa',
+    category: 'Cultura',
+    city: 'Sa Pa',
+    lat: 22.3356,
+    lng: 103.8415,
+    rating: 4.8,
+    ticketVnd: 0,
+    openingHours: '24 horas (Mercado nocturno de 18:00 a 22:30)',
+    bestTime: 'Tarde-noche para pasear junto al lago y probar brochetas a la brasa en la plaza',
+    description: 'El corazón alpino de Sa Pa, presidido por la iglesia de piedra de 1895 de estilo gótico francés frente a la plaza del mercado de amor.',
+    travelerTips: 'Por la noche, la calle Cầu Mây se llena de puestos de barbacoa tradicional (thịt nướng) y puestos de fruta de montaña. Clima fresco.',
+    howToGet: 'Ubicado en el centro neurálgico de Sa Pa, accesible a pie desde cualquier hotel del pueblo.',
+    grabFriendly: false,
+    isIconic: true,
+    badgeLabel: '⭐ Centro de Sa Pa'
   },
 
   // --- CENTRO: HOI AN, DA NANG, HUE ---

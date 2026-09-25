@@ -895,31 +895,18 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
         </div>
       )}
 
-      {/* 1. STATUS CARD */}
-      <div className="bg-stone-900 text-stone-100 rounded-2xl p-4 sm:p-5 border border-stone-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
-            <Languages className="w-5 h-5" />
+      {/* 1. COMPACT STATUS & CONTROLS HEADER */}
+      <div className="bg-stone-900 text-stone-100 rounded-2xl px-4 py-3 border border-stone-800 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
+            <Languages className="w-4 h-4" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-white">Traductor Bidireccional</span>
-              <span className="flex items-center gap-1.5 text-xs text-stone-300">
-                <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                <span>{isOnline ? 'Online con IA' : 'Modo Offline'}</span>
-              </span>
-            </div>
-            <p className="text-xs text-stone-400 mt-0.5">
-              {isTravelerToVi ? (
-                <span>
-                  Traduciendo de <strong className="text-amber-300">{travelerLang === 'es' ? 'Español' : 'Inglés'}</strong> a <strong className="text-amber-300">Vietnamita</strong> para mostrar al dependiente.
-                </span>
-              ) : (
-                <span>
-                  Traduciendo de <strong className="text-amber-300">Vietnamita</strong> a <strong className="text-amber-300">{travelerLang === 'es' ? 'Español' : 'Inglés'}</strong>.
-                </span>
-              )}
-            </p>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-sm text-white">Traductor</span>
+            <span className="flex items-center gap-1.5 text-xs text-stone-300">
+              <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              <span className="text-[11px]">{isOnline ? 'Online IA' : 'Offline'}</span>
+            </span>
           </div>
         </div>
 
@@ -927,10 +914,10 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
         <button
           id="btn-open-google-translate"
           onClick={() => openGoogleTranslate(travelerLang === 'es' ? 'es' : 'en', 'vi', inputText)}
-          className="self-start sm:self-auto px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white border border-stone-700 text-xs font-semibold flex items-center gap-2 transition cursor-pointer shrink-0"
-          title="Abrir frase en Google Translate oficial"
+          className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white border border-stone-700 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
+          title="Abrir en Google Translate oficial"
         >
-          <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
+          <ExternalLink className="w-3 h-3 text-amber-400" />
           <span>Google Translate ↗</span>
         </button>
       </div>
@@ -1304,17 +1291,6 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
               ))}
             </div>
           )}
-        </div>
-
-        {/* 4. Practical communication tip */}
-        <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 text-xs text-stone-600 flex items-start gap-3">
-          <HelpCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="font-semibold text-stone-800">Consejo de viaje en Vietnam:</p>
-            <p className="leading-relaxed">
-              El vietnamita tiene 6 tonos fonéticos. Si al hablar no te entienden de inmediato, <strong>pulsa el icono de pantalla completa ⛶ para mostrárselo en grande</strong> o presiona el altavoz 🔊 para reproducir la voz nativa.
-            </p>
-          </div>
         </div>
       </div>
 

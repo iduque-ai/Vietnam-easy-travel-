@@ -694,7 +694,12 @@ export function generateSmartMenuForRestaurant(restaurant: RestaurantItem): Rest
         nameVi: restaurant.nameVi || mustOrder,
         nameEs: mustOrder,
         phonetic: 'mon dac biet',
-        description: restaurant.description || 'Especialidad culinaria recomendada del establecimiento.',
+        description:
+          restaurant.description &&
+          !restaurant.description.includes('tiempo real en Google Maps') &&
+          !restaurant.description.includes('reseñas verificadas')
+            ? restaurant.description
+            : 'Especialidad culinaria recomendada del establecimiento.',
         priceVnd: avg,
         category: 'Platos Principales',
         dietary: ['🌾 Elaboración fresca', '🍜 Receta tradicional'],

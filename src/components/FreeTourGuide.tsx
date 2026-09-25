@@ -154,13 +154,13 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
   const [gpsError, setGpsError] = useState<SmartGeoError | null>(null);
   const [gpsDetails, setGpsDetails] = useState<SmartGeoResult | null>(null);
 
-  // Active tour state - initialize with a curated tour immediately so tour mode is never blank!
-  const [activeTour, setActiveTour] = useState<FreeTourData>(() => {
+  // Active tour state - start empty so user chooses or searches
+  const [activeTour, setActiveTour] = useState<FreeTourData | null>(() => {
     if (initialPoi) {
       const match = findClientCuratedTour(initialPoi.nameEs, initialPoi.city);
       if (match) return match;
     }
-    return CURATED_CLIENT_TOURS[0];
+    return null;
   });
   const [isLoadingTour, setIsLoadingTour] = useState<boolean>(false);
   const [tourError, setTourError] = useState<string | null>(null);
@@ -262,12 +262,20 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
         const voices = window.speechSynthesis.getVoices();
         const esVoice = voices.find(
           (v) =>
+            (v.lang === 'es-ES' || v.lang === 'es_ES' || v.lang.toLowerCase().includes('es-es')) &&
+            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('España') || v.name.includes('Spain') || v.name.includes('Alvaro') || v.name.includes('Jorge') || v.name.includes('Elvira') || v.name.includes('Monica'))
+        ) || voices.find(
+          (v) => v.lang === 'es-ES' || v.lang === 'es_ES' || v.lang.toLowerCase().includes('es-es')
+        ) || voices.find(
+          (v) =>
             v.lang.startsWith('es') &&
-            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Premium'))
-        );
+            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Spain') || v.name.includes('Español'))
+        ) || voices.find((v) => v.lang.startsWith('es'));
+
         if (esVoice) {
           utterance.voice = esVoice;
         }
+        utterance.lang = 'es-ES';
 
         utterance.onend = () => {
           idx++;
@@ -656,28 +664,27 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
       {/* Top Banner & Mode Switcher */}
       <div
         id="free-tour-hero-banner"
-        className="bg-gradient-to-r from-stone-900 via-stone-800 to-amber-950 text-stone-100 rounded-2xl p-5 sm:p-6 shadow-md border border-stone-700/60 relative overflow-hidden"
+        className="bg-gradient-to-r from-stone-900 via-stone-800 to-amber-950 text-stone-100 rounded-2xl p-4 sm:p-6 shadow-md border border-stone-700/60 relative overflow-hidden"
       >
         <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 relative z-10">
           <div>
-            <div className="inline-flex items-center gap-2 bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full text-xs font-medium border border-amber-500/30 mb-2">
+            <div className="inline-flex items-center gap-2 bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full text-xs font-medium border border-amber-500/30 mb-1.5">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Modo Free Tour con Gemini</span>
-              <span className="text-stone-400">•</span>
-              <span className="text-emerald-400 flex items-center gap-1">
+              <span>Audioguía Free Tour con IA</span>
+              <span className="text-stone-500 hidden sm:inline">·</span>
+              <span className="text-emerald-400 hidden sm:inline-flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Guía Local Inteligente (Online & Offline)
+                Online & Offline
               </span>
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-              Audioguía & Free Tour en Directo
+            <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-white">
+              Audioguía en Directo
             </h1>
-            <p className="text-stone-300 text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed">
-              Ponte frente a cualquier templo, pagoda, lago o calle de Vietnam. Tu audioguía narrará
-              en español las leyendas, qué buscar con los ojos, ángulos fotográficos y responderá tus preguntas en vivo.
+            <p className="text-stone-300 text-xs sm:text-sm mt-0.5 max-w-2xl leading-relaxed">
+              Narración en español de leyendas, arquitectura, detalles ocultos y preguntas en vivo.
             </p>
           </div>
 
@@ -686,10 +693,10 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
             <button
               id="btn-saved-tours-toggle"
               onClick={() => setShowSavedList(!showSavedList)}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-semibold transition-all"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-semibold transition-all min-h-[40px]"
             >
               <Bookmark className="w-4 h-4 text-amber-400" />
-              <span>Tours Guardados ({savedTours.length})</span>
+              <span>Guardados ({savedTours.length})</span>
             </button>
           </div>
         </div>

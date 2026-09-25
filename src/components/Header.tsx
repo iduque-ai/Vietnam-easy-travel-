@@ -190,16 +190,8 @@ export const Header: React.FC<HeaderProps> = ({
               })}
             </nav>
 
-            {/* Right Action: Rate Pill + Drawer Toggle / Refresh */}
+            {/* Right Action: Drawer Toggle / Refresh */}
             <div className="flex items-center gap-2 shrink-0">
-              <div
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-800/90 border border-stone-700/70 font-mono text-xs text-stone-200 cursor-default"
-                title={`1 USD ≈ ${Math.round(usdToVnd).toLocaleString('es-ES')} ₫ | Actualizado: ${formattedDate}`}
-              >
-                <span className="text-amber-400 font-bold">1 € =</span>
-                <span>{eurToVnd.toLocaleString('es-ES')} ₫</span>
-              </div>
-
               <button
                 id="btn-refresh-rates-desktop"
                 onClick={onRefreshRates}
@@ -254,21 +246,8 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* Quick Currency Rate & Drawer Toggle */}
+            {/* Drawer Toggle */}
             <div className="flex items-center gap-1.5 shrink-0">
-              <div className="px-2 py-1 rounded-lg bg-stone-800 border border-stone-700 font-mono text-xs text-stone-200 flex items-center gap-1">
-                <span className="text-amber-400 font-semibold">1€≈</span>
-                <span>{eurToVnd >= 1000 ? `${Math.round(eurToVnd / 1000)}k` : eurToVnd}₫</span>
-                <button
-                  onClick={onRefreshRates}
-                  disabled={isRefreshing || !isOnline}
-                  aria-label="Actualizar tipo de cambio"
-                  className="ml-0.5 p-0.5 text-stone-400 hover:text-amber-300 transition"
-                >
-                  <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-                </button>
-              </div>
-
               {/* Hamburger button */}
               <button
                 id="btn-open-mobile-drawer"

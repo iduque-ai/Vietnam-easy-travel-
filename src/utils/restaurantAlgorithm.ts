@@ -13,10 +13,15 @@ export const BAYESIAN_THRESHOLD_WEIGHT = 25;
 /**
  * Filter criteria strictly requested:
  * 1. Descartar restaurantes con menos de 10 reviews (reviewsCount >= 10)
- * 2. Mostrar restaurantes con más de 4.5 de puntuación (rating > 4.5)
+ * 2. Mostrar restaurantes con puntuación de 4.5 o más (rating >= 4.5)
  */
-export function filterStrictRestaurants(rawList: RestaurantItem[]): {
+export function filterStrictRestaurants(
+  rawList: RestaurantItem[],
+  minRating: number = 4.5,
+  minReviews: number = 10
+): {
   filtered: RestaurantItem[];
+  discarded: RestaurantItem[];
   stats: {
     totalRaw: number;
     approvedCount: number;
@@ -27,17 +32,20 @@ export function filterStrictRestaurants(rawList: RestaurantItem[]): {
 } {
   let discardedLowReviews = 0;
   let discardedLowRating = 0;
+  const discarded: RestaurantItem[] = [];
 
   const filtered = rawList.filter((restaurant) => {
     // Rule 1: Descartar restaurantes con menos de 10 reviews
-    if (restaurant.reviewsCount < 10) {
+    if (restaurant.reviewsCount < minReviews) {
       discardedLowReviews++;
+      discarded.push(restaurant);
       return false;
     }
 
-    // Rule 2: Mostrar restaurantes con más de 4.5 de puntuación
-    if (restaurant.rating <= 4.5) {
+    // Rule 2: Mostrar restaurantes con 4.5 o más de puntuación (rating >= 4.5)
+    if (restaurant.rating < minRating) {
       discardedLowRating++;
+      discarded.push(restaurant);
       return false;
     }
 
@@ -46,6 +54,7 @@ export function filterStrictRestaurants(rawList: RestaurantItem[]): {
 
   return {
     filtered,
+    discarded,
     stats: {
       totalRaw: rawList.length,
       approvedCount: filtered.length,

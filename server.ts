@@ -1733,33 +1733,180 @@ function mapGooglePlaceToItem(place: any, defaultCity: string): any {
     category: category,
     specialties: [mustOrderDish, 'Platos tradicionales frescos', 'Cocina vietnamita auténtica'],
     mustOrderDish: mustOrderDish,
-    description: `Restaurante encontrado en tiempo real en Google Maps con ${reviewsCount.toLocaleString('es-ES')} reseñas verificadas y ${rating}★.`,
+    description: '',
     travelerTips: place.opening_hours?.open_now ? 'Abierto ahora. Afluencia alta en horas de comida/cena.' : 'Comprobar horario antes de acudir.',
     openingHours: place.opening_hours?.open_now !== undefined ? (place.opening_hours.open_now ? 'Abierto ahora' : 'Cerrado temporalmente') : '10:00 - 22:00',
     hasAirConditioning: true,
     grabFoodDelivery: true,
     isCashOnly: false,
-    badgeLabel: reviewsCount > 3000 ? `+${Math.round(reviewsCount / 1000)}k Google` : 'En vivo Google Maps',
+    badgeLabel: '',
     source: 'google_live',
   };
 }
+
+// Location Detection Endpoint via Client IP (fallback when browser GPS is blocked in iframe)
+app.get('/api/location/detect', async (req, res) => {
+  try {
+    const forwarded = req.headers['x-forwarded-for'];
+    const clientIp = typeof forwarded === 'string'
+      ? forwarded.split(',')[0].trim()
+      : req.socket.remoteAddress || '';
+
+    // If local/docker internal IP, return not available
+    if (!clientIp || clientIp.startsWith('127.') || clientIp.startsWith('10.') || clientIp.startsWith('192.168.') || clientIp === '::1') {
+      return res.json({ success: false, reason: 'private_ip' });
+    }
+
+    const geoRes = await fetch(`http://ip-api.com/json/${clientIp}?fields=status,country,countryCode,region,regionName,city,lat,lon`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!geoRes.ok) {
+      return res.json({ success: false });
+    }
+    const data = await geoRes.json();
+    if (data.status === 'success') {
+      const isVietnam = data.countryCode === 'VN';
+      let detectedCity = 'Hà Nội';
+      const cityName = (data.city || '').toLowerCase();
+      const regionName = (data.regionName || '').toLowerCase();
+
+      if (cityName.includes('sapa') || cityName.includes('sa pa') || regionName.includes('lao cai') || regionName.includes('lào cai')) {
+        detectedCity = 'Sa Pa';
+      } else if (cityName.includes('da nang') || cityName.includes('đà nẵng')) {
+        detectedCity = 'Đà Nẵng';
+      } else if (cityName.includes('hoi an') || cityName.includes('hội an')) {
+        detectedCity = 'Hội An';
+      } else if (cityName.includes('hue') || cityName.includes('huế')) {
+        detectedCity = 'Huế';
+      } else if (cityName.includes('ho chi minh') || cityName.includes('saigon')) {
+        detectedCity = 'TP. Hồ Chí Minh';
+      } else if (cityName.includes('ninh binh') || cityName.includes('ninh bình')) {
+        detectedCity = 'Ninh Bình';
+      }
+
+      return res.json({
+        success: true,
+        isInsideVietnam: isVietnam,
+        city: detectedCity,
+        lat: data.lat,
+        lng: data.lon,
+        rawCity: data.city,
+        regionName: data.regionName,
+        country: data.country,
+      });
+    }
+    return res.json({ success: false });
+  } catch (err) {
+    return res.json({ success: false });
+  }
+});
 
 // Live Online Restaurant Search Endpoint
 app.post('/api/restaurants/search', async (req, res) => {
   const { query, city, lat, lng } = req.body || {};
   const googleApiKey = process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || '';
 
-  const cleanCity = city && city !== 'Todo Vietnam' && city !== 'Cerca de mí' ? city : 'Vietnam';
   const cleanQuery = typeof query === 'string' ? query.trim() : '';
+  const numLat = typeof lat === 'number' && !isNaN(lat) ? lat : null;
+  const numLng = typeof lng === 'number' && !isNaN(lng) ? lng : null;
+  const inVietnamCoords =
+    numLat !== null && numLng !== null && numLat >= 8.0 && numLat <= 24.0 && numLng >= 102.0 && numLng <= 110.0;
 
-  let searchQuery = '';
-  if (cleanQuery) {
-    searchQuery = `${cleanQuery} restaurant ${cleanCity}`.trim();
-  } else {
-    searchQuery = `best restaurants and local food in ${cleanCity === 'Vietnam' ? 'Hanoi' : cleanCity} Vietnam`;
+  // Detect city from coordinates if user is searching near current GPS location
+  let detectedCity = '';
+  if (inVietnamCoords) {
+    const distToSapa = Math.hypot(numLat - 22.3364, numLng - 103.8438);
+    const distToHanoi = Math.hypot(numLat - 21.0285, numLng - 105.8542);
+    const distToHalong = Math.hypot(numLat - 20.9505, numLng - 107.0734);
+    const distToNinhBinh = Math.hypot(numLat - 20.2506, numLng - 105.9745);
+    const distToPhongNha = Math.hypot(numLat - 17.5852, numLng - 106.2829);
+    const distToHue = Math.hypot(numLat - 16.4637, numLng - 107.5909);
+    const distToDanang = Math.hypot(numLat - 16.0680, numLng - 108.2208);
+    const distToHoian = Math.hypot(numLat - 15.8801, numLng - 108.3300);
+    const distToDalat = Math.hypot(numLat - 11.9404, numLng - 108.4583);
+    const distToSaigon = Math.hypot(numLat - 10.7769, numLng - 106.7009);
+    const distToCanTho = Math.hypot(numLat - 10.0452, numLng - 105.7469);
+    const distToPhuQuoc = Math.hypot(numLat - 10.2289, numLng - 103.9572);
+
+    const min = Math.min(
+      distToSapa,
+      distToHanoi,
+      distToHalong,
+      distToNinhBinh,
+      distToPhongNha,
+      distToDanang,
+      distToHoian,
+      distToHue,
+      distToDalat,
+      distToSaigon,
+      distToCanTho,
+      distToPhuQuoc
+    );
+    if (min === distToSapa && distToSapa < 0.6) detectedCity = 'Sa Pa';
+    else if (min === distToNinhBinh && distToNinhBinh < 0.5) detectedCity = 'Ninh Bình';
+    else if (min === distToHalong && distToHalong < 0.5) detectedCity = 'Hạ Long';
+    else if (min === distToDanang && distToDanang < 0.3) detectedCity = 'Đà Nẵng';
+    else if (min === distToHoian && distToHoian < 0.3) detectedCity = 'Hội An';
+    else if (min === distToHue && distToHue < 0.4) detectedCity = 'Huế';
+    else if (min === distToPhongNha && distToPhongNha < 0.6) detectedCity = 'Phong Nha';
+    else if (min === distToDalat && distToDalat < 0.5) detectedCity = 'Đà Lạt';
+    else if (min === distToSaigon && distToSaigon < 0.5) detectedCity = 'TP. Hồ Chí Minh';
+    else if (min === distToCanTho && distToCanTho < 0.6) detectedCity = 'Cần Thơ';
+    else if (min === distToPhuQuoc && distToPhuQuoc < 0.7) detectedCity = 'Phú Quốc';
+    else if (min === distToHanoi && distToHanoi < 0.5) detectedCity = 'Hà Nội';
   }
 
-  const cacheKey = `${searchQuery}_${lat || ''}_${lng || ''}`.toLowerCase();
+  // Detect if query mentions any city specifically
+  const lowerQuery = cleanQuery.toLowerCase();
+  let querySpecifiedCity = '';
+  if (lowerQuery.includes('sa pa') || lowerQuery.includes('sapa')) querySpecifiedCity = 'Sa Pa';
+  else if (lowerQuery.includes('hà nội') || lowerQuery.includes('hanoi')) querySpecifiedCity = 'Hà Nội';
+  else if (lowerQuery.includes('hạ long') || lowerQuery.includes('halong')) querySpecifiedCity = 'Hạ Long';
+  else if (lowerQuery.includes('ninh bình') || lowerQuery.includes('ninh binh')) querySpecifiedCity = 'Ninh Bình';
+  else if (lowerQuery.includes('phong nha')) querySpecifiedCity = 'Phong Nha';
+  else if (lowerQuery.includes('huế') || lowerQuery.includes('hue')) querySpecifiedCity = 'Huế';
+  else if (lowerQuery.includes('đà nẵng') || lowerQuery.includes('da nang')) querySpecifiedCity = 'Đà Nẵng';
+  else if (lowerQuery.includes('hội an') || lowerQuery.includes('hoi an')) querySpecifiedCity = 'Hội An';
+  else if (lowerQuery.includes('đà lạt') || lowerQuery.includes('dalat')) querySpecifiedCity = 'Đà Lạt';
+  else if (lowerQuery.includes('hồ chí minh') || lowerQuery.includes('saigon') || lowerQuery.includes('sài gòn')) querySpecifiedCity = 'TP. Hồ Chí Minh';
+  else if (lowerQuery.includes('cần thơ') || lowerQuery.includes('can tho')) querySpecifiedCity = 'Cần Thơ';
+  else if (lowerQuery.includes('phú quốc') || lowerQuery.includes('phu quoc')) querySpecifiedCity = 'Phú Quốc';
+
+  // Resolve target city
+  let targetCity = '';
+  if (querySpecifiedCity) {
+    targetCity = querySpecifiedCity;
+  } else if (city && city !== 'Todo Vietnam' && city !== 'Cerca de mí') {
+    targetCity = city;
+  } else if (detectedCity) {
+    targetCity = detectedCity;
+  } else if (city === 'Cerca de mí') {
+    targetCity = 'Sa Pa'; // default fallback for near me if in northern mountains, or generic
+  } else {
+    targetCity = 'Hà Nội';
+  }
+
+  // Format search query carefully
+  let searchQuery = '';
+  if (querySpecifiedCity) {
+    searchQuery = `${cleanQuery} Vietnam`;
+  } else if (inVietnamCoords && (city === 'Cerca de mí' || !city)) {
+    if (cleanQuery) {
+      searchQuery = `${cleanQuery} restaurant ${targetCity || 'Vietnam'}`.trim();
+    } else {
+      searchQuery = `best restaurants and local food in ${targetCity || 'Sa Pa'} Vietnam`;
+    }
+  } else if (cleanQuery) {
+    if (city === 'Todo Vietnam') {
+      searchQuery = `${cleanQuery} restaurant Vietnam`.trim();
+    } else {
+      searchQuery = `${cleanQuery} restaurant ${targetCity}`.trim();
+    }
+  } else {
+    searchQuery = `best restaurants and local food in ${targetCity} Vietnam`;
+  }
+
+  const cacheKey = `${searchQuery}_${numLat || ''}_${numLng || ''}`.toLowerCase();
   const cached = restaurantSearchCache.get(cacheKey);
   const now = Date.now();
   if (cached && now - cached.timestamp < 20 * 60 * 1000) {
@@ -1768,6 +1915,7 @@ app.post('/api/restaurants/search', async (req, res) => {
       restaurants: cached.data,
       source: 'google_live_cache',
       count: cached.data.length,
+      detectedCity: targetCity,
     });
   }
 
@@ -1783,18 +1931,89 @@ app.post('/api/restaurants/search', async (req, res) => {
     const url = new URL('https://maps.googleapis.com/maps/api/place/textsearch/json');
     url.searchParams.set('query', searchQuery);
     url.searchParams.set('key', googleApiKey);
-    if (lat && lng && typeof lat === 'number' && typeof lng === 'number') {
-      url.searchParams.set('location', `${lat},${lng}`);
-      url.searchParams.set('radius', '8000');
+
+    const CITY_CENTERS: Record<string, { lat: number; lng: number; radius: string }> = {
+      'Sa Pa': { lat: 22.3364, lng: 103.8438, radius: '7000' },
+      'Hà Nội': { lat: 21.0285, lng: 105.8542, radius: '10000' },
+      'Ninh Bình': { lat: 20.2506, lng: 105.9745, radius: '10000' },
+      'Hạ Long': { lat: 20.9505, lng: 107.0734, radius: '10000' },
+      'Huế': { lat: 16.4637, lng: 107.5909, radius: '8000' },
+      'Đà Nẵng': { lat: 16.0680, lng: 108.2208, radius: '8000' },
+      'Hội An': { lat: 15.8801, lng: 108.3300, radius: '6000' },
+      'Phong Nha': { lat: 17.5852, lng: 106.2829, radius: '12000' },
+      'Đà Lạt': { lat: 11.9404, lng: 108.4583, radius: '8000' },
+      'TP. Hồ Chí Minh': { lat: 10.7769, lng: 106.7009, radius: '10000' },
+      'Cần Thơ': { lat: 10.0452, lng: 105.7469, radius: '9000' },
+      'Phú Quốc': { lat: 10.2289, lng: 103.9572, radius: '14000' },
+    };
+
+    if (inVietnamCoords && !querySpecifiedCity) {
+      url.searchParams.set('location', `${numLat},${numLng}`);
+      url.searchParams.set('radius', city === 'Cerca de mí' ? '6000' : '8000');
+    } else if (CITY_CENTERS[targetCity] && !cleanQuery) {
+      url.searchParams.set('location', `${CITY_CENTERS[targetCity].lat},${CITY_CENTERS[targetCity].lng}`);
+      url.searchParams.set('radius', CITY_CENTERS[targetCity].radius);
+    } else if (CITY_CENTERS[targetCity] && cleanQuery) {
+      // For manual searches, provide bias but wider radius
+      url.searchParams.set('location', `${CITY_CENTERS[targetCity].lat},${CITY_CENTERS[targetCity].lng}`);
+      url.searchParams.set('radius', '25000');
     }
 
-    const resp = await fetch(url.toString());
-    const data = await resp.json();
+    let resp = await fetch(url.toString());
+    let data = await resp.json();
+
+    // Fallback: If cleanQuery provided but returned 0 results in target city, search nationally
+    if ((!data.results || data.results.length === 0) && cleanQuery && targetCity !== 'Todo Vietnam') {
+      const fallbackUrl = new URL('https://maps.googleapis.com/maps/api/place/textsearch/json');
+      fallbackUrl.searchParams.set('query', `${cleanQuery} Vietnam`);
+      fallbackUrl.searchParams.set('key', googleApiKey);
+      const fallbackResp = await fetch(fallbackUrl.toString());
+      const fallbackData = await fallbackResp.json();
+      if (fallbackData.status === 'OK' && Array.isArray(fallbackData.results) && fallbackData.results.length > 0) {
+        data = fallbackData;
+      }
+    }
 
     if (data.status === 'OK' && Array.isArray(data.results)) {
+      const minReviewsRequired = cleanQuery ? 1 : 5;
       const mapped = data.results
-        .filter((r: any) => r.geometry?.location?.lat && r.geometry?.location?.lng && (r.user_ratings_total || 0) >= 5)
-        .map((r: any) => mapGooglePlaceToItem(r, cleanCity === 'Vietnam' ? 'Hà Nội' : cleanCity));
+        .filter((r: any) => r.geometry?.location?.lat && r.geometry?.location?.lng && (r.user_ratings_total || 0) >= minReviewsRequired)
+        .map((r: any) => {
+          const addr = (r.formatted_address || '').toLowerCase();
+          const pName = (r.name || '').toLowerCase();
+          const rLat = r.geometry?.location?.lat;
+          const rLng = r.geometry?.location?.lng;
+          let rCity = targetCity;
+
+          if (
+            addr.includes('sa pa') ||
+            addr.includes('sapa') ||
+            addr.includes('lào cai') ||
+            pName.includes('sapa') ||
+            pName.includes('sa pa') ||
+            (rLat && rLng && Math.hypot(rLat - 22.3364, rLng - 103.8438) < 0.3)
+          ) {
+            rCity = 'Sa Pa';
+          } else if (
+            addr.includes('hà nội') ||
+            addr.includes('hanoi') ||
+            (rLat && rLng && Math.hypot(rLat - 21.0285, rLng - 105.8542) < 0.3)
+          ) {
+            rCity = 'Hà Nội';
+          } else if (addr.includes('hội an') || addr.includes('hoi an')) {
+            rCity = 'Hội An';
+          } else if (addr.includes('đà nẵng') || addr.includes('da nang')) {
+            rCity = 'Đà Nẵng';
+          } else if (addr.includes('huế') || addr.includes('hue')) {
+            rCity = 'Huế';
+          } else if (addr.includes('hồ chí minh') || addr.includes('saigon')) {
+            rCity = 'TP. Hồ Chí Minh';
+          } else if (addr.includes('ninh bình') || addr.includes('ninh binh')) {
+            rCity = 'Ninh Bình';
+          }
+
+          return mapGooglePlaceToItem(r, rCity);
+        });
 
       // Cache the result
       restaurantSearchCache.set(cacheKey, {
@@ -1807,6 +2026,7 @@ app.post('/api/restaurants/search', async (req, res) => {
         restaurants: mapped,
         source: 'google_live',
         count: mapped.length,
+        detectedCity: targetCity,
       });
     }
 

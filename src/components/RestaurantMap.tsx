@@ -29,6 +29,7 @@ import {
   BookOpen,
   Plus,
   Minus,
+  RefreshCw,
 } from 'lucide-react';
 import { speakVietnamese } from '../utils/storage';
 
@@ -115,6 +116,8 @@ interface RestaurantMapProps {
   onViewMenu?: (restaurant: RestaurantItem) => void;
   userLocation?: { lat: number; lng: number; accuracy?: number } | null;
   userLocationLabel?: string;
+  isLiveTracking?: boolean;
+  onToggleLiveTracking?: () => void;
   className?: string;
 }
 
@@ -123,28 +126,23 @@ const GoogleMapCameraController: React.FC<{
   center: { lat: number; lng: number };
   zoom: number;
   selectedLocation: { lat: number; lng: number } | null;
-}> = ({ center, zoom, selectedLocation }) => {
+  onMapReady?: () => void;
+}> = ({ center, zoom, selectedLocation, onMapReady }) => {
   const map = useMap();
   const prevCenterRef = useRef<{ lat: number; lng: number }>(center);
-  const isFirstMountRef = useRef(true);
+  const prevZoomRef = useRef<number>(zoom);
 
-  // When city center changes (e.g. user selected another city or requested GPS location)
+  // When map mounts or when city center / zoom changes
   useEffect(() => {
     if (!map) return;
-    if (isFirstMountRef.current) {
-      isFirstMountRef.current = false;
-      return;
-    }
-    const centerChanged =
-      Math.abs(prevCenterRef.current.lat - center.lat) > 0.0001 ||
-      Math.abs(prevCenterRef.current.lng - center.lng) > 0.0001;
-
-    if (centerChanged) {
-      prevCenterRef.current = center;
-      map.panTo(center);
+    onMapReady?.();
+    map.panTo(center);
+    if (typeof zoom === 'number') {
       map.setZoom(zoom);
     }
-  }, [map, center.lat, center.lng, zoom]);
+    prevCenterRef.current = center;
+    prevZoomRef.current = zoom;
+  }, [map, center.lat, center.lng, zoom, onMapReady]);
 
   // When a restaurant is selected
   useEffect(() => {
@@ -155,26 +153,72 @@ const GoogleMapCameraController: React.FC<{
     if (currentZoom < 16) {
       map.setZoom(16);
     }
-    // CRITICAL: When selectedLocation becomes null (closing or deselecting a restaurant),
-    // we intentionally DO NOT call map.panTo(center) and DO NOT call map.setZoom(zoom).
-    // The camera maintains its exact zoom level and position, allowing the user to
-    // continue browsing neighboring restaurants effortlessly.
   }, [map, selectedLocation?.lat, selectedLocation?.lng]);
 
   return null;
 };
 
-// Compact custom controls for Google Maps (Micro Mapa/Satélite & Micro Zoom +/-)
+// Pegman SVG Icon (Official Google yellow silhouette)
+const PegmanIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="4.5" r="2.5" />
+    <path d="M15 8c0-.6-.4-1-1-1h-4c-.6 0-1 .4-1 1v4c0 .4.2.7.5.9L10 17v4c0 .6.4 1 1 1h.5c.6 0 1-.4 1-1v-4h.5v4c0 .6.4 1 1 1h.5c.6 0 1-.4 1-1v-4l.5-4.1c.3-.2.5-.5.5-.9V8z" />
+  </svg>
+);
+
+// Compact custom controls for Google Maps (Micro Mapa/Satélite, Pegman Street View & Micro Zoom +/-)
 const GoogleMapCustomControls: React.FC<{
-  userLocation?: { lat: number; lng: number } | null;
-}> = ({ userLocation }) => {
+  userLocation?: { lat: number; lng: number; accuracy?: number } | null;
+  selectedLocation?: { lat: number; lng: number } | null;
+  isLiveTracking?: boolean;
+  onToggleLiveTracking?: () => void;
+}> = ({ userLocation, selectedLocation, isLiveTracking, onToggleLiveTracking }) => {
   const map = useMap();
   const [mapType, setMapType] = useState<'roadmap' | 'hybrid'>('roadmap');
+  const [isStreetViewActive, setIsStreetViewActive] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!map) return;
+    const panorama = map.getStreetView();
+    if (!panorama) return;
+
+    const listener = panorama.addListener('visible_changed', () => {
+      setIsStreetViewActive(Boolean(panorama.getVisible()));
+    });
+
+    return () => {
+      listener?.remove();
+    };
+  }, [map]);
 
   const handleSetMapType = (type: 'roadmap' | 'hybrid') => {
     setMapType(type);
     if (map) {
       map.setMapTypeId(type);
+    }
+  };
+
+  const handleToggleStreetView = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!map) return;
+    const panorama = map.getStreetView();
+    if (!panorama) return;
+
+    if (panorama.getVisible()) {
+      panorama.setVisible(false);
+    } else {
+      const center = map.getCenter();
+      const pos = selectedLocation || (center ? { lat: center.lat(), lng: center.lng() } : null);
+      if (pos) {
+        panorama.setPosition(pos);
+        panorama.setPov({ heading: 165, pitch: 0 });
+        panorama.setVisible(true);
+      }
     }
   };
 
@@ -231,9 +275,27 @@ const GoogleMapCustomControls: React.FC<{
         </div>
       </div>
 
-      {/* Sleek, Micro Zoom & Location Controls (Bottom-Right, above attribution) */}
-      <div className="absolute bottom-6 right-2.5 z-10 flex flex-col items-center gap-1 select-none">
-        {userLocation && (
+      {/* Sleek, Micro Zoom, Pegman & Location Controls (Bottom-Right, above attribution) */}
+      <div className="absolute bottom-6 right-2.5 z-10 flex flex-col items-center gap-1.5 select-none">
+        {onToggleLiveTracking ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleLiveTracking();
+            }}
+            className={`w-7 h-7 rounded-lg border shadow-xs flex items-center justify-center transition cursor-pointer active:scale-95 ${
+              isLiveTracking
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-md ring-2 ring-emerald-300'
+                : userLocation
+                ? 'bg-white/95 hover:bg-white text-sky-600 border-stone-200/90'
+                : 'bg-white/95 hover:bg-white text-stone-600 border-stone-200/90'
+            }`}
+            title={isLiveTracking ? 'Rastreo GPS en tiempo real activo (Haz clic para pausar)' : 'Activar GPS en tiempo real'}
+          >
+            <Crosshair className={`w-3.5 h-3.5 ${isLiveTracking ? 'animate-spin' : ''}`} />
+          </button>
+        ) : userLocation ? (
           <button
             type="button"
             onClick={handleRecenterUser}
@@ -242,7 +304,23 @@ const GoogleMapCustomControls: React.FC<{
           >
             <Crosshair className="w-3.5 h-3.5" />
           </button>
-        )}
+        ) : null}
+
+        {/* Muñeco de Street View situado encima de los botones de zoom */}
+        <button
+          type="button"
+          onClick={handleToggleStreetView}
+          className={`w-7 h-7 rounded-lg bg-white/95 hover:bg-white border shadow-xs flex items-center justify-center transition cursor-pointer active:scale-95 ${
+            isStreetViewActive
+              ? 'bg-amber-100 border-amber-400 text-amber-600 ring-2 ring-amber-400'
+              : 'border-stone-200/90 text-amber-500 hover:text-amber-600'
+          }`}
+          title={isStreetViewActive ? 'Salir de Street View' : 'Ver Street View a pie de calle'}
+        >
+          <PegmanIcon className="w-4 h-4" />
+        </button>
+
+        {/* Controles de Zoom (+ / -) */}
         <div className="bg-white/95 backdrop-blur-md rounded-lg border border-stone-200/90 shadow-xs flex flex-col overflow-hidden">
           <button
             type="button"
@@ -277,6 +355,8 @@ const MapLibreRestaurantMap: React.FC<RestaurantMapProps> = ({
   onViewMenu,
   userLocation,
   userLocationLabel = 'Tu ubicación actual',
+  isLiveTracking,
+  onToggleLiveTracking,
   className = 'h-[320px] sm:h-[440px]',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -524,8 +604,23 @@ const MapLibreRestaurantMap: React.FC<RestaurantMapProps> = ({
       </div>
 
       {/* Sleek, Micro Zoom & Location Controls for MapLibre */}
-      <div className="absolute bottom-6 right-2.5 z-10 flex flex-col items-center gap-1 select-none">
-        {userLocation && (
+      <div className="absolute bottom-6 right-2.5 z-10 flex flex-col items-center gap-1.5 select-none">
+        {onToggleLiveTracking ? (
+          <button
+            type="button"
+            onClick={onToggleLiveTracking}
+            className={`w-7 h-7 rounded-lg border shadow-xs flex items-center justify-center transition cursor-pointer active:scale-95 ${
+              isLiveTracking
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-md ring-2 ring-emerald-300'
+                : userLocation
+                ? 'bg-white/95 hover:bg-white text-sky-600 border-stone-200/90'
+                : 'bg-white/95 hover:bg-white text-stone-600 border-stone-200/90'
+            }`}
+            title={isLiveTracking ? 'Rastreo GPS en tiempo real activo (Haz clic para pausar)' : 'Activar GPS en tiempo real'}
+          >
+            <Crosshair className={`w-3.5 h-3.5 ${isLiveTracking ? 'animate-spin' : ''}`} />
+          </button>
+        ) : userLocation ? (
           <button
             type="button"
             onClick={() => {
@@ -539,7 +634,26 @@ const MapLibreRestaurantMap: React.FC<RestaurantMapProps> = ({
           >
             <Crosshair className="w-3.5 h-3.5" />
           </button>
-        )}
+        ) : null}
+
+        {/* Muñeco de Street View encima de los botones de zoom */}
+        <a
+          href={(() => {
+            const target = selectedRestaurantId
+              ? items.find((i) => i.restaurant.id === selectedRestaurantId)?.restaurant
+              : null;
+            const lat = target ? target.lat : (mapRef.current?.getCenter().lat ?? center.lat);
+            const lng = target ? target.lng : (mapRef.current?.getCenter().lng ?? center.lng);
+            return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+          })()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-7 h-7 rounded-lg bg-white/95 hover:bg-white text-amber-500 hover:text-amber-600 border border-stone-200/90 shadow-xs flex items-center justify-center transition cursor-pointer active:scale-95"
+          title="Ver Street View a pie de calle"
+        >
+          <PegmanIcon className="w-4 h-4" />
+        </a>
+
         <div className="bg-white/95 backdrop-blur-md rounded-lg border border-stone-200/90 shadow-xs flex flex-col overflow-hidden">
           <button
             type="button"
@@ -599,20 +713,45 @@ export const RestaurantMap: React.FC<RestaurantMapProps> = (props) => {
     return null;
   }, [activeInfoWindowItem]);
 
-  // If no Google Maps API key, seamlessly render vector map
-  if (!GOOGLE_MAPS_API_KEY) {
+  const [isMapReady, setIsMapReady] = useState<boolean>(false);
+  const [useVectorFallback, setUseVectorFallback] = useState<boolean>(false);
+
+  // Safety fallback: if Google Maps hasn't initialized in 6 seconds, fallback to vector tiles
+  useEffect(() => {
+    if (!GOOGLE_MAPS_API_KEY) return;
+    const timer = setTimeout(() => {
+      if (!isMapReady) {
+        setUseVectorFallback(true);
+      }
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [isMapReady]);
+
+  // If no Google Maps API key or vector fallback triggered, seamlessly render vector map
+  if (!GOOGLE_MAPS_API_KEY || useVectorFallback) {
     return <MapLibreRestaurantMap {...props} />;
   }
 
   return (
-    <div className={`relative w-full rounded-2xl overflow-hidden border border-stone-200/90 shadow-xs ${className}`}>
+    <div className={`relative w-full rounded-2xl overflow-hidden border border-stone-200/90 shadow-xs bg-stone-100 ${className}`}>
+      {/* Loading Overlay while Google Maps tiles and markers initialize */}
+      {!isMapReady && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-stone-100/90 backdrop-blur-xs transition-opacity duration-300">
+          <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white shadow-md border border-stone-200">
+            <RefreshCw className="w-4 h-4 animate-spin text-amber-600" />
+            <span className="text-xs font-semibold text-stone-700">Cargando mapa interactivo...</span>
+          </div>
+        </div>
+      )}
+
       {/* Google Maps React API Provider */}
       <APIProvider apiKey={GOOGLE_MAPS_API_KEY} libraries={['marker']}>
         <Map
-          mapId="VIETNAM_RESTAURANTS_MAP"
+          mapId="DEMO_MAP_ID"
           internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
           defaultCenter={{ lat: center.lat, lng: center.lng }}
           defaultZoom={zoom}
+          onTilesLoaded={() => setIsMapReady(true)}
           gestureHandling="greedy"
           disableDefaultUI={false}
           mapTypeControl={false}
@@ -626,10 +765,16 @@ export const RestaurantMap: React.FC<RestaurantMapProps> = (props) => {
             center={center}
             zoom={zoom}
             selectedLocation={selectedLocation}
+            onMapReady={() => setIsMapReady(true)}
           />
 
-          {/* Compact Custom Controls (Micro Mapa/Satélite & Micro Zoom +/-) */}
-          <GoogleMapCustomControls userLocation={userLocation} />
+          {/* Compact Custom Controls (Micro Mapa/Satélite, Pegman Street View & Micro Zoom +/-) */}
+          <GoogleMapCustomControls
+            userLocation={userLocation}
+            selectedLocation={selectedLocation}
+            isLiveTracking={props.isLiveTracking}
+            onToggleLiveTracking={props.onToggleLiveTracking}
+          />
 
           {/* Restaurant Pins */}
           {items.map((entry, index) => {

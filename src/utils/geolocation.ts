@@ -1,5 +1,6 @@
 import { PointOfInterest } from '../types';
 import { POINTS_OF_INTEREST, REGION_PACKS } from '../data/pois';
+import { VIETNAM_CITIES_CATALOG } from '../data/cities';
 
 export interface GeoCoords {
   latitude: number;
@@ -16,18 +17,38 @@ export interface SmartGeoResult {
   distanceToVietnamKm: number;
   closestPoi: PointOfInterest;
   distanceToClosestPoiKm: number;
+  closestCity: string;
   recommendedRegionId: string;
   isSimulated?: boolean;
   simulatedName?: string;
   provider: 'gps_high_accuracy' | 'network' | 'simulated';
   timestamp: number;
+  isExactCoordinate?: boolean;
 }
 
 export interface SmartGeoError {
-  code: 'PERMISSION_DENIED' | 'POSITION_UNAVAILABLE' | 'TIMEOUT' | 'NOT_SUPPORTED' | 'UNKNOWN';
+  code:
+    | 'PERMISSION_DENIED'
+    | 'POSITION_UNAVAILABLE'
+    | 'TIMEOUT'
+    | 'NOT_SUPPORTED'
+    | 'LOW_ACCURACY'
+    | 'UNKNOWN';
   message: string;
   userTip: string;
   isIframeBlocked?: boolean;
+  accuracy?: number;
+  threshold?: number;
+  rawCoords?: GeoCoords;
+}
+
+export interface GeolocationFilterOptions {
+  /** Maximum acceptable accuracy radius in meters (e.g. 500m or 800m). Default: 800m */
+  maxAccuracyMeters?: number;
+  /** Timeout in ms before failing back. Default: 6000ms */
+  timeoutMs?: number;
+  /** Allow fallback to coarse network/IP if GPS unavailable. Default: true */
+  allowNetworkFallback?: boolean;
 }
 
 export interface SimulationPreset {
@@ -44,6 +65,18 @@ export interface SimulationPreset {
 }
 
 export const VIETNAM_SIMULATION_PRESETS: SimulationPreset[] = [
+  {
+    id: 'sim-sapa',
+    name: 'Sa Pa (Centro & Valle Mường Hoa)',
+    cityName: 'Sa Pa',
+    lat: 22.3356,
+    lng: 103.8415,
+    regionId: 'reg-hanoi-north',
+    poiId: 'poi-sp-2',
+    poiName: 'Iglesia de Piedra y Plaza Central de Sa Pa',
+    icon: '⛰️',
+    description: 'En el corazón de las montañas de Sa Pa, rodeado de terrazas de arroz, niebla y cultura Hmong.',
+  },
   {
     id: 'sim-hanoi',
     name: 'Hanói (Lago Hoàn Kiếm & Barrio Antiguo)',
@@ -196,14 +229,45 @@ function queryBrowserPosition(options: PositionOptions): Promise<GeolocationPosi
   });
 }
 
+// Major Vietnamese tourist destination cities with exact coordinates
+export const MAJOR_VIETNAMESE_CITIES = VIETNAM_CITIES_CATALOG.map((city) => ({
+  name: city.name,
+  lat: city.lat,
+  lng: city.lng,
+  regionId: city.regionId,
+}));
+
+export function findClosestCity(lat: number, lng: number): {
+  name: string;
+  distanceKm: number;
+  cityCoords: { lat: number; lng: number };
+} {
+  let closest = MAJOR_VIETNAMESE_CITIES[0];
+  let minDistance = Infinity;
+  for (const c of MAJOR_VIETNAMESE_CITIES) {
+    const d = calculateDistanceKm(lat, lng, c.lat, c.lng);
+    if (d < minDistance) {
+      minDistance = d;
+      closest = c;
+    }
+  }
+  return {
+    name: closest.name,
+    distanceKm: Math.round(minDistance * 10) / 10,
+    cityCoords: { lat: closest.lat, lng: closest.lng },
+  };
+}
+
 // Helper to convert GeolocationPosition to SmartGeoResult
 export function processGeolocationPosition(
   position: GeolocationPosition,
-  provider: 'gps_high_accuracy' | 'network' = 'gps_high_accuracy'
+  provider: 'gps_high_accuracy' | 'network' = 'gps_high_accuracy',
+  isExactCoordinate: boolean = true
 ): SmartGeoResult {
   const { latitude, longitude, accuracy, altitude, heading, speed } = position.coords;
   const inVietnam = isPointInVietnam(latitude, longitude);
   const { closestPoi, distanceKm, recommendedRegionId } = findClosestPoi(latitude, longitude);
+  const { name: closestCity } = findClosestCity(latitude, longitude);
 
   const distanceToVietnamKm = inVietnam
     ? 0
@@ -222,31 +286,125 @@ export function processGeolocationPosition(
     distanceToVietnamKm,
     closestPoi,
     distanceToClosestPoiKm: Math.round(distanceKm * 10) / 10,
+    closestCity,
     recommendedRegionId,
     provider,
     timestamp: position.timestamp || Date.now(),
+    isExactCoordinate,
   };
 }
 
 /**
- * Attempts geolocation prioritizing HIGH ACCURACY (hardware GPS / true mobile antenna):
- * Phase 1: High accuracy GPS query (enableHighAccuracy: true, maximumAge: 0, 10s timeout).
- * Phase 2: If Phase 1 times out or is unavailable (e.g. desktop indoors), fallback to network WiFi/cellular.
+ * Robust Geolocation function using browser API with precision filter.
+ * - Forces hardware high-accuracy GPS with timeout protection.
+ * - Filters by accuracy: if the reading uncertainty exceeds `maxAccuracyMeters` (default: 800m),
+ *   it triggers a LOW_ACCURACY error so the UI can prompt the user to manually select their city.
  */
-export async function getSmartGeolocation(): Promise<{
-  success: true;
-  data: SmartGeoResult;
-} | {
-  success: false;
-  error: SmartGeoError;
-}> {
+export async function getRobustBrowserGeolocation(options?: GeolocationFilterOptions): Promise<
+  | { success: true; data: SmartGeoResult }
+  | { success: false; error: SmartGeoError }
+> {
+  const maxAccuracy = options?.maxAccuracyMeters ?? 2500;
+  const timeout = options?.timeoutMs ?? 8000;
+
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
     return {
       success: false,
       error: {
         code: 'NOT_SUPPORTED',
         message: 'Tu navegador o dispositivo no soporta la API de geolocalización.',
-        userTip: 'Puedes seleccionar tu ciudad o monumento directamente de la lista.',
+        userTip: 'Selecciona manualmente tu ciudad en la lista desplegable.',
+      },
+    };
+  }
+
+  try {
+    const position = await queryBrowserPosition({
+      enableHighAccuracy: true,
+      maximumAge: 10000,
+      timeout,
+    });
+
+    const accuracy = position.coords.accuracy;
+
+    // Precision filter: if accuracy radius exceeds threshold (e.g. 800m), flag as imprecise
+    if (typeof accuracy === 'number' && accuracy > maxAccuracy) {
+      return {
+        success: false,
+        error: {
+          code: 'LOW_ACCURACY',
+          message: `Lectura GPS imprecisa (±${Math.round(accuracy)}m). Para evitar ubicarte erróneamente en Hanói u otra provincia, confirma tu ciudad.`,
+          userTip: 'La señal GPS es débil o estás en interiores. Elige tu ciudad (Sa Pa, Hanói, Đà Nẵng...) en el modal.',
+          accuracy: Math.round(accuracy),
+          threshold: maxAccuracy,
+          rawCoords: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy,
+          },
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: processGeolocationPosition(position, 'gps_high_accuracy', true),
+    };
+  } catch (err: any) {
+    const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+    let code: SmartGeoError['code'] = 'UNKNOWN';
+    let message = 'No se pudo leer las coordenadas exactas del GPS.';
+    let userTip = 'Selecciona tu ciudad actual en la lista.';
+
+    if (err?.code === 1) {
+      code = 'PERMISSION_DENIED';
+      message = 'Permiso de ubicación no concedido en el navegador o bloqueado por el visor web.';
+      userTip = isIframe
+        ? 'El visor web restringe el sensor GPS por seguridad. Selecciona tu ciudad en el selector manual.'
+        : 'Revisa los permisos de ubicación del navegador o pulsa sobre tu ciudad directamente.';
+    } else if (err?.code === 2) {
+      code = 'POSITION_UNAVAILABLE';
+      message = 'Señal de satélites GPS no disponible en este momento.';
+      userTip = 'Si estás en interiores o el dispositivo no tiene antena GPS, selecciona tu ciudad.';
+    } else if (err?.code === 3) {
+      code = 'TIMEOUT';
+      message = 'Tiempo de espera agotado buscando satélites GPS.';
+      userTip = 'Activa la antena GPS o elige tu ciudad actual en el modal.';
+    }
+
+    return {
+      success: false,
+      error: {
+        code,
+        message,
+        userTip,
+        isIframeBlocked: Boolean(isIframe && (err?.code === 1 || err?.code === 3)),
+      },
+    };
+  }
+}
+
+/**
+ * Attempts geolocation prioritizing HIGH ACCURACY (hardware GPS / true mobile antenna):
+ * Phase 1: High accuracy GPS query with precision filter.
+ * Phase 2: If Phase 1 times out or is unavailable, fallback to network WiFi/cellular (with precision check).
+ * Phase 3: If browser GPS fails, report clear error or fallback only if permitted.
+ */
+export async function getSmartGeolocation(options?: GeolocationFilterOptions): Promise<
+  | { success: true; data: SmartGeoResult }
+  | { success: false; error: SmartGeoError }
+> {
+  const maxAccuracy = options?.maxAccuracyMeters ?? 800;
+  const timeout = options?.timeoutMs ?? 5500;
+  const allowNetworkFallback = options?.allowNetworkFallback ?? true;
+
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return {
+      success: false,
+      error: {
+        code: 'NOT_SUPPORTED',
+        message: 'Tu navegador o dispositivo no soporta la API de geolocalización.',
+        userTip: 'Puedes seleccionar tu ciudad o destino directamente en el modal.',
       },
     };
   }
@@ -255,26 +413,25 @@ export async function getSmartGeolocation(): Promise<{
   let lastError: any = null;
   let providerUsed: 'gps_high_accuracy' | 'network' = 'gps_high_accuracy';
 
-  // Phase 1: High accuracy hardware GPS first (no stale cache)
+  // Phase 1: High accuracy hardware GPS first (timeout to avoid freezing)
   try {
     position = await queryBrowserPosition({
       enableHighAccuracy: true,
-      maximumAge: 0,
-      timeout: 10000,
+      maximumAge: 15000,
+      timeout,
     });
     providerUsed = 'gps_high_accuracy';
   } catch (err: any) {
     lastError = err;
   }
 
-  // Phase 2: If Phase 1 failed because of timeout or position unavailable (not permission denied),
-  // fallback to network/WiFi triangulation
-  if (!position && lastError && lastError.code !== 1) {
+  // Phase 2: If Phase 1 failed because of timeout or position unavailable (not permission denied)
+  if (!position && allowNetworkFallback && lastError && lastError.code !== 1) {
     try {
       position = await queryBrowserPosition({
         enableHighAccuracy: false,
-        maximumAge: 10000,
-        timeout: 6000,
+        maximumAge: 60000,
+        timeout: 3500,
       });
       providerUsed = 'network';
     } catch (err: any) {
@@ -282,27 +439,55 @@ export async function getSmartGeolocation(): Promise<{
     }
   }
 
+  // Precision filter check on obtained browser position
+  if (position) {
+    const accuracy = position.coords.accuracy;
+    if (typeof accuracy === 'number' && accuracy > maxAccuracy) {
+      return {
+        success: false,
+        error: {
+          code: 'LOW_ACCURACY',
+          message: `Lectura GPS imprecisa (±${Math.round(accuracy)}m). Supera el margen de exactitud de ±${maxAccuracy}m.`,
+          userTip: 'Para evitar ubicarte erróneamente en Hanói cuando estás en Sa Pa u otra ciudad, selecciona tu ciudad actual.',
+          accuracy: Math.round(accuracy),
+          threshold: maxAccuracy,
+          rawCoords: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy,
+          },
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: processGeolocationPosition(position, providerUsed, true),
+    };
+  }
+
+  // Fallback Phase 3: Only if IP fallback is explicitly desired and wasn't denied
   if (!position) {
     const isIframe = typeof window !== 'undefined' && window.self !== window.top;
     let code: SmartGeoError['code'] = 'UNKNOWN';
-    let message = 'No se pudo obtener la posición GPS.';
-    let userTip = 'Puedes elegir uno de los puntos sugeridos de Vietnam con 1 clic.';
+    let message = 'No se pudo obtener la posición GPS exacta.';
+    let userTip = 'Puedes elegir Sa Pa, Hanói, Đà Nẵng u otra ciudad con 1 clic.';
     const isIframeBlocked = Boolean(isIframe && (lastError?.code === 1 || lastError?.code === 3));
 
     if (lastError?.code === 1) {
       code = 'PERMISSION_DENIED';
       message = 'Permiso de ubicación no concedido en el navegador o bloqueado por el visor de la aplicación.';
       userTip = isIframe
-        ? 'Los visores web en ventanas integradas suelen restringir el GPS por seguridad. Pulsa "Probar en Hanói/Hội An" o abre la app en una nueva pestaña.'
+        ? 'Los visores web integrados suelen restringir el GPS por seguridad. Pulsa tu ciudad actual (Sa Pa, Hanói...) en el selector.'
         : 'Revisa el icono de candado o ubicación en la barra de direcciones de tu navegador para dar permiso.';
     } else if (lastError?.code === 2) {
       code = 'POSITION_UNAVAILABLE';
       message = 'La señal de satélites GPS o triangulación de red no está disponible en este momento.';
-      userTip = 'Si estás en interiores o en un ordenador sin antena GPS, usa la simulación de ubicación.';
+      userTip = 'Si estás en interiores o en un ordenador sin antena GPS, selecciona tu ciudad en el modal.';
     } else if (lastError?.code === 3) {
       code = 'TIMEOUT';
       message = 'Tiempo de espera agotado buscando satélites GPS.';
-      userTip = 'Verifica que la antena de ubicación esté activa en los ajustes de tu móvil.';
+      userTip = 'Verifica que la antena de ubicación esté activa en tu dispositivo o elige tu ciudad en el selector.';
     }
 
     return {
@@ -384,6 +569,7 @@ export function createSimulatedResult(presetId: string): SmartGeoResult {
     distanceToVietnamKm: 0,
     closestPoi: poi,
     distanceToClosestPoiKm: 0.1,
+    closestCity: preset.cityName,
     recommendedRegionId: preset.regionId,
     isSimulated: true,
     simulatedName: preset.name,

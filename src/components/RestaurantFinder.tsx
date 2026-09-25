@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   UtensilsCrossed,
   Star,
@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Globe,
   BookOpen,
+  ExternalLink,
 } from 'lucide-react';
 import {
   RestaurantItem,
@@ -33,8 +34,15 @@ import {
 } from '../utils/restaurantAlgorithm';
 import { RestaurantMap, getRestaurantTheme } from './RestaurantMap';
 import { RestaurantMenuModal } from './RestaurantMenuModal';
+import { CitySelectionModal } from './CitySelectionModal';
 import { speakVietnamese } from '../utils/storage';
 import { useItineraryState } from '../utils/useItineraryState';
+import {
+  getRobustBrowserGeolocation,
+  getSmartGeolocation,
+  watchSmartGeolocation,
+} from '../utils/geolocation';
+import { CITY_COORDINATES_MAP, VietnamCityDestination } from '../data/cities';
 
 interface RestaurantFinderProps {
   ratesData: ExchangeRatesData;
@@ -44,15 +52,7 @@ interface RestaurantFinderProps {
   onToggleOnlineMode?: () => void;
 }
 
-const CITY_COORDINATES: Record<string, { lat: number; lng: number; zoom: number }> = {
-  'Hà Nội': { lat: 21.0285, lng: 105.8542, zoom: 14 },
-  'Hội An': { lat: 15.8801, lng: 108.3300, zoom: 15 },
-  'Đà Nẵng': { lat: 16.0680, lng: 108.2208, zoom: 14 },
-  'Huế': { lat: 16.4637, lng: 107.5909, zoom: 14 },
-  'TP. Hồ Chí Minh': { lat: 10.7769, lng: 106.7009, zoom: 14 },
-  'Ninh Bình': { lat: 20.2506, lng: 105.9745, zoom: 13 },
-  'Todo Vietnam': { lat: 16.0471, lng: 108.2062, zoom: 6 },
-};
+const CITY_COORDINATES = CITY_COORDINATES_MAP;
 
 export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
   ratesData,
@@ -63,9 +63,23 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
 }) => {
   // Budget & Filter State
   const [budgetPref, setBudgetPref] = useState<BudgetPreference>('all');
-  const [selectedCity, setSelectedCity] = useState<string>('Hà Nội');
+  const [selectedCity, setSelectedCity] = useState<string>(() => {
+    try {
+      return localStorage.getItem('vietnam_travel_selected_city') || 'Sa Pa';
+    } catch {
+      return 'Sa Pa';
+    }
+  });
   const [sortOption, setSortOption] = useState<RestaurantSortOption>('algorithm');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const handleSelectCity = useCallback((city: string) => {
+    setSelectedCity(city);
+    setSelectedRestaurant(null);
+    try {
+      localStorage.setItem('vietnam_travel_selected_city', city);
+    } catch {}
+  }, []);
 
   // View state: 'split' | 'map' | 'list'
   const [viewMode, setViewMode] = useState<'split' | 'map' | 'list'>('split');
@@ -79,9 +93,34 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('Almuerzo 13:00');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Manual City Selection Modal State
+  const [isCityModalOpen, setIsCityModalOpen] = useState<boolean>(false);
+  const [cityModalReason, setCityModalReason] = useState<string | null>(null);
+
+  // Quality Rating Filter State: strict (>=4.5★ & >=10 reviews) vs flexible (>=4.0★ & >=5 reviews)
+  const [strictRatingFilter, setStrictRatingFilter] = useState<boolean>(true);
+
   // Geolocation State
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [isLiveTracking, setIsLiveTracking] = useState<boolean>(false);
+  const [isSimulatingLiveWalk, setIsSimulatingLiveWalk] = useState<boolean>(false);
+  const stopWatchRef = useRef<(() => void) | null>(null);
+  const simTimerRef = useRef<any>(null);
+
+  // Clean up live watch & simulation on unmount
+  useEffect(() => {
+    return () => {
+      if (stopWatchRef.current) {
+        stopWatchRef.current();
+        stopWatchRef.current = null;
+      }
+      if (simTimerRef.current) {
+        clearInterval(simTimerRef.current);
+        simTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Live online Google Places search state
   const [liveRestaurants, setLiveRestaurants] = useState<RestaurantItem[]>([]);
@@ -96,10 +135,157 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
     }, 3000);
   }, []);
 
-  // Strict quality filter for offline curated dataset: only >4.5★ and >=10 reviews
-  const { filtered: approvedRestaurants } = useMemo(() => {
-    return filterStrictRestaurants(RAW_RESTAURANTS_DATA);
-  }, []);
+  // Handle manual city selection from modal
+  const handleSelectCityFromModal = useCallback(
+    (city: VietnamCityDestination) => {
+      if (stopWatchRef.current) {
+        stopWatchRef.current();
+        stopWatchRef.current = null;
+      }
+      setIsLiveTracking(false);
+      setSelectedCity(city.name);
+      setUserCoords({ lat: city.lat, lng: city.lng, accuracy: 25 });
+      setSelectedRestaurant(null);
+      setSortOption('algorithm');
+      try {
+        localStorage.setItem('vietnam_travel_selected_city', city.name);
+      } catch {}
+      showToast(`📍 Ubicación ajustada a ${city.name}. Buscador y mapa centrados.`);
+      setIsCityModalOpen(false);
+      setCityModalReason(null);
+    },
+    [showToast]
+  );
+
+  // Toggle continuous real-time live GPS tracking
+  const toggleLiveTracking = useCallback(() => {
+    // If active (either real GPS or simulation), pause
+    if (isLiveTracking || isSimulatingLiveWalk) {
+      if (stopWatchRef.current) {
+        stopWatchRef.current();
+        stopWatchRef.current = null;
+      }
+      if (simTimerRef.current) {
+        clearInterval(simTimerRef.current);
+        simTimerRef.current = null;
+      }
+      setIsLiveTracking(false);
+      setIsSimulatingLiveWalk(false);
+      showToast('⏸️ Rastreo en tiempo real pausado.');
+      return;
+    }
+
+    if (stopWatchRef.current) {
+      stopWatchRef.current();
+      stopWatchRef.current = null;
+    }
+    if (simTimerRef.current) {
+      clearInterval(simTimerRef.current);
+      simTimerRef.current = null;
+    }
+
+    showToast('🛰️ Conectando sensor GPS en tiempo real...');
+    setIsLocating(true);
+
+    const stopFn = watchSmartGeolocation(
+      (result) => {
+        setIsLocating(false);
+        setIsLiveTracking(true);
+        setIsSimulatingLiveWalk(false);
+        const { coords, isInsideVietnam, closestCity, closestPoi, distanceToClosestPoiKm, distanceToVietnamKm } = result;
+
+        // Set user coordinates regardless of country
+        setUserCoords({ lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy });
+
+        if (isInsideVietnam) {
+          setSelectedCity('Cerca de mí');
+          setSortOption('distance');
+          const acc = coords.accuracy ? `(±${Math.round(coords.accuracy)}m)` : '';
+          showToast(`📍 Posición en tiempo real actualizada en ${closestCity || 'Vietnam'} ${acc}`);
+        } else {
+          showToast(`🛰️ GPS en tiempo real activo: ${coords.latitude.toFixed(3)}°N, ${coords.longitude.toFixed(3)}°E (a ${distanceToVietnamKm.toLocaleString()} km de Vietnam). Se muestra tu posición.`);
+        }
+      },
+      (error) => {
+        setIsLocating(false);
+        setIsLiveTracking(false);
+        if (stopWatchRef.current) {
+          stopWatchRef.current();
+          stopWatchRef.current = null;
+        }
+
+        const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+        if (error.code === 'PERMISSION_DENIED') {
+          setCityModalReason(
+            isIframe
+              ? 'El visor de AI Studio bloquea el GPS por seguridad en iframe. Abre la app en el navegador directo para activar la antena GPS en tiempo real o selecciona tu ciudad:'
+              : 'Permiso de ubicación no concedido en el navegador. Revisa los permisos o elige tu ciudad en el modal:'
+          );
+          setIsCityModalOpen(true);
+        } else {
+          showToast(`Aviso GPS: ${error.message}`);
+        }
+      }
+    );
+
+    stopWatchRef.current = stopFn;
+  }, [isLiveTracking, isSimulatingLiveWalk, showToast]);
+
+  // Simulate real-time GPS walk in Vietnam (ideal when testing from abroad or planning at home)
+  const handleToggleSimulatedWalk = useCallback((targetCityName: string = 'Sa Pa') => {
+    if (isSimulatingLiveWalk) {
+      if (simTimerRef.current) {
+        clearInterval(simTimerRef.current);
+        simTimerRef.current = null;
+      }
+      setIsSimulatingLiveWalk(false);
+      setIsLiveTracking(false);
+      showToast('⏸️ Simulación de paseo en tiempo real pausada.');
+      return;
+    }
+
+    if (stopWatchRef.current) {
+      stopWatchRef.current();
+      stopWatchRef.current = null;
+    }
+
+    const cityCoord = CITY_COORDINATES[targetCityName] || CITY_COORDINATES['Sa Pa'] || { lat: 22.3356, lng: 103.8415 };
+    let currentLat = cityCoord.lat;
+    let currentLng = cityCoord.lng;
+    let stepCount = 0;
+
+    setUserCoords({ lat: currentLat, lng: currentLng, accuracy: 6 });
+    setSelectedCity('Cerca de mí');
+    setSortOption('distance');
+    setIsLiveTracking(true);
+    setIsSimulatingLiveWalk(true);
+    showToast(`🚶 Paseo en tiempo real iniciado en ${targetCityName}. Caminando por las calles...`);
+
+    // Advance coordinates every 3.5s to emulate real-time walking
+    simTimerRef.current = setInterval(() => {
+      stepCount++;
+      // Gentle walk along streets (approx 15-20 meters per step)
+      const latDelta = (Math.sin(stepCount * 0.4) * 0.00015) + ((Math.random() - 0.5) * 0.00008);
+      const lngDelta = (Math.cos(stepCount * 0.4) * 0.00018) + ((Math.random() - 0.5) * 0.00008);
+      currentLat += latDelta;
+      currentLng += lngDelta;
+
+      setUserCoords({
+        lat: Number(currentLat.toFixed(6)),
+        lng: Number(currentLng.toFixed(6)),
+        accuracy: Math.floor(4 + Math.random() * 5),
+      });
+    }, 3500);
+  }, [isSimulatingLiveWalk, showToast]);
+
+  // Dynamic filter thresholds
+  const minRatingThreshold = strictRatingFilter ? 4.5 : 4.0;
+  const minReviewsThreshold = strictRatingFilter ? 10 : 5;
+
+  // Quality filter for offline curated dataset
+  const { filtered: approvedRestaurants, discarded: discardedCurated } = useMemo(() => {
+    return filterStrictRestaurants(RAW_RESTAURANTS_DATA, minRatingThreshold, minReviewsThreshold);
+  }, [minRatingThreshold, minReviewsThreshold]);
 
   // Live Online Google Places fetching when in online mode
   useEffect(() => {
@@ -153,16 +339,50 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
     };
   }, [isOnline, searchQuery, selectedCity, userCoords?.lat, userCoords?.lng]);
 
+  // Count how many matching venues were excluded by strict quality filter
+  const hiddenMatchingCount = useMemo(() => {
+    if (!strictRatingFilter) return 0;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return 0;
+
+    let count = 0;
+    // Check in raw curated offline
+    RAW_RESTAURANTS_DATA.forEach((r) => {
+      const isLowQuality = r.rating < 4.5 || r.reviewsCount < 10;
+      if (isLowQuality) {
+        const matches =
+          r.name.toLowerCase().includes(q) ||
+          r.nameVi.toLowerCase().includes(q) ||
+          r.specialties.some((s) => s.toLowerCase().includes(q)) ||
+          r.mustOrderDish.toLowerCase().includes(q) ||
+          r.description.toLowerCase().includes(q);
+        if (matches) count++;
+      }
+    });
+
+    // Check in live online results
+    liveRestaurants.forEach((r) => {
+      if (r.rating < 4.5 || r.reviewsCount < 10) {
+        const matches =
+          r.name.toLowerCase().includes(q) ||
+          r.nameVi.toLowerCase().includes(q) ||
+          r.mustOrderDish.toLowerCase().includes(q);
+        if (matches) count++;
+      }
+    });
+
+    return count;
+  }, [strictRatingFilter, searchQuery, liveRestaurants]);
+
   // Combined Pool: In Online mode, displays all live Google Places results + enriched curated highlights
   const displayPool = useMemo(() => {
-    // OFFLINE MODE: strictly filter offline catalog
-    if (!isOnline) {
-      return approvedRestaurants.filter((restaurant) => {
-        if (selectedCity !== 'Todo Vietnam' && restaurant.city !== selectedCity) {
-          return false;
-        }
+    const hasSearch = searchQuery.trim().length > 0;
 
-        if (searchQuery.trim()) {
+    // OFFLINE MODE: filter offline catalog
+    if (!isOnline) {
+      const sourceList = hasSearch ? RAW_RESTAURANTS_DATA : approvedRestaurants;
+      return sourceList.filter((restaurant) => {
+        if (hasSearch) {
           const q = searchQuery.toLowerCase().trim();
           const matchesName =
             restaurant.name.toLowerCase().includes(q) ||
@@ -175,6 +395,21 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
           if (!matchesName && !matchesSpecialties && !matchesMustOrder && !matchesDistrict && !matchesDesc) {
             return false;
           }
+
+          // If manual search query is typed and matches, let it through even if in another city
+          if (selectedCity !== 'Todo Vietnam' && selectedCity !== 'Cerca de mí') {
+            if (restaurant.city === selectedCity) return true;
+            return matchesName;
+          }
+          return true;
+        }
+
+        if (
+          selectedCity !== 'Todo Vietnam' &&
+          selectedCity !== 'Cerca de mí' &&
+          restaurant.city !== selectedCity
+        ) {
+          return false;
         }
 
         return true;
@@ -188,8 +423,17 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
     const normalizeName = (n: string) =>
       n.toLowerCase().replace(/restaurant|quán|nhà hàng|vietnamese|food|&|cafe|bistro/gi, '').trim();
 
-    // 1. Add live results from Google Places API
-    liveRestaurants.forEach((item) => {
+    // 1. Add results from Google Places API
+    // When searching manually, keep all matching results (ratings and review counts are clearly displayed on cards)
+    const qualityLive = liveRestaurants.filter((item) => {
+      if (hasSearch) return true;
+      if (item.rating < minRatingThreshold || item.reviewsCount < minReviewsThreshold) {
+        return false;
+      }
+      return true;
+    });
+
+    qualityLive.forEach((item) => {
       const key = normalizeName(item.name);
       if (!seenNames.has(key)) {
         seenNames.add(key);
@@ -197,12 +441,9 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
       }
     });
 
-    // 2. Add or enrich with verified curated recommendations
-    approvedRestaurants.forEach((curated) => {
-      if (selectedCity !== 'Todo Vietnam' && curated.city !== selectedCity) {
-        return;
-      }
-
+    // 2. Add or enrich with curated recommendations (when searching, search entire catalog)
+    const curatedSource = hasSearch ? RAW_RESTAURANTS_DATA : approvedRestaurants;
+    curatedSource.forEach((curated) => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesName =
@@ -216,6 +457,18 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
         if (!matchesName && !matchesSpecialties && !matchesMustOrder && !matchesDistrict && !matchesDesc) {
           return;
         }
+
+        if (selectedCity !== 'Todo Vietnam' && selectedCity !== 'Cerca de mí') {
+          if (curated.city !== selectedCity && !matchesName) {
+            return;
+          }
+        }
+      } else if (
+        selectedCity !== 'Todo Vietnam' &&
+        selectedCity !== 'Cerca de mí' &&
+        curated.city !== selectedCity
+      ) {
+        return;
       }
 
       const key = normalizeName(curated.name);
@@ -240,7 +493,15 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
     });
 
     return combined;
-  }, [isOnline, approvedRestaurants, liveRestaurants, selectedCity, searchQuery]);
+  }, [
+    isOnline,
+    approvedRestaurants,
+    liveRestaurants,
+    selectedCity,
+    searchQuery,
+    minRatingThreshold,
+    minReviewsThreshold,
+  ]);
 
   // Algorithmic sorting with budget affinity
   const sortedScoredEntries = useMemo(() => {
@@ -248,12 +509,11 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
   }, [displayPool, sortOption, budgetPref, userCoords]);
 
   // Base map center for current city/area
-  // Intentionally independent of selectedRestaurant so closing or deselecting a restaurant NEVER triggers recentering or zoom out
   const currentMapCenter = useMemo(() => {
-    if (userCoords && selectedCity === 'Cerca de mí') {
+    if (userCoords && (selectedCity === 'Cerca de mí' || !CITY_COORDINATES[selectedCity])) {
       return { lat: userCoords.lat, lng: userCoords.lng };
     }
-    return CITY_COORDINATES[selectedCity] || CITY_COORDINATES['Hà Nội'];
+    return CITY_COORDINATES[selectedCity] || CITY_COORDINATES['Sa Pa'] || { lat: 22.3356, lng: 103.8415, zoom: 14 };
   }, [userCoords, selectedCity]);
 
   // Format currency helpers
@@ -269,35 +529,67 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
     [eurToVnd]
   );
 
-  // Handle GPS location request
-  const handleRequestLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      showToast('Tu navegador no soporta geolocalización.');
+  // Handle GPS location request with robust browser geolocation and precision filter
+  const handleRequestLocation = useCallback(async () => {
+    if (userCoords && selectedCity === 'Cerca de mí') {
+      setUserCoords(null);
+      setSelectedCity('Sa Pa');
+      setSortOption('algorithm');
+      showToast('📍 Modo GPS desactivado. Mostrando restaurantes de Sa Pa.');
       return;
     }
 
     setIsLocating(true);
+    showToast('🛰️ Leyendo coordenadas GPS con filtro de precisión...');
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        setUserCoords({ lat: latitude, lng: longitude, accuracy });
-        setIsLocating(false);
-        setSortOption('distance');
-        showToast('📍 GPS activado. Ordenado por cercanía.');
-      },
-      (error) => {
-        console.warn('Geolocation error:', error);
-        setIsLocating(false);
-        showToast('No se pudo acceder al GPS.');
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
+    try {
+      // Robust browser API call with precision filter
+      const res = await getRobustBrowserGeolocation({ maxAccuracyMeters: 2500, timeoutMs: 7000 });
+      setIsLocating(false);
+
+      if (res.success) {
+        const { coords, isInsideVietnam, closestPoi, distanceToClosestPoiKm, closestCity, distanceToVietnamKm } = res.data;
+        setUserCoords({ lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy });
+
+        if (isInsideVietnam) {
+          setSelectedCity('Cerca de mí');
+          setSortOption('distance');
+          const cityName = closestCity || closestPoi.city || 'Sa Pa';
+          const accInfo = coords.accuracy ? ` (±${Math.round(coords.accuracy)}m)` : '';
+          showToast(
+            `📍 GPS exacto fijado en ${cityName}${accInfo} • Cerca de ${closestPoi.nameEs} (${distanceToClosestPoiKm} km). Ordenado por cercanía.`
+          );
+        } else {
+          // User is outside Vietnam -> User coords are set so blue dot is visible!
+          showToast(
+            `🛰️ GPS detectado en ${coords.latitude.toFixed(3)}°N, ${coords.longitude.toFixed(3)}°E (a ${distanceToVietnamKm.toLocaleString()} km de Vietnam). Punto azul activo en mapa.`
+          );
+        }
+      } else {
+        // Failed exact reading or failed precision filter
+        const err = res.error;
+        if (err.rawCoords) {
+          setUserCoords({ lat: err.rawCoords.latitude, lng: err.rawCoords.longitude, accuracy: err.rawCoords.accuracy });
+        }
+        let reason = 'No se pudo obtener la posición GPS exacta del navegador.';
+        if (err.code === 'LOW_ACCURACY') {
+          reason = `🛰️ Precisión GPS moderada (±${err.accuracy}m). Se ha fijado tu punto aproximado en el mapa. Si prefieres afinarlo a tu ciudad actual, selecciónala:`;
+        } else if (err.code === 'PERMISSION_DENIED') {
+          reason = 'Permiso de ubicación no concedido en el navegador o bloqueado por el visor web. Selecciona manualmente tu ciudad:';
+        } else if (err.code === 'POSITION_UNAVAILABLE' || err.code === 'TIMEOUT') {
+          reason = 'Señal satelital no disponible o tiempo de espera agotado. Elige tu ciudad para ajustar el mapa y buscador:';
+        }
+
+        setCityModalReason(reason);
+        setIsCityModalOpen(true);
+        showToast('📍 Abre el selector manual para ajustar tu ciudad.');
       }
-    );
-  }, [showToast]);
+    } catch {
+      setIsLocating(false);
+      setCityModalReason('No se pudo conectar al sensor GPS del navegador. Elige tu ciudad actual:');
+      setIsCityModalOpen(true);
+    }
+  }, [userCoords, selectedCity, showToast]);
 
   // Handle selecting a restaurant and optionally scrolling to the map (toggle off if clicked again)
   const handleSelectRestaurant = useCallback(
@@ -374,30 +666,89 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
 
           {/* City Selection Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+            {/* Real-time Continuous Live GPS Toggle Button */}
             <button
-              onClick={handleRequestLocation}
+              type="button"
+              onClick={toggleLiveTracking}
               disabled={isLocating}
-              title="Filtrar por cercanía a mi posición GPS"
+              title={
+                isLiveTracking
+                  ? 'Rastreo en tiempo real activo. Haz clic para pausar.'
+                  : 'Activar sensor GPS en tiempo real para seguir mi posición mientras camino o me muevo'
+              }
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                userCoords
-                  ? 'bg-sky-500 text-white shadow-xs'
+                isLiveTracking
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs ring-2 ring-emerald-400/50'
+                  : userCoords && selectedCity === 'Cerca de mí'
+                  ? 'bg-sky-500 hover:bg-sky-600 text-white shadow-xs'
                   : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
               }`}
             >
-              <Crosshair className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />
-              <span>{isLocating ? 'GPS...' : userCoords ? 'Cerca de mí' : 'GPS'}</span>
+              {isLiveTracking ? (
+                <>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                  </span>
+                  <span>{isSimulatingLiveWalk ? '🚶 Paseo en Vivo' : '🔴 GPS En Vivo'}</span>
+                </>
+              ) : (
+                <>
+                  <Crosshair className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin text-sky-500' : ''}`} />
+                  <span>{isLocating ? 'GPS...' : userCoords ? 'GPS Activo' : 'GPS Tiempo Real'}</span>
+                </>
+              )}
             </button>
 
-            {Object.keys(CITY_COORDINATES).map((city) => {
+            {/* Simulated Live GPS walk button (perfect for testing from home/abroad) */}
+            <button
+              type="button"
+              onClick={() => handleToggleSimulatedWalk(selectedCity !== 'Cerca de mí' && selectedCity !== 'Todo Vietnam' ? selectedCity : 'Sa Pa')}
+              title="Simular un paseo en tiempo real por Vietnam para ver cómo se recalculan las distancias y restaurantes"
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1 shrink-0 ${
+                isSimulatingLiveWalk
+                  ? 'bg-amber-500 text-stone-950 font-bold ring-2 ring-amber-300'
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200'
+              }`}
+            >
+              <span>🚶</span>
+              <span className="hidden sm:inline">{isSimulatingLiveWalk ? 'Pausar Paseo' : 'Simular Paseo'}</span>
+            </button>
+
+            {/* Manual City Selector Modal Trigger */}
+            <button
+              type="button"
+              onClick={() => {
+                setCityModalReason(null);
+                setIsCityModalOpen(true);
+              }}
+              title="Abrir modal para seleccionar manualmente tu ciudad (Sapa, Hanói, Đà Nẵng, etc.)"
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-2xs"
+            >
+              <MapPin className="w-3.5 h-3.5 text-amber-600" />
+              <span>Elegir ciudad...</span>
+            </button>
+
+            {/* Quick Frequent Destinations */}
+            {Array.from(
+              new Set([
+                'Sa Pa',
+                'Hà Nội',
+                'Ninh Bình',
+                'Đà Nẵng',
+                'Hội An',
+                'Huế',
+                'TP. Hồ Chí Minh',
+                ...(selectedCity !== 'Cerca de mí' && selectedCity !== 'Todo Vietnam' ? [selectedCity] : []),
+                'Todo Vietnam',
+              ])
+            ).map((city) => {
               const isSelected = selectedCity === city;
               return (
                 <button
                   key={city}
                   type="button"
-                  onClick={() => {
-                    setSelectedCity(city);
-                    setSelectedRestaurant(null);
-                  }}
+                  onClick={() => handleSelectCity(city)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition cursor-pointer shrink-0 ${
                     isSelected
                       ? 'bg-stone-900 text-white font-bold shadow-xs'
@@ -413,7 +764,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
 
         {/* Row 2: Budget Pills, Search & View Toggle */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Budget Selector Pills */}
+          {/* Budget Selector Pills & Quality Filter */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
             <span className="text-xs font-semibold text-stone-400 mr-1 shrink-0">Presupuesto:</span>
             {(['all', 'budget', 'moderate', 'fine'] as BudgetPreference[]).map((tierKey) => {
@@ -439,6 +790,25 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                 </button>
               );
             })}
+
+            {/* Quality Rating Filter Toggle */}
+            <button
+              type="button"
+              onClick={() => setStrictRatingFilter((prev) => !prev)}
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-2xs ${
+                strictRatingFilter
+                  ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300'
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200'
+              }`}
+              title={
+                strictRatingFilter
+                  ? 'Filtro de calidad estricto activo: solo locales con ≥4.5★ y ≥10 reseñas. Haz clic para activar filtro flexible (≥4.0★)'
+                  : 'Filtro flexible activo: mostrando locales desde 4.0★. Haz clic para activar filtro estricto (≥4.5★)'
+              }
+            >
+              <Star className={`w-3.5 h-3.5 ${strictRatingFilter ? 'text-amber-500 fill-amber-500' : 'text-stone-400'}`} />
+              <span>{strictRatingFilter ? 'Filtro: ≥ 4.5★ (Estricto)' : 'Filtro: ≥ 4.0★ (Flexible)'}</span>
+            </button>
           </div>
 
           {/* Search Bar + View Toggle */}
@@ -506,74 +876,81 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
         </div>
       </div>
 
-      {/* Online / Offline Mode Indicator Banner */}
-      <div
-        className={`px-4 py-2.5 rounded-2xl border text-xs flex flex-wrap items-center justify-between gap-3 transition-all ${
-          isOnline
-            ? 'bg-emerald-50/90 border-emerald-200 text-emerald-900 shadow-2xs'
-            : 'bg-amber-50/90 border-amber-200 text-amber-900 shadow-2xs'
-        }`}
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="relative flex h-2.5 w-2.5 shrink-0">
-            {isOnline && (
+      {/* Streamlined Live Status Bar (Only appears when live searching, tracking or simulating) */}
+      {(isSearchingOnline || isLiveTracking || isSimulatingLiveWalk || (userCoords && (userCoords.lat < 8 || userCoords.lat > 24 || userCoords.lng < 102 || userCoords.lng > 110))) && (
+        <div className="px-3.5 py-2 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-2 bg-stone-900 text-stone-100 border-stone-800 shadow-xs animate-fade-in">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            )}
-            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isOnline ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-          </span>
-
-          <div className="min-w-0">
-            <div className="font-bold flex items-center gap-2 flex-wrap">
-              <span>{isOnline ? 'Modo Online Activo' : 'Modo Offline (Sin Conexión)'}</span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <div className="text-stone-300 text-[11px] truncate">
               {isSearchingOnline ? (
-                <span className="text-[11px] text-emerald-700 font-medium inline-flex items-center gap-1 bg-emerald-100/80 px-2 py-0.5 rounded-md">
-                  <RefreshCw className="w-3 h-3 animate-spin text-emerald-600" />
-                  Buscando en Google Maps...
+                <span className="text-amber-300 flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3 animate-spin" /> Buscando en Google Maps...
                 </span>
-              ) : isOnline ? (
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full border border-emerald-200/80">
-                  Google Places en directo
-                </span>
+              ) : isSimulatingLiveWalk ? (
+                <span>🚶 Paseo simulado activo en <strong className="text-white">{selectedCity === 'Cerca de mí' ? 'Sa Pa' : selectedCity}</strong> (recalculando distancias)</span>
+              ) : isLiveTracking ? (
+                <span>📍 GPS en vivo activo {userCoords ? `(${userCoords.lat.toFixed(3)}°, ${userCoords.lng.toFixed(3)}°)` : ''}</span>
               ) : (
-                <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full border border-amber-200/80">
-                  Catálogo local guardado
-                </span>
-              )}
-              {liveSearchError && isOnline && (
-                <span className="text-[11px] text-amber-700 font-normal">({liveSearchError})</span>
+                <span>📍 GPS en extranjero. Pulsa "Simular Paseo" para probar en Vietnam.</span>
               )}
             </div>
-            <p className="text-[11px] opacity-80 mt-0.5">
-              {isOnline
-                ? `Mostrando ${sortedScoredEntries.length} restaurantes encontrados en Google Maps y selección local para ${selectedCity}.`
-                : `Mostrando catálogo de restaurantes verificados descargados para viajar sin consumir datos.`}
-            </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {isSimulatingLiveWalk ? (
+              <button
+                type="button"
+                onClick={() => handleToggleSimulatedWalk()}
+                className="px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-300 text-xs font-semibold cursor-pointer transition"
+              >
+                Detener paseo
+              </button>
+            ) : isLiveTracking ? (
+              <button
+                type="button"
+                onClick={toggleLiveTracking}
+                className="px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold cursor-pointer transition"
+              >
+                Pausar GPS
+              </button>
+            ) : null}
           </div>
         </div>
-
-        {onToggleOnlineMode && (
-          <button
-            type="button"
-            onClick={onToggleOnlineMode}
-            className={`px-3 py-1 rounded-xl text-xs font-semibold border transition cursor-pointer shrink-0 shadow-2xs ${
-              isOnline
-                ? 'bg-white hover:bg-emerald-100/70 border-emerald-300 text-emerald-800'
-                : 'bg-white hover:bg-amber-100/70 border-amber-300 text-amber-800'
-            }`}
-          >
-            {isOnline ? 'Pasar a Modo Offline' : 'Activar Modo Online'}
-          </button>
-        )}
-      </div>
+      )}
 
       {/* Main Content: Map & Uncluttered Cards */}
       <div className="space-y-4">
         {/* Interactive Map (when in split or map mode) */}
         {viewMode !== 'list' && (
-          <div id="restaurant-map-section" className="bg-white rounded-2xl p-2 sm:p-3 border border-stone-200/90 shadow-xs">
+          <div id="restaurant-map-section" className="bg-white rounded-2xl p-2 sm:p-3 border border-stone-200/90 shadow-xs space-y-2">
+            <div className="flex items-center justify-between px-2 pt-1 pb-0.5 text-xs">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <span className="text-stone-600 truncate">
+                  Centro: <strong className="text-stone-900 font-bold">{selectedCity === 'Cerca de mí' ? 'GPS' : selectedCity}</strong>
+                </span>
+                <span className="text-stone-400 hidden sm:inline">· {sortedScoredEntries.length} restaurantes</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCityModalReason(null);
+                  setIsCityModalOpen(true);
+                }}
+                className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 hover:underline flex items-center gap-1 cursor-pointer shrink-0 ml-2"
+                title="Ajustar manualmente la ciudad y el centro del mapa"
+              >
+                <span>Cambiar ciudad</span>
+                <span>→</span>
+              </button>
+            </div>
+
             <RestaurantMap
               center={currentMapCenter}
-              zoom={CITY_COORDINATES[selectedCity]?.zoom || 14}
+              zoom={selectedCity === 'Cerca de mí' ? 15 : (CITY_COORDINATES[selectedCity]?.zoom || 14)}
               items={sortedScoredEntries}
               selectedRestaurantId={selectedRestaurant?.id}
               onSelectRestaurant={(restaurant) => {
@@ -590,7 +967,9 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                 setViewingMenuRestaurant(r);
               }}
               userLocation={userCoords}
-              userLocationLabel="Tu ubicación"
+              userLocationLabel={isLiveTracking ? 'Tu posición en tiempo real' : 'Tu ubicación'}
+              isLiveTracking={isLiveTracking}
+              onToggleLiveTracking={toggleLiveTracking}
               className={viewMode === 'map' ? 'h-[580px]' : 'h-[360px] sm:h-[400px]'}
             />
 
@@ -660,23 +1039,61 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
         {/* Clean Restaurant Cards List (when in split or list mode) */}
         {viewMode !== 'map' && (
           <div className="space-y-3">
-            {sortedScoredEntries.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-stone-300 space-y-2">
-                <UtensilsCrossed className="w-8 h-8 text-stone-300 mx-auto" />
-                <h4 className="font-bold text-stone-800 text-sm">No hay restaurantes con estos filtros</h4>
-                <p className="text-xs text-stone-500">
-                  Prueba a seleccionar "Todos" en presupuesto o cambiar de ciudad.
-                </p>
+            {/* Active search query feedback banner */}
+            {searchQuery.trim() && (
+              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-stone-800 animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-xl bg-amber-500 text-stone-950 font-bold shrink-0">
+                    <Search className="w-3.5 h-3.5" />
+                  </span>
+                  <div>
+                    <span>
+                      Resultados para <strong>"{searchQuery}"</strong> ({sortedScoredEntries.length} {sortedScoredEntries.length === 1 ? 'opción encontrada' : 'opciones encontradas'}). Búsqueda directa sin restricciones de ciudad.
+                    </span>
+                  </div>
+                </div>
                 <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setBudgetPref('all');
-                    setSelectedCity('Hà Nội');
-                  }}
-                  className="px-3 py-1.5 bg-amber-500 text-stone-950 font-bold rounded-xl text-xs transition cursor-pointer"
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="px-2.5 py-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-lg text-xs font-semibold cursor-pointer transition self-start sm:self-auto shrink-0 shadow-2xs"
                 >
-                  Restablecer filtros
+                  Limpiar búsqueda
                 </button>
+              </div>
+            )}
+
+            {sortedScoredEntries.length === 0 ? (
+              <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-stone-300 space-y-3">
+                <UtensilsCrossed className="w-8 h-8 text-stone-300 mx-auto" />
+                <h4 className="font-bold text-stone-800 text-sm">No hay restaurantes con los filtros actuales</h4>
+                <p className="text-xs text-stone-500 max-w-md mx-auto leading-relaxed">
+                  {strictRatingFilter
+                    ? 'El algoritmo está aplicando el filtro de calidad estricto (mínimo 4.5★ y 10 reseñas verificadas). Si buscas un local con menor puntuación o pocas reseñas, puedes activar el modo flexible.'
+                    : 'Prueba a cambiar el término de búsqueda o selecciona "Todos" en presupuesto.'}
+                </p>
+                <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
+                  {strictRatingFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setStrictRatingFilter(false)}
+                      className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold rounded-xl text-xs transition cursor-pointer shadow-xs"
+                    >
+                      Mostrar opciones desde 4.0★
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setBudgetPref('all');
+                      setStrictRatingFilter(true);
+                      setSelectedCity('Sa Pa');
+                    }}
+                    className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-xl text-xs transition cursor-pointer"
+                  >
+                    Restablecer filtros
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -730,21 +1147,22 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                                     Michelin {restaurant.michelinGuide}
                                   </span>
                                 )}
-                                {restaurant.source === 'google_live' && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                                    <Globe className="w-2.5 h-2.5 text-emerald-600" />
-                                    <span>{restaurant.badgeLabel || 'Google Maps en vivo'}</span>
-                                  </span>
-                                )}
-                                {restaurant.badgeLabel && restaurant.source !== 'google_live' && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                                    {restaurant.badgeLabel}
-                                  </span>
-                                )}
+                                {restaurant.badgeLabel &&
+                                  restaurant.source !== 'google_live' &&
+                                  !restaurant.badgeLabel.toLowerCase().includes('google') && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                      {restaurant.badgeLabel}
+                                    </span>
+                                  )}
                                 {isSelected && (
                                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
                                     <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
                                     En el mapa
+                                  </span>
+                                )}
+                                {restaurant.city !== selectedCity && selectedCity !== 'Todo Vietnam' && selectedCity !== 'Cerca de mí' && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-100 text-sky-800 border border-sky-200">
+                                    📍 En {restaurant.city}
                                   </span>
                                 )}
                               </div>
@@ -801,7 +1219,11 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                         {/* Expandable Extra Details (Accordion to avoid cognitive overload) */}
                         {isExpanded && (
                           <div className="mt-3 pt-3 border-t border-stone-100 text-xs text-stone-600 space-y-2 animate-fade-in">
-                            <p className="leading-relaxed">{restaurant.description}</p>
+                            {restaurant.description &&
+                              !restaurant.description.includes('tiempo real en Google Maps') &&
+                              !restaurant.description.includes('reseñas verificadas') && (
+                                <p className="leading-relaxed">{restaurant.description}</p>
+                              )}
                             <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500">
                               <span className="px-2 py-0.5 rounded-md bg-stone-100">
                                 ⏰ {restaurant.openingHours}
@@ -1017,6 +1439,20 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
           eurRate={ratesData?.rates?.VND || 27000}
         />
       )}
+
+      {/* Manual City Selection Modal */}
+      <CitySelectionModal
+        isOpen={isCityModalOpen}
+        onClose={() => {
+          setIsCityModalOpen(false);
+          setCityModalReason(null);
+        }}
+        onSelectCity={handleSelectCityFromModal}
+        currentCityName={selectedCity}
+        reasonMessage={cityModalReason}
+        onRetryGps={handleRequestLocation}
+        isLocatingGps={isLocating}
+      />
 
       {/* Mobile Floating Map / List Toggle */}
       <div className="md:hidden fixed bottom-20 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
