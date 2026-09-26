@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import {
   speakVietnamese,
+  speakSpanish,
   speakEnglish,
   openGoogleTranslate,
   CustomTranslationCard,
@@ -449,6 +450,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
   // Speech recognition
   const recognitionRef = useRef<any>(null);
   const [isListening, setIsListening] = useState(false);
+  const translationBoardRef = useRef<HTMLDivElement>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -620,7 +622,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       setInputText(travelerLang === 'es' ? '¿Cuánto cuesta esto?' : 'How much is this?');
       setTranslatedText('Cái này bao nhiêu tiền vậy ạ?');
       setPhoneticText('Cai nay bao nyew tien vay ah?');
-      setTipText('Pregunta de precio para mostrar al vendedor.');
+      setTipText('Pregunta de precio habitual en tiendas y mercados.');
     }
   };
 
@@ -651,7 +653,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
           if (autoSpeak) {
             if (isViToTraveler) {
               if (travelerLang === 'es') {
-                speakEnglish(resultVi); // Fallback TTS
+                speakSpanish(resultVi);
               } else {
                 speakEnglish(resultVi);
               }
@@ -701,7 +703,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
         } else if (normalized.includes('cuanto') || normalized.includes('precio') || normalized.includes('cuesta')) {
           viText = 'Cái này bao nhiêu tiền vậy ạ?';
           phoText = 'Cai nay bao nyew tien vay ah?';
-          tip = 'Pregunta clave para regatear y comprar.';
+          tip = 'Pregunta clave para compras.';
         } else if (normalized.includes('gracias')) {
           viText = 'Cảm ơn bạn rất nhiều!';
           phoText = 'Cam on ban rut nyew!';
@@ -745,7 +747,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
         const viText = textToTranslate;
         setTranslatedText(travelerLang === 'es' ? 'Traducción rápida: por favor elige una frase del panel inferior' : 'Quick translation: please choose a phrase from the panel below');
         setPhoneticText(viText);
-        setTipText('Para traducciones bidireccionales completas utiliza la conexión a internet.');
+        setTipText('Para traducciones completas utiliza la conexión a internet.');
       }
     } catch (err) {
       console.warn('Translate error:', err);
@@ -770,9 +772,20 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       setPhoneticText(phrase.phonetic);
       setTipText(phrase.tip || '');
       if (autoSpeak) {
-        speakEnglish(phrase.en);
+        if (travelerLang === 'es') {
+          speakSpanish(phrase.es);
+        } else {
+          speakEnglish(phrase.en);
+        }
       }
     }
+
+    // Smooth scroll to the translation board
+    setTimeout(() => {
+      if (translationBoardRef.current) {
+        translationBoardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 60);
   };
 
   const handleSpeakOutput = () => {
@@ -780,7 +793,11 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
     if (direction === 'traveler-to-vi') {
       speakVietnamese(translatedText);
     } else {
-      speakEnglish(translatedText);
+      if (travelerLang === 'es') {
+        speakSpanish(translatedText);
+      } else {
+        speakEnglish(translatedText);
+      }
     }
   };
 
@@ -791,10 +808,15 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const toggleMic = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  const toggleMic = async () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition ||
+      (window as any).mozSpeechRecognition ||
+      (window as any).msSpeechRecognition;
+
     if (!SpeechRecognition) {
-      alert('Tu navegador no soporta reconocimiento por voz directo. Puedes escribir el texto o abrir Google Translate con el botón superior.');
+      showToast('⚠️ Tu navegador no soporta reconocimiento por voz directo. Puedes escribir o usar Google Translate.');
       return;
     }
 
@@ -808,11 +830,31 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       return;
     }
 
+    // Explicit microphone permission check
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (err: any) {
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          showToast('⚠️ Permiso de micrófono denegado. Permítelo en ajustes.');
+          return;
+        }
+      }
+    }
+
     try {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+
       const recognition = new SpeechRecognition();
       recognitionRef.current = recognition;
       recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
 
       if (direction === 'traveler-to-vi') {
         recognition.lang = travelerLang === 'es' ? 'es-ES' : 'en-US';
@@ -820,17 +862,43 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
         recognition.lang = 'vi-VN';
       }
 
-      setIsListening(true);
-
-      recognition.onresult = (e: any) => {
-        const transcript = e.results[0][0].transcript;
-        setInputText(transcript);
-        setIsListening(false);
-        handleTranslate(transcript);
+      recognition.onstart = () => {
+        setIsListening(true);
+        showToast('🎙️ Escuchando... Habla ahora');
       };
 
-      recognition.onerror = () => {
+      recognition.onresult = (e: any) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = e.resultIndex; i < e.results.length; ++i) {
+          if (e.results[i].isFinal) {
+            finalTranscript += e.results[i][0].transcript;
+          } else {
+            interimTranscript += e.results[i][0].transcript;
+          }
+        }
+
+        const currentText = finalTranscript || interimTranscript;
+        if (currentText) {
+          setInputText(currentText);
+        }
+
+        if (finalTranscript) {
+          setIsListening(false);
+          handleTranslate(finalTranscript);
+        }
+      };
+
+      recognition.onerror = (e: any) => {
         setIsListening(false);
+        if (e.error === 'not-allowed') {
+          showToast('⚠️ Acceso al micrófono bloqueado. Permítelo en tu navegador.');
+        } else if (e.error === 'no-speech') {
+          showToast('No se detectó voz. Inténtalo de nuevo.');
+        } else if (e.error === 'network') {
+          showToast('Error de red en el procesado de voz.');
+        }
       };
 
       recognition.onend = () => {
@@ -838,8 +906,10 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       };
 
       recognition.start();
-    } catch {
+    } catch (err) {
+      console.warn('SpeechRecognition start error:', err);
       setIsListening(false);
+      showToast('No se pudo iniciar el micrófono.');
     }
   };
 
@@ -1004,7 +1074,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
         </div>
 
         {/* Dual Input/Output Translation Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+        <div ref={translationBoardRef} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch scroll-mt-6">
           {/* Card 1: Input Box (Source) */}
           <div className="rounded-2xl border border-stone-200 bg-stone-50/70 p-4 sm:p-5 flex flex-col justify-between focus-within:border-amber-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-amber-500/20 transition shadow-2xs min-h-[250px]">
             {/* Header */}
@@ -1013,7 +1083,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                 <span className="text-xl">{isTravelerToVi ? (travelerLang === 'es' ? '🇪🇸' : '🇬🇧') : '🇻🇳'}</span>
                 <div>
                   <span className="text-xs font-bold text-stone-900 block leading-tight">
-                    {isTravelerToVi ? (travelerLang === 'es' ? 'Tú hablas (Español)' : 'Tú hablas (Inglés)') : 'Habla el dependiente (Vietnamita)'}
+                    {isTravelerToVi ? (travelerLang === 'es' ? 'Español' : 'English') : 'Tiếng Việt'}
                   </span>
                   <span className="text-[10px] text-stone-500 font-medium">Idioma de entrada</span>
                 </div>
@@ -1025,7 +1095,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                 onClick={toggleMic}
                 className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                   isListening
-                    ? 'bg-rose-600 text-white animate-pulse shadow-sm'
+                    ? 'bg-rose-600 text-white animate-pulse shadow-sm ring-2 ring-rose-300'
                     : 'bg-white hover:bg-stone-100 text-stone-700 border border-stone-200'
                 }`}
                 title={isListening ? 'Detener micrófono' : 'Dictar por voz'}
@@ -1050,7 +1120,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                 }}
                 placeholder={
                   isTravelerToVi
-                    ? (travelerLang === 'es' ? 'Escribe o dicta en español (ej. ¿Cuánto cuesta esto?)...' : 'Type or speak in English (e.g. How much is this?)...')
+                    ? (travelerLang === 'es' ? 'Escribe o dicta en español...' : 'Type or speak in English...')
                     : 'Nhập hoặc nói tiếng Việt...'
                 }
                 className="w-full flex-1 text-base sm:text-lg font-medium text-stone-900 bg-transparent border-none focus:outline-none resize-none placeholder-stone-400 leading-snug"
@@ -1094,9 +1164,9 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                 <span className="text-xl">{isTravelerToVi ? '🇻🇳' : (travelerLang === 'es' ? '🇪🇸' : '🇬🇧')}</span>
                 <div>
                   <span className="text-xs font-bold text-amber-950 block leading-tight">
-                    {isTravelerToVi ? 'Para mostrar al local (Tiếng Việt)' : (travelerLang === 'es' ? 'Traducción para ti (Español)' : 'Translation for you (English)')}
+                    {isTravelerToVi ? 'Tiếng Việt' : (travelerLang === 'es' ? 'Español' : 'English')}
                   </span>
-                  <span className="text-[10px] text-amber-800 font-medium">Resultado traducido</span>
+                  <span className="text-[10px] text-amber-800 font-medium">Traducción</span>
                 </div>
               </div>
 
@@ -1128,7 +1198,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   onClick={handleSpeakOutput}
                   disabled={!translatedText}
                   className="p-1.5 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer"
-                  title="Escuchar pronunciación nativa"
+                  title="Escuchar pronunciación"
                 >
                   <Volume2 className="w-4 h-4 text-amber-700" />
                 </button>
@@ -1148,7 +1218,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   onClick={() => setIsFullscreenOutput(true)}
                   disabled={!translatedText}
                   className="p-1.5 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer"
-                  title="Pantalla completa para mostrar al dependiente"
+                  title="Pantalla completa"
                 >
                   <Maximize2 className="w-4 h-4 text-amber-800" />
                 </button>
@@ -1177,8 +1247,8 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
 
             {/* Footer Toolbar */}
             <div className="pt-3 border-t border-amber-200/70 flex items-center justify-between text-xs text-stone-600">
-              <span className="text-[11px] text-amber-900/80">
-                {isTravelerToVi ? 'Muestra la pantalla hacia el vendedor' : 'Traducción directa al instante'}
+              <span className="text-[11px] text-stone-500">
+                Traducción instantánea
               </span>
 
               <button
@@ -1187,37 +1257,35 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                 className="text-amber-900 font-bold hover:underline cursor-pointer flex items-center gap-1 text-xs"
               >
                 <Volume2 className="w-3.5 h-3.5 text-amber-700" />
-                <span>Repetir voz</span>
+                <span>Escuchar</span>
               </button>
             </div>
           </div>
         </div>
 
         {/* 3. QUICK PHRASES (Categorized cards, user-saved cards first) */}
-        <div className="space-y-3 pt-3 border-t border-stone-100">
+        <div className="space-y-3.5 pt-3 border-t border-stone-100">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-stone-600">
-              Frases y preguntas rápidas (1 toque para traducir):
+            <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
+              Frases rápidas
             </span>
 
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Category tabs */}
-              <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs">
-                {categoryTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setQuickCategory(tab.id)}
-                    className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer shrink-0 ${
-                      quickCategory === tab.id
-                        ? 'bg-stone-900 text-white font-bold shadow-xs'
-                        : 'text-stone-600 hover:text-stone-900 bg-stone-100'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+            {/* Category tabs + Nueva */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+              {categoryTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setQuickCategory(tab.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                    quickCategory === tab.id
+                      ? 'bg-stone-900 text-white shadow-xs'
+                      : 'text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200/80'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
 
               {/* Add custom card button */}
               <button
@@ -1228,7 +1296,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   );
                   setIsCustomModalOpen(true);
                 }}
-                className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1 transition cursor-pointer shrink-0 shadow-2xs"
+                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-stone-950 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer shrink-0 shadow-2xs whitespace-nowrap"
                 title="Crear una tarjeta de traducción personalizada"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -1248,47 +1316,63 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-              {displayedPhrases.map((phrase) => (
-                <button
-                  key={phrase.id || phrase.label}
-                  type="button"
-                  onClick={() => handleQuickPhraseClick(phrase)}
-                  className={`p-3 rounded-xl text-left transition cursor-pointer flex flex-col justify-between min-h-[82px] group relative shadow-2xs ${
-                    phrase.isCustom
-                      ? 'border border-amber-400 bg-amber-50/80 hover:bg-amber-100/90'
-                      : 'border border-stone-200 bg-stone-50 hover:bg-amber-50 hover:border-amber-300'
-                  }`}
-                >
-                  <div>
-                    {phrase.isCustom && (
-                      <div className="flex items-center justify-between gap-1 w-full text-[10px] text-amber-800 font-bold mb-1">
-                        <span className="flex items-center gap-1">
-                          <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                          <span>Personal</span>
-                        </span>
-                        <span
-                          role="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (phrase.id) handleDeleteCustomCard(phrase.id);
-                          }}
-                          className="p-1 -mr-1 -mt-1 rounded-md text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                          title="Eliminar tarjeta personal"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </span>
-                      </div>
-                    )}
-                    <div className="text-xs font-bold text-stone-900 group-hover:text-amber-950 leading-snug line-clamp-2">
-                      {phrase.label}
-                    </div>
-                  </div>
+              {displayedPhrases.map((phrase) => {
+                const isSelected = Boolean(
+                  (translatedText && phrase.vi.trim().toLowerCase() === translatedText.trim().toLowerCase()) ||
+                  (inputText && (phrase.es.trim().toLowerCase() === inputText.trim().toLowerCase() || phrase.vi.trim().toLowerCase() === inputText.trim().toLowerCase()))
+                );
 
-                  <div className="text-[11px] text-amber-700 font-medium mt-1 truncate">
-                    {phrase.vi}
-                  </div>
-                </button>
-              ))}
+                return (
+                  <button
+                    key={phrase.id || phrase.label}
+                    type="button"
+                    onClick={() => handleQuickPhraseClick(phrase)}
+                    className={`p-3 sm:p-3.5 rounded-2xl text-left transition-all duration-150 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[96px] h-full group relative shadow-2xs ${
+                      isSelected
+                        ? 'border-2 border-amber-500 bg-amber-50/95 ring-2 ring-amber-500/20 shadow-xs'
+                        : phrase.isCustom
+                        ? 'border border-amber-300 bg-amber-50/70 hover:bg-amber-100/80 hover:border-amber-400'
+                        : 'border border-stone-200 bg-stone-50/90 hover:bg-amber-50/70 hover:border-amber-300'
+                    }`}
+                  >
+                    <div>
+                      {phrase.isCustom && (
+                        <div className="flex items-center justify-between gap-1 w-full text-[10px] text-amber-800 font-bold mb-1">
+                          <span className="flex items-center gap-1">
+                            <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                            <span>Personal</span>
+                          </span>
+                          <span
+                            role="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (phrase.id) handleDeleteCustomCard(phrase.id);
+                            }}
+                            className="p-1 -mr-1 -mt-1 rounded-md text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                            title="Eliminar tarjeta personal"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </span>
+                        </div>
+                      )}
+                      <div className="text-xs font-bold text-stone-900 group-hover:text-amber-950 leading-snug">
+                        {phrase.label}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 mt-2 border-t border-stone-200/60 flex flex-col gap-0.5">
+                      <div className="text-xs font-semibold text-amber-800 leading-snug break-words">
+                        {phrase.vi}
+                      </div>
+                      {phrase.phonetic && (
+                        <div className="text-[10px] text-stone-500 font-mono italic leading-tight break-words">
+                          {phrase.phonetic}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1423,7 +1507,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
             <div className="flex items-center gap-2">
               <span className="text-2xl">{isTravelerToVi ? '🇻🇳' : '🇪🇸'}</span>
               <span className="text-sm sm:text-base font-bold text-amber-300 uppercase tracking-wider">
-                {isTravelerToVi ? 'Muestra esta pantalla al dependiente' : 'Traducción directa'}
+                {isTravelerToVi ? 'Tiếng Việt' : 'Español'}
               </span>
             </div>
 

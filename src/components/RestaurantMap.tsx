@@ -130,19 +130,34 @@ const GoogleMapCameraController: React.FC<{
 }> = ({ center, zoom, selectedLocation, onMapReady }) => {
   const map = useMap();
   const prevCenterRef = useRef<{ lat: number; lng: number }>(center);
-  const prevZoomRef = useRef<number>(zoom);
+  const isInitialMountRef = useRef<boolean>(true);
 
-  // When map mounts or when city center / zoom changes
+  // When map mounts or when city center changes significantly
   useEffect(() => {
     if (!map) return;
-    onMapReady?.();
-    map.panTo(center);
-    if (typeof zoom === 'number') {
-      map.setZoom(zoom);
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      onMapReady?.();
+      map.panTo(center);
+      if (typeof zoom === 'number') {
+        map.setZoom(zoom);
+      }
+      prevCenterRef.current = center;
+      return;
     }
-    prevCenterRef.current = center;
-    prevZoomRef.current = zoom;
-  }, [map, center.lat, center.lng, zoom, onMapReady]);
+
+    const latDiff = Math.abs(prevCenterRef.current.lat - center.lat);
+    const lngDiff = Math.abs(prevCenterRef.current.lng - center.lng);
+
+    // Only pan and reset zoom if destination/city actually changed (> ~5km)
+    if (latDiff > 0.05 || lngDiff > 0.05) {
+      prevCenterRef.current = center;
+      map.panTo(center);
+      if (typeof zoom === 'number') {
+        map.setZoom(zoom);
+      }
+    }
+  }, [map, center.lat, center.lng, zoom]);
 
   // When a restaurant is selected
   useEffect(() => {

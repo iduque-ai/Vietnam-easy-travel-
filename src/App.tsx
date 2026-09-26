@@ -16,7 +16,7 @@ import { ExchangeRatesData, ActiveTabType, PointOfInterest } from './types';
 import { getSavedRates, saveRates, isRatesStale } from './utils/storage';
 import { fetchLiveExchangeRates } from './utils/currencyApi';
 import { useItineraryState } from './utils/useItineraryState';
-import { Compass, Wifi, WifiOff, Clock, ShieldCheck, HelpCircle } from 'lucide-react';
+import { Compass, Wifi, WifiOff, Clock, ShieldCheck, HeartPulse, HelpCircle } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTabType>('converter');
@@ -223,8 +223,10 @@ export default function App() {
     }
   }, [refreshRates]);
 
-  // Vietnam local time helper (UTC+7)
+  // Vietnam local time helper (UTC+7) & Spain local time helper (Europe/Madrid)
   const [vietnamTime, setVietnamTime] = useState<string>('');
+  const [spainTime, setSpainTime] = useState<string>('');
+
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -235,7 +237,15 @@ export default function App() {
         second: '2-digit',
         hour12: false,
       });
+      const esFormatter = new Intl.DateTimeFormat('es-ES', {
+        timeZone: 'Europe/Madrid',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
       setVietnamTime(vnFormatter.format(now));
+      setSpainTime(esFormatter.format(now));
     };
 
     updateTime();
@@ -346,30 +356,54 @@ export default function App() {
       {/* Fixed Bottom Navigation for Mobile Devices */}
       <MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {/* Bottom Sticky Footer with Essential Vietnam Travel Facts */}
-      <footer className="bg-stone-900 text-stone-400 border-t border-stone-800 py-4 text-xs mb-16 md:mb-0">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-          <div className="flex items-center gap-2">
-            <span className="text-base" role="img" aria-label="Vietnam">🇻🇳</span>
-            <span className="font-semibold text-stone-200">Vietnam Travel Companion</span>
-            <span className="text-stone-600 hidden sm:inline">·</span>
-            <span className="text-stone-400 text-[11px] hidden sm:inline">100% funcional sin conexión</span>
-          </div>
+      {/* Bottom Sticky Footer with Dual Time and Emergency Numbers */}
+      <footer className="bg-stone-900 text-stone-400 border-t border-stone-800 py-3 text-xs mb-16 md:mb-0">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 max-w-lg mx-auto sm:max-w-none sm:flex sm:items-center sm:justify-center">
+            {/* Row 1: Vietnam & Ambulancia */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between sm:justify-start gap-2 bg-stone-800/90 px-3 py-1.5 rounded-lg border border-stone-700/80 text-[11px] text-stone-300 shadow-2xs">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="font-medium">Vietnam:</span>
+                </div>
+                <strong className="font-mono text-amber-300 ml-auto">{vietnamTime || '--:--:--'}</strong>
+              </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-stone-300">
-            <div className="flex items-center gap-1.5 bg-stone-800/80 px-2.5 py-1 rounded-lg border border-stone-700/80">
-              <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>Vietnam (UTC+7): </span>
-              <strong className="font-mono text-amber-300">{vietnamTime || '--:--:--'}</strong>
+              <div className="flex items-center justify-between sm:justify-start gap-2 bg-stone-800/90 px-3 py-1.5 rounded-lg border border-stone-700/80 text-[11px] text-stone-300 shadow-2xs">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span className="font-medium">España:</span>
+                </div>
+                <strong className="font-mono text-sky-300 ml-auto">{spainTime || '--:--:--'}</strong>
+              </div>
             </div>
 
-            <div className="flex items-center gap-1 bg-stone-800/80 px-2.5 py-1 rounded-lg border border-stone-700/80">
-              <span>🔌 220V (A, C, G)</span>
-            </div>
+            {/* Row 2 / Col 2: Ambulancia & Policía */}
+            <div className="flex flex-col gap-1.5">
+              <a
+                href="tel:115"
+                className="flex items-center justify-between sm:justify-start gap-2 bg-stone-800/90 hover:bg-stone-700/90 px-3 py-1.5 rounded-lg border border-stone-700/80 text-[11px] text-stone-300 shadow-2xs transition"
+                title="Llamar a Ambulancia / Emergencias médicas (115)"
+              >
+                <div className="flex items-center gap-1.5">
+                  <HeartPulse className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span className="font-medium">Ambulancia:</span>
+                </div>
+                <strong className="font-mono text-rose-300 font-bold ml-auto">115</strong>
+              </a>
 
-            <div className="flex items-center gap-1 bg-stone-800/80 px-2.5 py-1 rounded-lg border border-stone-700/80">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Policía: 113</span>
+              <a
+                href="tel:113"
+                className="flex items-center justify-between sm:justify-start gap-2 bg-stone-800/90 hover:bg-stone-700/90 px-3 py-1.5 rounded-lg border border-stone-700/80 text-[11px] text-stone-300 shadow-2xs transition"
+                title="Llamar a Policía de Vietnam (113)"
+              >
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="font-medium">Policía:</span>
+                </div>
+                <strong className="font-mono text-emerald-300 font-bold ml-auto">113</strong>
+              </a>
             </div>
           </div>
         </div>

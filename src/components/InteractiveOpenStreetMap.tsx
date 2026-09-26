@@ -134,7 +134,9 @@ export const InteractiveOpenStreetMap: React.FC<InteractiveOpenStreetMapProps> =
     map.setStyle(VECTOR_STYLES[vectorStyle].url);
   }, [vectorStyle]);
 
-  // Handle Center / Target Location Pan
+  const prevCenterRef = useRef<{ lat: number; lng: number }>(center);
+
+  // Handle Center / Target Location Pan without unwanted zoom out
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -146,11 +148,26 @@ export const InteractiveOpenStreetMap: React.FC<InteractiveOpenStreetMapProps> =
         duration: 1200,
         essential: true,
       });
-    } else {
+      return;
+    }
+
+    const latDiff = Math.abs(prevCenterRef.current.lat - center.lat);
+    const lngDiff = Math.abs(prevCenterRef.current.lng - center.lng);
+
+    // Only change zoom if region/city center changed significantly (> ~5km)
+    if (latDiff > 0.05 || lngDiff > 0.05) {
+      prevCenterRef.current = center;
       map.easeTo({
         center: [center.lng, center.lat],
         zoom: zoom,
         duration: 800,
+      });
+    } else {
+      // Soft pan to maintain the user's manual zoom level
+      prevCenterRef.current = center;
+      map.easeTo({
+        center: [center.lng, center.lat],
+        duration: 500,
       });
     }
   }, [center.lat, center.lng, zoom, selectedLocationTarget]);

@@ -471,27 +471,27 @@ function generateClientFallbackCard(rawConditions: string[], personName?: string
 }
 
 export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnline }) => {
-  // Stored cards list
+  // Stored cards list (starts empty if user hasn't created any)
   const [savedCards, setSavedCards] = useState<AllergyCardData[]>(() => getSavedAllergyCards());
   const [activeCardId, setActiveCardId] = useState<string>(() => {
     const list = getSavedAllergyCards();
     return list.length > 0 ? list[0].id : 'new';
   });
 
-  // Current working card state
+  // Current working card state (starts null if no cards saved yet)
   const [currentCard, setCurrentCard] = useState<AllergyCardData | null>(() => {
     const list = getSavedAllergyCards();
-    return list.length > 0 ? list[0] : DEFAULT_ALLERGY_CARDS[0];
+    return list.length > 0 ? list[0] : null;
   });
 
-  // Editor form state
+  // Editor form state (starts with empty selection)
   const [selectedConditions, setSelectedConditions] = useState<string[]>(() => {
     const list = getSavedAllergyCards();
-    return list.length > 0 ? (list[0].conditions || []).map(cleanAllergenLabel) : ['Cacahuetes y frutos secos'];
+    return list.length > 0 ? (list[0].conditions || []).map(cleanAllergenLabel) : [];
   });
   const [personName, setPersonName] = useState<string>(() => {
     const list = getSavedAllergyCards();
-    return list.length > 0 ? (list[0].personName || 'Ficha Principal') : 'Ficha Principal';
+    return list.length > 0 ? (list[0].personName || 'Mi Ficha') : 'Mi Ficha';
   });
 
   // Search & Filter state for the ingredients list
@@ -503,7 +503,9 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
   const [copied, setCopied] = useState<boolean>(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [isFullscreenMode, setIsFullscreenMode] = useState<boolean>(false);
-  const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
+  const [isCreatingNew, setIsCreatingNew] = useState<boolean>(() => {
+    return getSavedAllergyCards().length === 0;
+  });
 
   // Sync when active card changes
   const handleSelectCard = (card: AllergyCardData) => {
@@ -518,11 +520,10 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
   const handleStartNewCard = () => {
     setIsCreatingNew(true);
     setActiveCardId('new');
-    setSelectedConditions(['Cacahuetes y frutos secos']);
+    setSelectedConditions([]);
     const defaultName = `Ficha ${savedCards.length + 1}`;
     setPersonName(defaultName);
-    const draft = generateClientFallbackCard(['Cacahuetes y frutos secos'], defaultName);
-    setCurrentCard(draft);
+    setCurrentCard(null);
   };
 
   // Toggle a condition chip (always clean of "Sin ")
@@ -1122,12 +1123,12 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
             </div>
           </div>
 
-          {/* Vietnamese Large Display Card (Designed to be read 1m away across counter) */}
+          {/* Vietnamese Large Display Card */}
           <div className="bg-rose-50/60 rounded-2xl p-5 sm:p-6 border-2 border-rose-300 shadow-2xs space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-black tracking-widest uppercase text-rose-700 flex items-center gap-1.5">
                 <AlertTriangle className="w-4 h-4 text-rose-600" />
-                Muestra esta pantalla al dependiente o cocinero:
+                Aviso médico y alimentario:
               </span>
               <span className="text-[11px] font-bold text-stone-400 font-sans">
                 Tiếng Việt (Vietnamita)
@@ -1210,7 +1211,7 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-rose-400 font-black text-sm uppercase tracking-widest">
                 <ShieldAlert className="w-5 h-5 text-rose-500" />
-                <span>Modo Vendedor / Nhà Hàng (Pantalla Completa)</span>
+                <span>Pantalla Completa (Tiếng Việt)</span>
               </div>
               <button
                 type="button"

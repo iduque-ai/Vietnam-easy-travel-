@@ -347,9 +347,9 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
       )}
 
       {/* Main Converter Card */}
-      <div className="bg-white rounded-2xl p-5 sm:p-7 border border-stone-200 shadow-sm space-y-6">
+      <div className="bg-white rounded-2xl p-3.5 sm:p-6 border border-stone-200 shadow-sm space-y-4 sm:space-y-6">
         {/* Currency selection */}
-        <div className="flex items-center gap-2 pb-4 border-b border-stone-100">
+        <div className="flex items-center gap-2 pb-3 sm:pb-4 border-b border-stone-100">
           <label htmlFor="currency-select" className="text-xs font-semibold uppercase tracking-wider text-stone-500">
             Moneda:
           </label>
@@ -357,7 +357,7 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
             id="currency-select"
             value={selectedCurrency}
             onChange={(e) => handleCurrencyChange(e.target.value as CurrencyCode)}
-            className="bg-stone-100 hover:bg-stone-200 font-semibold text-stone-900 text-sm px-3 py-1.5 rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
+            className="bg-stone-100 hover:bg-stone-200 font-semibold text-stone-900 text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
           >
             {CURRENCIES.map((curr) => (
               <option key={curr.code} value={curr.code}>
@@ -367,14 +367,14 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
           </select>
         </div>
 
-        {/* Big Dual Display / Input */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+        {/* Big Dual Display / Input - Optimized for Mobile Screens */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4 items-center">
           {/* VND Box */}
-          <div className="p-4 sm:p-5 rounded-xl border border-stone-200 bg-stone-50/70 focus-within:border-amber-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-amber-500/20 transition shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-medium text-stone-500 mb-1.5">
+          <div className="p-3 sm:p-4 rounded-xl border border-stone-200 bg-stone-50/70 focus-within:border-amber-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-amber-500/20 transition shadow-2xs">
+            <div className="flex items-center justify-between text-xs font-medium text-stone-500 mb-1">
               <span className="flex items-center gap-1.5">
-                <span className="text-base">🇻🇳</span>
-                <span className="font-semibold text-stone-800">Đồng Vietnamita (VND)</span>
+                <span className="text-sm sm:text-base">🇻🇳</span>
+                <span className="font-semibold text-stone-800 text-xs sm:text-sm">Đồng Vietnamita (VND)</span>
               </span>
             </div>
 
@@ -386,23 +386,23 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
                 value={vndAmount ? parseInt(vndAmount, 10).toLocaleString('es-ES') : ''}
                 onChange={(e) => handleVndChange(e.target.value)}
                 placeholder="0"
-                className="w-full text-2xl sm:text-3xl font-bold font-mono text-stone-900 bg-transparent border-none focus:outline-none pr-10"
+                className="w-full text-2xl sm:text-3xl font-bold font-mono text-stone-900 bg-transparent border-none focus:outline-none pr-8 py-0.5"
               />
-              <span className="absolute right-0 top-1/2 -translate-y-1/2 text-lg font-bold text-stone-400">
+              <span className="absolute right-0 top-1/2 -translate-y-1/2 text-base sm:text-lg font-bold text-stone-400">
                 ₫
               </span>
             </div>
 
-            <div className="mt-2 text-xs text-stone-500 flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span>
+            <div className="mt-1.5 text-xs text-stone-500 flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono text-[11px] sm:text-xs">
                   {vndAmount ? `${(parseFloat(vndAmount) / 1000).toLocaleString('es-ES')}k VND` : '0k VND'}
                 </span>
                 <button
                   type="button"
                   onClick={handleAddThousandMultiplier}
                   title="Añadir 3 ceros (×1000)"
-                  className="px-2 py-0.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[10px] transition cursor-pointer border border-amber-300 shadow-2xs"
+                  className="px-2 py-0.5 rounded-md bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[10px] transition cursor-pointer border border-amber-300 shadow-2xs active:scale-95"
                 >
                   +3 ceros (k)
                 </button>
@@ -420,13 +420,13 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
           </div>
 
           {/* Foreign Currency Box */}
-          <div className="p-4 sm:p-5 rounded-xl border border-stone-200 bg-stone-50/70 focus-within:border-amber-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-amber-500/20 transition shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-medium text-stone-500 mb-1.5">
+          <div className="p-3 sm:p-4 rounded-xl border border-stone-200 bg-stone-50/70 focus-within:border-amber-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-amber-500/20 transition shadow-2xs">
+            <div className="flex items-center justify-between text-xs font-medium text-stone-500 mb-1">
               <span className="flex items-center gap-1.5">
-                <span className="text-base">
+                <span className="text-sm sm:text-base">
                   {CURRENCIES.find((c) => c.code === selectedCurrency)?.flag}
                 </span>
-                <span className="font-semibold text-stone-800">{selectedCurrency} ({currSymbol})</span>
+                <span className="font-semibold text-stone-800 text-xs sm:text-sm">{selectedCurrency} ({currSymbol})</span>
               </span>
             </div>
 
@@ -439,15 +439,15 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
                 onChange={(e) => handleForeignChange(e.target.value)}
                 onBlur={handleForeignBlur}
                 placeholder="0.00"
-                className="w-full text-2xl sm:text-3xl font-bold font-mono text-stone-900 bg-transparent border-none focus:outline-none pr-10"
+                className="w-full text-2xl sm:text-3xl font-bold font-mono text-stone-900 bg-transparent border-none focus:outline-none pr-8 py-0.5"
               />
-              <span className="absolute right-0 top-1/2 -translate-y-1/2 text-lg font-bold text-stone-400">
+              <span className="absolute right-0 top-1/2 -translate-y-1/2 text-base sm:text-lg font-bold text-stone-400">
                 {currSymbol}
               </span>
             </div>
 
-            <div className="mt-2 text-xs text-stone-500 flex items-center justify-between">
-              <span>
+            <div className="mt-1.5 text-xs text-stone-500 flex items-center justify-between">
+              <span className="font-mono text-[11px] sm:text-xs">
                 1 {currSymbol} ≈ {Math.round(foreignToVndRate).toLocaleString('es-ES')} ₫
               </span>
               {foreignAmount && (

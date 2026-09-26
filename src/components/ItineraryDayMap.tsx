@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   APIProvider,
   Map,
@@ -51,12 +51,14 @@ export interface MapStopItem {
   vietnameseTitle: string;
 }
 
-// Controller to fit map bounds to the day's stops
+// Controller to fit map bounds to the day's stops without auto zooming out on user interactions
 const DayMapBoundsController: React.FC<{
   stops: MapStopItem[];
   activeStopId?: string;
 }> = ({ stops, activeStopId }) => {
   const map = useMap();
+  const initialFittedRef = useRef<boolean>(false);
+  const prevStopsCountRef = useRef<number>(stops.length);
 
   useEffect(() => {
     if (!map || stops.length === 0) return;
@@ -65,22 +67,27 @@ const DayMapBoundsController: React.FC<{
       const active = stops.find((s) => s.stopId === activeStopId);
       if (active) {
         map.panTo({ lat: active.lat, lng: active.lng });
-        map.setZoom(15);
         return;
       }
     }
 
-    if (stops.length === 1) {
-      map.panTo({ lat: stops[0].lat, lng: stops[0].lng });
-      map.setZoom(14);
-      return;
-    }
+    // Only auto fit bounds once when the map loads or when stops list length changes
+    if (!initialFittedRef.current || prevStopsCountRef.current !== stops.length) {
+      initialFittedRef.current = true;
+      prevStopsCountRef.current = stops.length;
 
-    const gWindow = typeof window !== 'undefined' ? (window as any).google : undefined;
-    if (gWindow && gWindow.maps) {
-      const bounds = new gWindow.maps.LatLngBounds();
-      stops.forEach((s) => bounds.extend({ lat: s.lat, lng: s.lng }));
-      map.fitBounds(bounds, 50);
+      if (stops.length === 1) {
+        map.panTo({ lat: stops[0].lat, lng: stops[0].lng });
+        map.setZoom(14);
+        return;
+      }
+
+      const gWindow = typeof window !== 'undefined' ? (window as any).google : undefined;
+      if (gWindow && gWindow.maps) {
+        const bounds = new gWindow.maps.LatLngBounds();
+        stops.forEach((s) => bounds.extend({ lat: s.lat, lng: s.lng }));
+        map.fitBounds(bounds, 50);
+      }
     }
   }, [map, stops, activeStopId]);
 

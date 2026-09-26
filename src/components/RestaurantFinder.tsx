@@ -104,20 +104,14 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [isLiveTracking, setIsLiveTracking] = useState<boolean>(false);
-  const [isSimulatingLiveWalk, setIsSimulatingLiveWalk] = useState<boolean>(false);
   const stopWatchRef = useRef<(() => void) | null>(null);
-  const simTimerRef = useRef<any>(null);
 
-  // Clean up live watch & simulation on unmount
+  // Clean up live watch on unmount
   useEffect(() => {
     return () => {
       if (stopWatchRef.current) {
         stopWatchRef.current();
         stopWatchRef.current = null;
-      }
-      if (simTimerRef.current) {
-        clearInterval(simTimerRef.current);
-        simTimerRef.current = null;
       }
     };
   }, []);
@@ -159,18 +153,13 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
 
   // Toggle continuous real-time live GPS tracking
   const toggleLiveTracking = useCallback(() => {
-    // If active (either real GPS or simulation), pause
-    if (isLiveTracking || isSimulatingLiveWalk) {
+    // If active, pause
+    if (isLiveTracking) {
       if (stopWatchRef.current) {
         stopWatchRef.current();
         stopWatchRef.current = null;
       }
-      if (simTimerRef.current) {
-        clearInterval(simTimerRef.current);
-        simTimerRef.current = null;
-      }
       setIsLiveTracking(false);
-      setIsSimulatingLiveWalk(false);
       showToast('⏸️ Rastreo en tiempo real pausado.');
       return;
     }
@@ -178,10 +167,6 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
     if (stopWatchRef.current) {
       stopWatchRef.current();
       stopWatchRef.current = null;
-    }
-    if (simTimerRef.current) {
-      clearInterval(simTimerRef.current);
-      simTimerRef.current = null;
     }
 
     showToast('🛰️ Conectando sensor GPS en tiempo real...');
@@ -191,8 +176,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
       (result) => {
         setIsLocating(false);
         setIsLiveTracking(true);
-        setIsSimulatingLiveWalk(false);
-        const { coords, isInsideVietnam, closestCity, closestPoi, distanceToClosestPoiKm, distanceToVietnamKm } = result;
+        const { coords, isInsideVietnam, closestCity, distanceToVietnamKm } = result;
 
         // Set user coordinates regardless of country
         setUserCoords({ lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy });
@@ -203,7 +187,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
           const acc = coords.accuracy ? `(±${Math.round(coords.accuracy)}m)` : '';
           showToast(`📍 Posición en tiempo real actualizada en ${closestCity || 'Vietnam'} ${acc}`);
         } else {
-          showToast(`🛰️ GPS en tiempo real activo: ${coords.latitude.toFixed(3)}°N, ${coords.longitude.toFixed(3)}°E (a ${distanceToVietnamKm.toLocaleString()} km de Vietnam). Se muestra tu posición.`);
+          showToast(`🛰️ GPS en tiempo real activo: ${coords.latitude.toFixed(3)}°N, ${coords.longitude.toFixed(3)}°E (a ${distanceToVietnamKm.toLocaleString()} km de Vietnam).`);
         }
       },
       (error) => {
@@ -229,54 +213,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
     );
 
     stopWatchRef.current = stopFn;
-  }, [isLiveTracking, isSimulatingLiveWalk, showToast]);
-
-  // Simulate real-time GPS walk in Vietnam (ideal when testing from abroad or planning at home)
-  const handleToggleSimulatedWalk = useCallback((targetCityName: string = 'Sa Pa') => {
-    if (isSimulatingLiveWalk) {
-      if (simTimerRef.current) {
-        clearInterval(simTimerRef.current);
-        simTimerRef.current = null;
-      }
-      setIsSimulatingLiveWalk(false);
-      setIsLiveTracking(false);
-      showToast('⏸️ Simulación de paseo en tiempo real pausada.');
-      return;
-    }
-
-    if (stopWatchRef.current) {
-      stopWatchRef.current();
-      stopWatchRef.current = null;
-    }
-
-    const cityCoord = CITY_COORDINATES[targetCityName] || CITY_COORDINATES['Sa Pa'] || { lat: 22.3356, lng: 103.8415 };
-    let currentLat = cityCoord.lat;
-    let currentLng = cityCoord.lng;
-    let stepCount = 0;
-
-    setUserCoords({ lat: currentLat, lng: currentLng, accuracy: 6 });
-    setSelectedCity('Cerca de mí');
-    setSortOption('distance');
-    setIsLiveTracking(true);
-    setIsSimulatingLiveWalk(true);
-    showToast(`🚶 Paseo en tiempo real iniciado en ${targetCityName}. Caminando por las calles...`);
-
-    // Advance coordinates every 3.5s to emulate real-time walking
-    simTimerRef.current = setInterval(() => {
-      stepCount++;
-      // Gentle walk along streets (approx 15-20 meters per step)
-      const latDelta = (Math.sin(stepCount * 0.4) * 0.00015) + ((Math.random() - 0.5) * 0.00008);
-      const lngDelta = (Math.cos(stepCount * 0.4) * 0.00018) + ((Math.random() - 0.5) * 0.00008);
-      currentLat += latDelta;
-      currentLng += lngDelta;
-
-      setUserCoords({
-        lat: Number(currentLat.toFixed(6)),
-        lng: Number(currentLng.toFixed(6)),
-        accuracy: Math.floor(4 + Math.random() * 5),
-      });
-    }, 3500);
-  }, [isSimulatingLiveWalk, showToast]);
+  }, [isLiveTracking, showToast]);
 
   // Dynamic filter thresholds
   const minRatingThreshold = strictRatingFilter ? 4.5 : 4.0;
@@ -690,7 +627,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                   </span>
-                  <span>{isSimulatingLiveWalk ? '🚶 Paseo en Vivo' : '🔴 GPS En Vivo'}</span>
+                  <span>🔴 GPS En Vivo</span>
                 </>
               ) : (
                 <>
@@ -698,21 +635,6 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                   <span>{isLocating ? 'GPS...' : userCoords ? 'GPS Activo' : 'GPS Tiempo Real'}</span>
                 </>
               )}
-            </button>
-
-            {/* Simulated Live GPS walk button (perfect for testing from home/abroad) */}
-            <button
-              type="button"
-              onClick={() => handleToggleSimulatedWalk(selectedCity !== 'Cerca de mí' && selectedCity !== 'Todo Vietnam' ? selectedCity : 'Sa Pa')}
-              title="Simular un paseo en tiempo real por Vietnam para ver cómo se recalculan las distancias y restaurantes"
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1 shrink-0 ${
-                isSimulatingLiveWalk
-                  ? 'bg-amber-500 text-stone-950 font-bold ring-2 ring-amber-300'
-                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200'
-              }`}
-            >
-              <span>🚶</span>
-              <span className="hidden sm:inline">{isSimulatingLiveWalk ? 'Pausar Paseo' : 'Simular Paseo'}</span>
             </button>
 
             {/* Manual City Selector Modal Trigger */}
@@ -876,8 +798,8 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
         </div>
       </div>
 
-      {/* Streamlined Live Status Bar (Only appears when live searching, tracking or simulating) */}
-      {(isSearchingOnline || isLiveTracking || isSimulatingLiveWalk || (userCoords && (userCoords.lat < 8 || userCoords.lat > 24 || userCoords.lng < 102 || userCoords.lng > 110))) && (
+      {/* Streamlined Live Status Bar (Only appears when live searching or tracking) */}
+      {(isSearchingOnline || isLiveTracking) && (
         <div className="px-3.5 py-2 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-2 bg-stone-900 text-stone-100 border-stone-800 shadow-xs animate-fade-in">
           <div className="flex items-center gap-2 min-w-0">
             <span className="relative flex h-2 w-2 shrink-0">
@@ -889,26 +811,14 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                 <span className="text-amber-300 flex items-center gap-1">
                   <RefreshCw className="w-3 h-3 animate-spin" /> Buscando en Google Maps...
                 </span>
-              ) : isSimulatingLiveWalk ? (
-                <span>🚶 Paseo simulado activo en <strong className="text-white">{selectedCity === 'Cerca de mí' ? 'Sa Pa' : selectedCity}</strong> (recalculando distancias)</span>
-              ) : isLiveTracking ? (
-                <span>📍 GPS en vivo activo {userCoords ? `(${userCoords.lat.toFixed(3)}°, ${userCoords.lng.toFixed(3)}°)` : ''}</span>
               ) : (
-                <span>📍 GPS en extranjero. Pulsa "Simular Paseo" para probar en Vietnam.</span>
+                <span>📍 GPS en vivo activo {userCoords ? `(${userCoords.lat.toFixed(3)}°, ${userCoords.lng.toFixed(3)}°)` : ''}</span>
               )}
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {isSimulatingLiveWalk ? (
-              <button
-                type="button"
-                onClick={() => handleToggleSimulatedWalk()}
-                className="px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-300 text-xs font-semibold cursor-pointer transition"
-              >
-                Detener paseo
-              </button>
-            ) : isLiveTracking ? (
+            {isLiveTracking && (
               <button
                 type="button"
                 onClick={toggleLiveTracking}
@@ -916,7 +826,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
               >
                 Pausar GPS
               </button>
-            ) : null}
+            )}
           </div>
         </div>
       )}

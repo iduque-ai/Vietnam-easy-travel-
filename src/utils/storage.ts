@@ -101,22 +101,68 @@ export function saveFavoritePoiIds(ids: string[]): void {
   }
 }
 
+// Pre-cache and get best available voice for language
+let cachedVoices: SpeechSynthesisVoice[] = [];
+
+if (typeof window !== 'undefined' && window.speechSynthesis) {
+  const updateVoices = () => {
+    try {
+      cachedVoices = window.speechSynthesis.getVoices();
+    } catch {}
+  };
+  updateVoices();
+  if (window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = updateVoices;
+  }
+}
+
+function getAvailableVoices(): SpeechSynthesisVoice[] {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return [];
+  if (cachedVoices.length === 0) {
+    try {
+      cachedVoices = window.speechSynthesis.getVoices();
+    } catch {}
+  }
+  return cachedVoices;
+}
+
+// Clean text for speech synthesis (strip emojis, unwanted brackets, etc.)
+function cleanTextForSpeech(text: string): string {
+  return text
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Text-to-speech pronunciation in Vietnamese
 export function speakVietnamese(text: string): boolean {
   if (typeof window === 'undefined' || !window.speechSynthesis) {
     return false;
   }
 
+  const clean = cleanTextForSpeech(text);
+  if (!clean) return false;
+
   try {
     window.speechSynthesis.cancel(); // Stop any pending speech
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'vi-VN';
-    utterance.rate = 0.85; // Slightly slower for clarity
-    utterance.pitch = 1.0;
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
 
-    // Check if a vi-VN voice exists
-    const voices = window.speechSynthesis.getVoices();
-    const viVoice = voices.find((v) => v.lang.startsWith('vi'));
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.lang = 'vi-VN';
+    utterance.rate = 0.88; // Natural, clear cadence
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    const voices = getAvailableVoices();
+    // Prioritize natural/Google/Microsoft/Apple Vietnamese voices
+    const viVoice =
+      voices.find((v) => v.lang.replace('_', '-').toLowerCase().startsWith('vi') && /google|natural|neural|linh|hoaimy|mai|namminh/i.test(v.name)) ||
+      voices.find((v) => v.lang.replace('_', '-').toLowerCase().startsWith('vi')) ||
+      voices.find((v) => /vietnam|tiếng việt/i.test(v.name));
+
     if (viVoice) {
       utterance.voice = viVoice;
     }
@@ -129,21 +175,71 @@ export function speakVietnamese(text: string): boolean {
   }
 }
 
+// Text-to-speech pronunciation in Spanish
+export function speakSpanish(text: string): boolean {
+  if (typeof window === 'undefined' || !window.speechSynthesis) {
+    return false;
+  }
+
+  const clean = cleanTextForSpeech(text);
+  if (!clean) return false;
+
+  try {
+    window.speechSynthesis.cancel();
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.lang = 'es-ES';
+    utterance.rate = 0.92;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    const voices = getAvailableVoices();
+    const esVoice =
+      voices.find((v) => (v.lang.startsWith('es-ES') || v.lang.startsWith('es_ES')) && /google|natural|neural|monica|jorge|alvaro/i.test(v.name)) ||
+      voices.find((v) => v.lang.toLowerCase().startsWith('es')) ||
+      voices.find((v) => /spanish|español/i.test(v.name));
+
+    if (esVoice) {
+      utterance.voice = esVoice;
+    }
+
+    window.speechSynthesis.speak(utterance);
+    return true;
+  } catch (err) {
+    console.warn('Spanish speech synthesis error:', err);
+    return false;
+  }
+}
+
 // Text-to-speech pronunciation in English
 export function speakEnglish(text: string): boolean {
   if (typeof window === 'undefined' || !window.speechSynthesis) {
     return false;
   }
 
+  const clean = cleanTextForSpeech(text);
+  if (!clean) return false;
+
   try {
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 0.9;
-    utterance.pitch = 1.0;
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
 
-    const voices = window.speechSynthesis.getVoices();
-    const enVoice = voices.find((v) => v.lang.startsWith('en'));
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.92;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    const voices = getAvailableVoices();
+    const enVoice =
+      voices.find((v) => (v.lang.startsWith('en-US') || v.lang.startsWith('en_US')) && /google|natural|neural|samantha|daniel/i.test(v.name)) ||
+      voices.find((v) => v.lang.toLowerCase().startsWith('en'));
+
     if (enVoice) {
       utterance.voice = enVoice;
     }
@@ -369,20 +465,16 @@ export const DEFAULT_ALLERGY_CARDS: AllergyCardData[] = [
 export function getSavedAllergyCards(): AllergyCardData[] {
   try {
     const raw = localStorage.getItem(ALLERGY_CARDS_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch (e) {
     console.error('Failed reading allergy cards from localStorage:', e);
   }
-  // Store default cards
-  try {
-    localStorage.setItem(ALLERGY_CARDS_KEY, JSON.stringify(DEFAULT_ALLERGY_CARDS));
-  } catch {}
-  return DEFAULT_ALLERGY_CARDS;
+  return [];
 }
 
 export function saveAllergyCards(cards: AllergyCardData[]): void {
