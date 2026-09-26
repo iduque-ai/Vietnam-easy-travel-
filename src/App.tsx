@@ -357,7 +357,7 @@ export default function App() {
       <MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {/* Bottom Sticky Footer with Dual Time and Emergency Numbers */}
-      <footer className="bg-stone-900 text-stone-400 border-t border-stone-800 py-3 text-xs mb-16 md:mb-0">
+      <footer className="bg-stone-900 text-stone-400 border-t border-stone-800 pt-3.5 pb-24 md:py-3.5 text-xs">
         <div className="max-w-6xl mx-auto px-4">
           <div className="grid grid-cols-2 gap-2 sm:gap-4 max-w-lg mx-auto sm:max-w-none sm:flex sm:items-center sm:justify-center">
             {/* Row 1: Vietnam & Ambulancia */}
