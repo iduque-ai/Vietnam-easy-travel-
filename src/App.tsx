@@ -254,7 +254,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-stone-100 text-stone-800 flex flex-col font-sans overflow-x-hidden w-full max-w-full">
+    <div className="min-h-[100dvh] bg-stone-100 text-stone-800 flex flex-col font-sans overflow-x-hidden w-full max-w-full">
       {/* Quota Exceeded Sticky Banner */}
       {isMapsQuotaExceeded && (
         <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
@@ -357,7 +357,10 @@ export default function App() {
       <MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {/* Bottom Sticky Footer with Dual Time and Emergency Numbers */}
-      <footer className="bg-stone-900 text-stone-400 border-t border-stone-800 pt-3.5 pb-24 md:py-3.5 text-xs">
+      <footer
+        className="bg-stone-900 text-stone-400 border-t border-stone-800 pt-3.5 pb-28 md:py-3.5 text-xs"
+        style={{ paddingBottom: 'calc(6.75rem + env(safe-area-inset-bottom, 0px))' }}
+      >
         <div className="max-w-6xl mx-auto px-4">
           <div className="grid grid-cols-2 gap-2 sm:gap-4 max-w-lg mx-auto sm:max-w-none sm:flex sm:items-center sm:justify-center">
             {/* Row 1: Vietnam & Ambulancia */}

@@ -45,8 +45,12 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-stone-900/95 backdrop-blur-lg border-t border-stone-800/90 shadow-[0_-8px_25px_rgba(0,0,0,0.4)] select-none"
-      style={{ paddingBottom: 'calc(0.4rem + env(safe-area-inset-bottom, 0px))' }}
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-stone-900/95 backdrop-blur-lg border-t border-stone-800/90 shadow-[0_-8px_25px_rgba(0,0,0,0.4)] select-none will-change-transform"
+      style={{
+        paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))',
+        transform: 'translate3d(0, 0, 0)',
+        WebkitTransform: 'translate3d(0, 0, 0)',
+      }}
       aria-label="Navegación principal móvil"
     >
       <div className="flex items-center justify-around px-1 pt-1.5">
