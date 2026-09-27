@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   PhoneCall,
+  Lock,
 } from 'lucide-react';
 import { ExchangeRatesData, ActiveTabType } from '../types';
 import {
@@ -589,6 +590,20 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </div>
               </div>
+
+              {(geoStatus === 'denied' || micStatus === 'denied') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDrawerOpen(false);
+                    if (onOpenPermissionsModal) onOpenPermissionsModal();
+                  }}
+                  className="w-full mt-2 py-1.5 px-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Lock className="w-3 h-3 text-amber-400" />
+                  <span>Cómo desbloquear en el navegador ⚙️</span>
+                </button>
+              )}
             </div>
 
             {/* Drawer Footer */}

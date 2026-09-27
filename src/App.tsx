@@ -18,6 +18,7 @@ import { ExchangeRatesData, ActiveTabType, PointOfInterest } from './types';
 import { getSavedRates, saveRates, isRatesStale } from './utils/storage';
 import { fetchLiveExchangeRates } from './utils/currencyApi';
 import { useItineraryState } from './utils/useItineraryState';
+import { VIETNAM_SIMULATION_PRESETS } from './utils/geolocation';
 import { Compass, Wifi, WifiOff, Clock, ShieldCheck, HeartPulse, HelpCircle } from 'lucide-react';
 
 export default function App() {
@@ -297,6 +298,14 @@ export default function App() {
       <PermissionsModal
         isOpen={isPermissionsModalOpen}
         onClose={() => setIsPermissionsModalOpen(false)}
+        onSelectSimulationPreset={(presetId) => {
+          const preset = VIETNAM_SIMULATION_PRESETS.find((p) => p.id === presetId);
+          if (preset) {
+            setTargetMapRegionId(preset.regionId);
+            setOfflineToast(`📍 Posición en Vietnam activada: ${preset.name}`);
+            setTimeout(() => setOfflineToast(null), 3500);
+          }
+        }}
       />
 
       {/* Emergency & Consular Assistance Modal */}
