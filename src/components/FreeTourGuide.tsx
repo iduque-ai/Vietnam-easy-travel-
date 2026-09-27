@@ -36,7 +36,19 @@ import {
 import { FreeTourData, FreeTourStop, PointOfInterest, TourChatMessage } from '../types';
 import { POINTS_OF_INTEREST } from '../data/pois';
 import { CURATED_CLIENT_TOURS, findClientCuratedTour } from '../data/curatedTours';
-import { getSavedFreeTours, saveFreeTour, deleteSavedFreeTour } from '../utils/storage';
+import {
+  getSavedFreeTours,
+  saveFreeTour,
+  deleteSavedFreeTour,
+} from '../utils/storage';
+import {
+  playNaturalSpeech,
+  stopAllSpeech,
+  speakVietnameseNatural,
+  preprocessTextForNaturalSpeech,
+  findBestNaturalVoice,
+} from '../utils/speechSynthesis';
+import { AudioWaveIndicator } from './AudioWaveIndicator';
 import {
   getSmartGeolocation,
   createSimulatedResult,
@@ -199,14 +211,16 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   }, []);
 
+  // Active audio guide session tracker
+  const activeSessionIdRef = useRef<number>(0);
+
   // Stop any playing speech safely
   const stopAudio = useCallback(() => {
+    activeSessionIdRef.current++;
+    stopAllSpeech();
     if (keepAliveIntervalRef.current) {
       clearInterval(keepAliveIntervalRef.current);
       keepAliveIntervalRef.current = null;
-    }
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
     }
     setIsPlayingAudio(false);
     setIsPausedAudio(false);
@@ -214,102 +228,79 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     setCurrentSentenceIndex(-1);
   }, []);
 
-  // SpeechSynthesis audio playback with sentence-by-sentence queueing to prevent browser 15s freeze
+  // Natural Voice Audioguide playback with real-time sentence synchronization
   const playAudio = useCallback(
-    (text: string, title: string) => {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-        showToast('Tu navegador no soporta síntesis de voz interactiva.');
-        return;
-      }
-
+    (text: string, title: string, startFromIndex = 0) => {
       stopAudio();
+      const sessionId = ++activeSessionIdRef.current;
 
-      // Split text into readable sentences
-      const rawSentences = text
+      // Preprocess text for natural human prosody
+      const processedText = preprocessTextForNaturalSpeech(text, 'es-ES');
+
+      // Split text into readable sentences with natural pauses
+      const rawSentences = processedText
         .split(/(?<=[.!?])\s+/)
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
-      const sentences = rawSentences.length > 0 ? rawSentences : [text];
+      const sentences = rawSentences.length > 0 ? rawSentences : [processedText];
       setAudioSentences(sentences);
       setSpeakingTextTitle(title);
       setIsPlayingAudio(true);
       setIsPausedAudio(false);
 
-      // Keepalive timer for Chrome / Android iframe speech pause issue
-      keepAliveIntervalRef.current = setInterval(() => {
-        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-          if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
-            window.speechSynthesis.pause();
-            window.speechSynthesis.resume();
-          }
-        }
-      }, 9000);
-
-      let idx = 0;
-
-      const speakSentence = (sentenceIdx: number) => {
+      const speakSentence = async (sentenceIdx: number) => {
+        if (activeSessionIdRef.current !== sessionId) return;
         if (sentenceIdx >= sentences.length) {
           stopAudio();
           return;
         }
 
         setCurrentSentenceIndex(sentenceIdx);
-        const utterance = new SpeechSynthesisUtterance(sentences[sentenceIdx]);
-        utterance.lang = 'es-ES';
-        utterance.rate = playbackSpeed;
+        const sentence = sentences[sentenceIdx];
 
-        const voices = window.speechSynthesis.getVoices();
-        const esVoice = voices.find(
-          (v) =>
-            (v.lang === 'es-ES' || v.lang === 'es_ES' || v.lang.toLowerCase().includes('es-es')) &&
-            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('España') || v.name.includes('Spain') || v.name.includes('Alvaro') || v.name.includes('Jorge') || v.name.includes('Elvira') || v.name.includes('Monica'))
-        ) || voices.find(
-          (v) => v.lang === 'es-ES' || v.lang === 'es_ES' || v.lang.toLowerCase().includes('es-es')
-        ) || voices.find(
-          (v) =>
-            v.lang.startsWith('es') &&
-            (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Spain') || v.name.includes('Español'))
-        ) || voices.find((v) => v.lang.startsWith('es'));
-
-        if (esVoice) {
-          utterance.voice = esVoice;
-        }
-        utterance.lang = 'es-ES';
-
-        utterance.onend = () => {
-          idx++;
-          speakSentence(idx);
-        };
-
-        utterance.onerror = (e) => {
-          console.warn('Speech sentence error:', e);
-          idx++;
-          if (idx < sentences.length) {
-            speakSentence(idx);
-          } else {
-            stopAudio();
-          }
-        };
-
-        speechUtteranceRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
+        await playNaturalSpeech({
+          text: sentence,
+          lang: 'es-ES',
+          speed: playbackSpeed,
+          id: `tour-narrative-${sessionId}-${sentenceIdx}`,
+          onStart: () => {
+            if (activeSessionIdRef.current === sessionId) {
+              setIsPlayingAudio(true);
+              setIsPausedAudio(false);
+            }
+          },
+          onEnd: () => {
+            if (activeSessionIdRef.current === sessionId) {
+              speakSentence(sentenceIdx + 1);
+            }
+          },
+          onError: () => {
+            if (activeSessionIdRef.current === sessionId) {
+              speakSentence(sentenceIdx + 1);
+            }
+          },
+        });
       };
 
-      speakSentence(0);
+      speakSentence(startFromIndex);
     },
-    [playbackSpeed, stopAudio, showToast]
+    [playbackSpeed, stopAudio]
   );
 
   const pauseAudio = () => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      if (isPlayingAudio && !isPausedAudio) {
-        window.speechSynthesis.pause();
-        setIsPausedAudio(true);
-      } else if (isPausedAudio) {
-        window.speechSynthesis.resume();
-        setIsPausedAudio(false);
-      }
+    if (isPlayingAudio && !isPausedAudio) {
+      activeSessionIdRef.current++;
+      stopAllSpeech();
+      setIsPausedAudio(true);
+      setIsPlayingAudio(false);
+    } else if (isPausedAudio) {
+      const resumeIdx = currentSentenceIndex >= 0 ? currentSentenceIndex : 0;
+      playAudio(
+        audioSentences.join(' '),
+        speakingTextTitle || 'Audioguía',
+        resumeIdx
+      );
     }
   };
 
@@ -319,14 +310,9 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     showToast(`Velocidad de narración: ${nextSpeed}x`);
   };
 
-  // Pronounce Vietnamese term
+  // Pronounce Vietnamese term using high-definition natural engine
   const speakVietnamese = (text: string) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'vi-VN';
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
+    speakVietnameseNatural(text, `tour-vi-${text.slice(0, 20)}`);
   };
 
   // Helper to construct a reliable fallback tour client-side
@@ -1143,7 +1129,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                       playAudio(activeTour.audioGuideScript, `Audioguía: ${activeTour.placeName}`);
                     }
                   }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow-md transition-all active:scale-95"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
                 >
                   {isPlayingAudio && !isPausedAudio ? (
                     <>
@@ -1162,7 +1148,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                   <button
                     id="btn-stop-audio"
                     onClick={stopAudio}
-                    className="p-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-xl text-xs transition-all"
+                    className="p-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-xl text-xs transition-all cursor-pointer"
                     title="Detener audio"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
@@ -1172,8 +1158,8 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                 <button
                   id="btn-toggle-audio-speed"
                   onClick={toggleSpeed}
-                  className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-amber-300 rounded-lg text-xs font-mono font-bold transition-all border border-stone-700"
-                  title="Cambiar velocidad de reproducción"
+                  className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-amber-300 rounded-lg text-xs font-mono font-bold transition-all border border-stone-700 cursor-pointer"
+                  title="Cambiar velocidad de narración"
                 >
                   {playbackSpeed.toFixed(1)}x
                 </button>
@@ -1182,20 +1168,23 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
               {/* Sound wave visualizer / playback indicator */}
               <div className="flex items-center gap-2 text-xs text-stone-400">
                 {isPlayingAudio && !isPausedAudio ? (
-                  <div className="flex items-center gap-1">
-                    <span className="w-1 h-3 bg-amber-400 animate-pulse rounded-full" />
-                    <span className="w-1 h-5 bg-amber-400 animate-pulse delay-75 rounded-full" />
-                    <span className="w-1 h-2 bg-amber-400 animate-pulse delay-150 rounded-full" />
-                    <span className="w-1 h-4 bg-amber-400 animate-pulse delay-100 rounded-full" />
-                    <span className="text-amber-300 font-medium ml-1 truncate max-w-[200px]">
-                      {speakingTextTitle || 'Reproduciendo...'}
+                  <div className="flex items-center gap-2">
+                    <AudioWaveIndicator isPlaying={true} size="md" colorClass="text-amber-400" />
+                    <span className="text-amber-300 font-medium truncate max-w-[180px] sm:max-w-[260px]">
+                      {speakingTextTitle || 'Voz Natural reproduciendo...'}
                     </span>
                   </div>
                 ) : (
-                  <span className="text-stone-400 flex items-center gap-1.5">
-                    <Headphones className="w-3.5 h-3.5 text-stone-500" />
-                    <span>Ideal con auriculares mientras caminas</span>
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/60 text-[10px] font-semibold">
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      <span>Voz Natural IA</span>
+                    </span>
+                    <span className="text-stone-400 hidden sm:flex items-center gap-1.5">
+                      <Headphones className="w-3.5 h-3.5 text-stone-500" />
+                      <span>Ideal con auriculares</span>
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -1212,9 +1201,13 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
               </div>
               <button
                 onClick={() => playAudio(activeTour.audioGuideScript, 'Narrativa del Guía')}
-                className="text-xs font-semibold text-amber-700 hover:text-amber-800 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors"
+                className="text-xs font-semibold text-amber-700 hover:text-amber-800 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer"
               >
-                <Volume2 className="w-3.5 h-3.5" />
+                <AudioWaveIndicator
+                  isPlaying={isPlayingAudio && speakingTextTitle.includes('Narrativa')}
+                  size="sm"
+                  colorClass="text-amber-700"
+                />
                 <span>Leer en voz alta</span>
               </button>
             </div>
@@ -1283,15 +1276,28 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          playAudio(
-                            `${stop.title}. Qué mirar: ${stop.whatToLookAt}. Historia: ${stop.story}. Consejo de guía: ${stop.insiderTip}`,
-                            `Parada ${stop.number}: ${stop.title}`
-                          );
+                          const isThisPlaying = isPlayingAudio && speakingTextTitle.includes(`Parada ${stop.number}`);
+                          if (isThisPlaying) {
+                            stopAudio();
+                          } else {
+                            playAudio(
+                              `${stop.title}. Qué mirar: ${stop.whatToLookAt}. Historia: ${stop.story}. Consejo de guía: ${stop.insiderTip}`,
+                              `Parada ${stop.number}: ${stop.title}`
+                            );
+                          }
                         }}
-                        className="p-1.5 bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-900 rounded-lg text-xs transition-colors shrink-0"
-                        title="Escuchar esta parada"
+                        className={`p-2 rounded-xl text-xs transition-all shrink-0 cursor-pointer flex items-center justify-center ${
+                          isPlayingAudio && speakingTextTitle.includes(`Parada ${stop.number}`)
+                            ? 'bg-amber-400 text-stone-950 font-bold shadow-xs'
+                            : 'bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-900'
+                        }`}
+                        title="Escuchar narración de esta parada con voz natural"
                       >
-                        <Volume2 className="w-4 h-4" />
+                        <AudioWaveIndicator
+                          isPlaying={isPlayingAudio && speakingTextTitle.includes(`Parada ${stop.number}`)}
+                          size="sm"
+                          colorClass={isPlayingAudio && speakingTextTitle.includes(`Parada ${stop.number}`) ? 'text-stone-950' : 'text-stone-700'}
+                        />
                       </button>
                     </div>
 

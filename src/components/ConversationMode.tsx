@@ -19,6 +19,7 @@ import {
   Plus,
   Trash2,
   Star,
+  Sliders,
 } from 'lucide-react';
 import {
   speakVietnamese,
@@ -29,8 +30,14 @@ import {
   getSavedCustomCards,
   saveCustomCard,
   deleteSavedCustomCard,
+  subscribeSpeechState,
+  stopAllSpeech,
+  getSavedSpeechSettings,
+  SpeechSettings,
 } from '../utils/storage';
 import { TRAVEL_PHRASES } from '../data/phrases';
+import { VoiceSettingsModal } from './VoiceSettingsModal';
+import { AudioWaveIndicator } from './AudioWaveIndicator';
 
 interface ConversationModeProps {
   isOnline: boolean;
@@ -438,6 +445,23 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
   const [quickCategory, setQuickCategory] = useState<string>('precios');
   const [customCards, setCustomCards] = useState<CustomTranslationCard[]>(() => getSavedCustomCards());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [speechSettings, setSpeechSettings] = useState<SpeechSettings>(() => getSavedSpeechSettings());
+  const [speakingState, setSpeakingState] = useState<{
+    isSpeaking: boolean;
+    speakingId: string | null;
+  }>({ isSpeaking: false, speakingId: null });
+
+  // Subscribe to speech state changes
+  useEffect(() => {
+    const unsub = subscribeSpeechState((state) => {
+      setSpeakingState({
+        isSpeaking: state.isSpeaking,
+        speakingId: state.speakingId,
+      });
+    });
+    return unsub;
+  }, []);
 
   // Modal for creating custom cards
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
@@ -757,6 +781,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
   };
 
   const handleQuickPhraseClick = (phrase: QuickPhrase) => {
+    const playId = `quick-${phrase.id || phrase.label}`;
     if (direction === 'traveler-to-vi') {
       const query = travelerLang === 'es' ? phrase.es : phrase.en;
       setInputText(query);
@@ -764,7 +789,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       setPhoneticText(phrase.phonetic);
       setTipText(phrase.tip || '');
       if (autoSpeak) {
-        speakVietnamese(phrase.vi);
+        speakVietnamese(phrase.vi, playId);
       }
     } else {
       setInputText(phrase.vi);
@@ -773,9 +798,9 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       setTipText(phrase.tip || '');
       if (autoSpeak) {
         if (travelerLang === 'es') {
-          speakSpanish(phrase.es);
+          speakSpanish(phrase.es, playId);
         } else {
-          speakEnglish(phrase.en);
+          speakEnglish(phrase.en, playId);
         }
       }
     }
@@ -790,13 +815,18 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
 
   const handleSpeakOutput = () => {
     if (!translatedText) return;
+    const playId = 'conversation-main-output';
+    if (speakingState.isSpeaking && speakingState.speakingId === playId) {
+      stopAllSpeech();
+      return;
+    }
     if (direction === 'traveler-to-vi') {
-      speakVietnamese(translatedText);
+      speakVietnamese(translatedText, playId);
     } else {
       if (travelerLang === 'es') {
-        speakSpanish(translatedText);
+        speakSpanish(translatedText, playId);
       } else {
-        speakEnglish(translatedText);
+        speakEnglish(translatedText, playId);
       }
     }
   };
@@ -1001,16 +1031,28 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
           </div>
         </div>
 
-        {/* Action: Google Translate external link */}
-        <button
-          id="btn-open-google-translate"
-          onClick={() => openGoogleTranslate(travelerLang === 'es' ? 'es' : 'en', 'vi', inputText)}
-          className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-white border border-stone-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
-          title="Abrir en Google Translate oficial"
-        >
-          <ExternalLink className="w-3 h-3 text-amber-400" />
-          <span>Google Translate ↗</span>
-        </button>
+        {/* Actions: Voice Settings + Google Translate external link */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsVoiceModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+            title="Ajustar velocidad, tono y motor de voz natural"
+          >
+            <Sliders className="w-3 h-3 text-amber-400" />
+            <span>Voz Natural</span>
+          </button>
+
+          <button
+            id="btn-open-google-translate"
+            onClick={() => openGoogleTranslate(travelerLang === 'es' ? 'es' : 'en', 'vi', inputText)}
+            className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-white border border-stone-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+            title="Abrir en Google Translate oficial"
+          >
+            <ExternalLink className="w-3 h-3 text-amber-400" />
+            <span>Google Translate ↗</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. MAIN TRANSLATOR BOARD */}
@@ -1134,7 +1176,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                     e.preventDefault();
                     handleTranslate();
                   }
@@ -1160,7 +1202,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                     Borrar
                   </button>
                 ) : (
-                  <span className="text-stone-400 text-[11px]">Pulsa Enter para traducir</span>
+                  <span className="text-stone-400 text-[11px]">Ctrl+Enter para traducir rápido</span>
                 )}
               </div>
 
@@ -1218,10 +1260,18 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   type="button"
                   onClick={handleSpeakOutput}
                   disabled={!translatedText}
-                  className="p-2 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer active:scale-95 shadow-2xs"
-                  title="Escuchar pronunciación"
+                  className={`p-2 rounded-xl border transition cursor-pointer active:scale-95 shadow-2xs flex items-center justify-center ${
+                    speakingState.isSpeaking && speakingState.speakingId === 'conversation-main-output'
+                      ? 'bg-amber-400 text-stone-950 border-amber-300 ring-2 ring-amber-400/30'
+                      : 'bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border-amber-200'
+                  }`}
+                  title="Pronunciación en voz natural"
                 >
-                  <Volume2 className="w-4 h-4 text-amber-700" />
+                  <AudioWaveIndicator
+                    isPlaying={speakingState.isSpeaking && speakingState.speakingId === 'conversation-main-output'}
+                    size="md"
+                    colorClass="text-amber-950"
+                  />
                 </button>
 
                 <button
@@ -1264,22 +1314,6 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   💡 {tipText}
                 </p>
               )}
-            </div>
-
-            {/* Footer Toolbar */}
-            <div className="pt-3 border-t border-amber-200/70 flex items-center justify-between text-xs text-stone-600">
-              <span className="text-[11px] text-stone-500">
-                Traducción instantánea
-              </span>
-
-              <button
-                type="button"
-                onClick={handleSpeakOutput}
-                className="text-amber-900 font-bold hover:underline cursor-pointer flex items-center gap-1 text-xs"
-              >
-                <Volume2 className="w-3.5 h-3.5 text-amber-700" />
-                <span>Escuchar</span>
-              </button>
             </div>
           </div>
         </div>
@@ -1564,14 +1598,38 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
           <div className="flex items-center justify-center gap-4 pt-4 border-t border-stone-800">
             <button
               onClick={handleSpeakOutput}
-              className="px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-sm shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95"
+              className={`px-6 py-3 rounded-2xl font-bold text-sm shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95 ${
+                speakingState.isSpeaking && speakingState.speakingId === 'conversation-main-output'
+                  ? 'bg-amber-400 text-stone-950 ring-4 ring-amber-400/30'
+                  : 'bg-amber-500 hover:bg-amber-400 text-stone-950'
+              }`}
             >
-              <Volume2 className="w-5 h-5 text-stone-950" />
-              <span>Reproducir voz en vietnamita</span>
+              <AudioWaveIndicator
+                isPlaying={speakingState.isSpeaking && speakingState.speakingId === 'conversation-main-output'}
+                size="lg"
+                colorClass="text-stone-950"
+              />
+              <span>
+                {speakingState.isSpeaking && speakingState.speakingId === 'conversation-main-output'
+                  ? 'Reproduciendo voz natural (Clic para pausar)'
+                  : isTravelerToVi
+                  ? 'Reproducir voz en vietnamita'
+                  : 'Reproducir voz'}
+              </span>
             </button>
           </div>
         </div>
       )}
+
+      {/* Voice Settings Modal */}
+      <VoiceSettingsModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => {
+          setIsVoiceModalOpen(false);
+          setSpeechSettings(getSavedSpeechSettings());
+        }}
+        isOnline={isOnline}
+      />
     </div>
   );
 };

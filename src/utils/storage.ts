@@ -135,121 +135,31 @@ function cleanTextForSpeech(text: string): string {
     .trim();
 }
 
-// Text-to-speech pronunciation in Vietnamese
-export function speakVietnamese(text: string): boolean {
-  if (typeof window === 'undefined' || !window.speechSynthesis) {
-    return false;
-  }
+export * from './speechSynthesis';
+import {
+  playNaturalSpeech,
+  speakVietnameseNatural,
+  speakSpanishNatural,
+  speakEnglishNatural,
+  stopAllSpeech,
+} from './speechSynthesis';
 
-  const clean = cleanTextForSpeech(text);
-  if (!clean) return false;
-
-  try {
-    window.speechSynthesis.cancel(); // Stop any pending speech
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = 'vi-VN';
-    utterance.rate = 0.88; // Natural, clear cadence
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    const voices = getAvailableVoices();
-    // Prioritize natural/Google/Microsoft/Apple Vietnamese voices
-    const viVoice =
-      voices.find((v) => v.lang.replace('_', '-').toLowerCase().startsWith('vi') && /google|natural|neural|linh|hoaimy|mai|namminh/i.test(v.name)) ||
-      voices.find((v) => v.lang.replace('_', '-').toLowerCase().startsWith('vi')) ||
-      voices.find((v) => /vietnam|tiếng việt/i.test(v.name));
-
-    if (viVoice) {
-      utterance.voice = viVoice;
-    }
-
-    window.speechSynthesis.speak(utterance);
-    return true;
-  } catch (err) {
-    console.warn('Speech synthesis error:', err);
-    return false;
-  }
+// Enhanced Text-to-speech pronunciation in Vietnamese (Natural Neural / Calibrated)
+export function speakVietnamese(text: string, id?: string): boolean {
+  if (!text) return false;
+  return speakVietnameseNatural(text, id);
 }
 
-// Text-to-speech pronunciation in Spanish
-export function speakSpanish(text: string): boolean {
-  if (typeof window === 'undefined' || !window.speechSynthesis) {
-    return false;
-  }
-
-  const clean = cleanTextForSpeech(text);
-  if (!clean) return false;
-
-  try {
-    window.speechSynthesis.cancel();
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = 'es-ES';
-    utterance.rate = 0.92;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    const voices = getAvailableVoices();
-    const esVoice =
-      voices.find((v) => (v.lang.startsWith('es-ES') || v.lang.startsWith('es_ES')) && /google|natural|neural|monica|jorge|alvaro/i.test(v.name)) ||
-      voices.find((v) => v.lang.toLowerCase().startsWith('es')) ||
-      voices.find((v) => /spanish|español/i.test(v.name));
-
-    if (esVoice) {
-      utterance.voice = esVoice;
-    }
-
-    window.speechSynthesis.speak(utterance);
-    return true;
-  } catch (err) {
-    console.warn('Spanish speech synthesis error:', err);
-    return false;
-  }
+// Enhanced Text-to-speech pronunciation in Spanish (Natural & Warm)
+export function speakSpanish(text: string, id?: string): boolean {
+  if (!text) return false;
+  return speakSpanishNatural(text, id);
 }
 
-// Text-to-speech pronunciation in English
-export function speakEnglish(text: string): boolean {
-  if (typeof window === 'undefined' || !window.speechSynthesis) {
-    return false;
-  }
-
-  const clean = cleanTextForSpeech(text);
-  if (!clean) return false;
-
-  try {
-    window.speechSynthesis.cancel();
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = 'en-US';
-    utterance.rate = 0.92;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    const voices = getAvailableVoices();
-    const enVoice =
-      voices.find((v) => (v.lang.startsWith('en-US') || v.lang.startsWith('en_US')) && /google|natural|neural|samantha|daniel/i.test(v.name)) ||
-      voices.find((v) => v.lang.toLowerCase().startsWith('en'));
-
-    if (enVoice) {
-      utterance.voice = enVoice;
-    }
-
-    window.speechSynthesis.speak(utterance);
-    return true;
-  } catch (err) {
-    console.warn('English speech synthesis error:', err);
-    return false;
-  }
+// Enhanced Text-to-speech pronunciation in English
+export function speakEnglish(text: string, id?: string): boolean {
+  if (!text) return false;
+  return speakEnglishNatural(text, id);
 }
 
 // Launch Google Translate in text mode (English <-> Vietnamese)

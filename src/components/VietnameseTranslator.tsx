@@ -15,7 +15,9 @@ import {
   Languages,
   Star,
   Trash2,
-  X
+  X,
+  Sliders,
+  Sparkles
 } from 'lucide-react';
 import { PhraseItem, DishItem } from '../types';
 import { TRAVEL_PHRASES } from '../data/phrases';
@@ -25,10 +27,16 @@ import {
   getDefaultTranslatorSubTab,
   getSavedCustomCards,
   deleteSavedCustomCard,
-  CustomTranslationCard
+  CustomTranslationCard,
+  subscribeSpeechState,
+  stopAllSpeech,
+  getSavedSpeechSettings,
+  SpeechSettings
 } from '../utils/storage';
 import { AllergyCardsSection } from './AllergyCardsSection';
 import { ConversationMode } from './ConversationMode';
+import { VoiceSettingsModal } from './VoiceSettingsModal';
+import { AudioWaveIndicator } from './AudioWaveIndicator';
 
 interface VietnameseTranslatorProps {
   isOnline: boolean;
@@ -60,11 +68,29 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
   const [selectedCategory, setSelectedCategory] = useState<string>('compras');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [customCards, setCustomCards] = useState<CustomTranslationCard[]>(() => getSavedCustomCards());
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [speechSettings, setSpeechSettings] = useState<SpeechSettings>(() => getSavedSpeechSettings());
+  const [speakingState, setSpeakingState] = useState<{
+    isSpeaking: boolean;
+    speakingId: string | null;
+  }>({ isSpeaking: false, speakingId: null });
+
+  // Subscribe to speech state changes
+  useEffect(() => {
+    const unsub = subscribeSpeechState((state) => {
+      setSpeakingState({
+        isSpeaking: state.isSpeaking,
+        speakingId: state.speakingId,
+      });
+    });
+    return unsub;
+  }, []);
 
   // Reload custom cards when switching tabs or when window focuses
   useEffect(() => {
     const handleFocus = () => {
       setCustomCards(getSavedCustomCards());
+      setSpeechSettings(getSavedSpeechSettings());
     };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
@@ -151,15 +177,20 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleSpeak = (text: string) => {
-    speakVietnamese(text);
+  const handleSpeak = (text: string, id?: string) => {
+    const playId = id || `phrase-${text.slice(0, 25)}`;
+    if (speakingState.isSpeaking && speakingState.speakingId === playId) {
+      stopAllSpeech();
+      return;
+    }
+    speakVietnamese(text, playId);
   };
 
   return (
     <div className="space-y-6 max-w-4xl w-full mx-auto min-w-0">
       {/* Sub tabs navigation */}
-      {/* SUB-TABS NAVIGATION */}
-      <div className="w-full">
+      {/* SUB-TABS NAVIGATION & VOICE CONTROLS */}
+      <div className="w-full space-y-2.5">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-stone-200/60 p-1.5 rounded-2xl border border-stone-300/70 shadow-2xs">
           <button
             id="subtab-conversation"
@@ -211,6 +242,29 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
           >
             <ShieldAlert className="w-4 h-4 shrink-0" />
             <span className="truncate">Fichas Dietas</span>
+          </button>
+        </div>
+
+        {/* Voice Natural Tuning Quick Bar */}
+        <div className="bg-gradient-to-r from-stone-900 via-[#181614] to-stone-900 text-stone-200 px-3.5 py-2 rounded-2xl border border-stone-800 flex items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2 text-xs min-w-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="text-amber-300 font-semibold text-[11px] sm:text-xs truncate flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Voz Natural Suave</span>
+              <span className="text-stone-400 font-normal hidden sm:inline">
+                · {speechSettings.speedPreset === 'slow' ? '0.8x lenta' : speechSettings.speedPreset === 'fast' ? '1.1x rápida' : '0.92x fluida'} ({speechSettings.gender === 'female' ? 'femenina' : 'masculina'})
+              </span>
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsVoiceModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-300 hover:text-amber-200 text-[11px] font-bold transition cursor-pointer border border-stone-700 shrink-0 active:scale-95"
+          >
+            <Sliders className="w-3 h-3 text-amber-400" />
+            <span>Ajustar voz</span>
           </button>
         </div>
       </div>
@@ -363,12 +417,24 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
 
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleSpeak(phrase.vietnamese)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-950 text-xs font-semibold transition cursor-pointer border border-amber-200/70 shadow-2xs"
-                      title="Reproducir pronunciación en vietnamita"
+                      onClick={() => handleSpeak(phrase.vietnamese, `phrase-${phrase.id}`)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border shadow-2xs ${
+                        speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`
+                          ? 'bg-amber-400 text-stone-950 font-bold border-amber-300 ring-2 ring-amber-400/30'
+                          : 'bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-950 border-amber-200/70'
+                      }`}
+                      title="Reproducir pronunciación en vietnamita (Voz natural suave)"
                     >
-                      <Volume2 className="w-3.5 h-3.5 text-amber-700" />
-                      <span>Escuchar</span>
+                      <AudioWaveIndicator
+                        isPlaying={speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`}
+                        size="sm"
+                        colorClass="text-amber-950"
+                      />
+                      <span>
+                        {speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`
+                          ? 'Reproduciendo...'
+                          : 'Escuchar'}
+                      </span>
                     </button>
 
                     <button
@@ -473,11 +539,19 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                     </div>
 
                     <button
-                      onClick={() => handleSpeak(dish.nameVi)}
-                      className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200/70 text-amber-900 transition cursor-pointer shrink-0 active:scale-95 shadow-2xs"
-                      title="Escuchar nombre del plato"
+                      onClick={() => handleSpeak(dish.nameVi, `dish-${dish.id}`)}
+                      className={`p-2.5 rounded-xl border transition cursor-pointer shrink-0 active:scale-95 shadow-2xs flex items-center justify-center ${
+                        speakingState.isSpeaking && speakingState.speakingId === `dish-${dish.id}`
+                          ? 'bg-amber-400 text-stone-950 border-amber-300 ring-2 ring-amber-400/30'
+                          : 'bg-amber-50 hover:bg-amber-100 border-amber-200/70 text-amber-900'
+                      }`}
+                      title="Escuchar pronunciación suave del plato"
                     >
-                      <Volume2 className="w-4 h-4 text-amber-700" />
+                      <AudioWaveIndicator
+                        isPlaying={speakingState.isSpeaking && speakingState.speakingId === `dish-${dish.id}`}
+                        size="md"
+                        colorClass="text-amber-950"
+                      />
                     </button>
                   </div>
 
@@ -526,6 +600,16 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
       {subTab === 'allergy' && (
         <AllergyCardsSection isOnline={isOnline} />
       )}
+
+      {/* Voice Settings Modal */}
+      <VoiceSettingsModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => {
+          setIsVoiceModalOpen(false);
+          setSpeechSettings(getSavedSpeechSettings());
+        }}
+        isOnline={isOnline}
+      />
     </div>
   );
 };

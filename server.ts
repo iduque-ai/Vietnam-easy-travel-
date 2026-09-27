@@ -2325,6 +2325,190 @@ app.post('/api/restaurants/menu', async (req, res) => {
   });
 });
 
+// TTS In-memory Cache for instant sub-second audio response
+interface TTSCacheEntry {
+  timestamp: number;
+  audioBase64: string;
+  mimeType: string;
+  source: string;
+}
+const ttsCache = new Map<string, TTSCacheEntry>();
+
+// High-Definition Neural TTS API endpoint
+app.post('/api/tts', async (req, res) => {
+  const { text, lang = 'vi-VN', voice, gender = 'female' } = req.body || {};
+  if (!text || typeof text !== 'string' || !text.trim()) {
+    return res.status(400).json({ success: false, error: 'Text is required for TTS' });
+  }
+
+  const cleanText = text.trim().slice(0, 1000);
+  const isVietnamese = lang.toLowerCase().startsWith('vi');
+  const isSpanish = lang.toLowerCase().startsWith('es');
+  const cacheKey = `${lang}:${gender}:${cleanText.toLowerCase()}`;
+
+  const cached = ttsCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < 3600000 * 24) {
+    return res.json({
+      success: true,
+      audioBase64: cached.audioBase64,
+      mimeType: cached.mimeType,
+      source: cached.source,
+      cached: true,
+    });
+  }
+
+  // 1. Attempt Gemini TTS (Try gemini-3.8-flash-lite-tts, then gemini-3.8-flash-tts)
+  if (process.env.GEMINI_API_KEY) {
+    const defaultVoice = isVietnamese 
+      ? (gender === 'male' ? 'Fenrir' : 'Kore')
+      : (gender === 'male' ? 'Puck' : 'Zephyr');
+
+    const styleInstruction = isVietnamese
+      ? "Giọng đọc tiếng Việt bản xứ tự nhiên, nhẹ nhàng, ấm áp, âm điệu chuẩn 6 thanh điệu, không ngắt quãng gắt, có nhịp thở êm dịu."
+      : isSpanish
+      ? "Voz humana en español de locutor/guía turístico: tono cálido, pausado, natural, suave y amigable."
+      : "Warm, gentle, natural friendly human voice with organic pauses and clear pronunciation.";
+
+    const modelsToTry = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'];
+
+    for (const modelName of modelsToTry) {
+      try {
+        const ai = getAI();
+        const contentsPayload: any = [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: cleanText,
+                speechMetadata: {
+                  style: styleInstruction,
+                },
+              },
+            ],
+          },
+        ];
+
+        const response: any = await ai.models.generateContent({
+          model: modelName,
+          contents: contentsPayload,
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: voice || defaultVoice },
+              },
+            },
+          },
+        });
+
+        const audioPart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData?.data);
+        if (audioPart && audioPart.inlineData?.data) {
+          const audioBase64 = audioPart.inlineData.data;
+          const mimeType = audioPart.inlineData.mimeType || 'audio/wav';
+
+          ttsCache.set(cacheKey, {
+            timestamp: now,
+            audioBase64,
+            mimeType,
+            source: modelName,
+          });
+
+          return res.json({
+            success: true,
+            audioBase64,
+            mimeType,
+            source: modelName,
+            cached: false,
+          });
+        }
+      } catch (err: any) {
+        console.warn(`[TTS] ${modelName} attempt failed (${err?.message || err}), checking next fallback...`);
+      }
+    }
+  }
+
+  // 2. High-quality Google Neural TTS proxy fallback (instant & unlimited)
+  try {
+    const langCode = isVietnamese ? 'vi' : isSpanish ? 'es' : 'en';
+    const googleTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${langCode}&q=${encodeURIComponent(cleanText)}`;
+    
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const gResponse = await fetch(googleTtsUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': 'https://translate.google.com/',
+        'Accept': 'audio/mpeg, audio/*;q=0.9, */*;q=0.8',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (gResponse.ok) {
+      const arrayBuffer = await gResponse.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const audioBase64 = buffer.toString('base64');
+      const mimeType = 'audio/mpeg';
+
+      ttsCache.set(cacheKey, {
+        timestamp: now,
+        audioBase64,
+        mimeType,
+        source: 'google_neural_tts',
+      });
+
+      return res.json({
+        success: true,
+        audioBase64,
+        mimeType,
+        source: 'google_neural_tts',
+        cached: false,
+      });
+    }
+  } catch (gErr: any) {
+    console.warn('[TTS] Google TTS proxy failed:', gErr?.message || gErr);
+  }
+
+  return res.status(503).json({
+    success: false,
+    error: 'Server-side TTS currently unavailable, falling back to browser synthesis.',
+    fallbackToBrowser: true,
+  });
+});
+
+// GET direct audio stream endpoint
+app.get('/api/tts', async (req, res) => {
+  const text = (req.query.text as string) || '';
+  const lang = (req.query.lang as string) || 'vi-VN';
+  if (!text.trim()) {
+    return res.status(400).send('Text query param is required');
+  }
+  const isVietnamese = lang.toLowerCase().startsWith('vi');
+  const isSpanish = lang.toLowerCase().startsWith('es');
+  const langCode = isVietnamese ? 'vi' : isSpanish ? 'es' : 'en';
+
+  try {
+    const googleTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${langCode}&q=${encodeURIComponent(text.trim())}`;
+    const gResponse = await fetch(googleTtsUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': 'https://translate.google.com/',
+        'Accept': 'audio/mpeg, audio/*;q=0.9, */*;q=0.8',
+      },
+    });
+    if (gResponse.ok) {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      const buffer = Buffer.from(await gResponse.arrayBuffer());
+      return res.send(buffer);
+    }
+  } catch (e) {
+    console.warn('GET /api/tts error:', e);
+  }
+  return res.status(502).send('TTS unavailable');
+});
+
 
 
 async function startServer() {
