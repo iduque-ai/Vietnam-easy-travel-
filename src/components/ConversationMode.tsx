@@ -36,6 +36,7 @@ import {
   SpeechSettings,
 } from '../utils/storage';
 import { TRAVEL_PHRASES } from '../data/phrases';
+import { requestMicrophonePermission } from '../utils/permissions';
 import { VoiceSettingsModal } from './VoiceSettingsModal';
 import { AudioWaveIndicator } from './AudioWaveIndicator';
 
@@ -839,6 +840,13 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
   };
 
   const toggleMic = async () => {
+    // Request or verify microphone access
+    const micPerm = await requestMicrophonePermission();
+    if (!micPerm.success && micPerm.status === 'denied') {
+      showToast('⚠️ Permiso de micrófono bloqueado. Actívalo en el icono de candado 🔒 de la barra del navegador.');
+      return;
+    }
+
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition ||
@@ -846,18 +854,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       (window as any).msSpeechRecognition;
 
     if (!SpeechRecognition) {
-      // Fallback: test mic via getUserMedia
-      if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          stream.getTracks().forEach((track) => track.stop());
-          showToast('⚠️ Micrófono detectado pero tu navegador no admite transcripción directa. Escribe en el campo de texto.');
-        } catch {
-          showToast('⚠️ Permiso de micrófono no concedido o no disponible.');
-        }
-      } else {
-        showToast('⚠️ Tu navegador no soporta reconocimiento por voz directo.');
-      }
+      showToast('⚠️ Micrófono activado. Escribe o selecciona una frase rápida para traducir con audio.');
       return;
     }
 

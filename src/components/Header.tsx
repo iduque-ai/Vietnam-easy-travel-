@@ -23,6 +23,13 @@ import {
   PhoneCall,
 } from 'lucide-react';
 import { ExchangeRatesData, ActiveTabType } from '../types';
+import {
+  PermissionStatusType,
+  subscribePermissions,
+  queryBrowserPermissions,
+  requestGeolocationPermission,
+  requestMicrophonePermission,
+} from '../utils/permissions';
 
 interface HeaderProps {
   activeTab: ActiveTabType;
@@ -105,61 +112,30 @@ export const Header: React.FC<HeaderProps> = ({
   spainTime,
 }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [geoStatus, setGeoStatus] = useState<'prompt' | 'granted' | 'denied' | 'unknown'>('unknown');
-  const [micStatus, setMicStatus] = useState<'prompt' | 'granted' | 'denied' | 'unknown'>('unknown');
+  const [geoStatus, setGeoStatus] = useState<PermissionStatusType>('unknown');
+  const [micStatus, setMicStatus] = useState<PermissionStatusType>('unknown');
   const [isRequestingPerms, setIsRequestingPerms] = useState(false);
 
-  const checkPermissions = useCallback(async () => {
-    if (typeof navigator !== 'undefined' && (navigator as any).permissions) {
-      try {
-        const geo = await (navigator as any).permissions.query({ name: 'geolocation' });
-        setGeoStatus(geo.state);
-        geo.onchange = () => setGeoStatus(geo.state);
-      } catch {}
-
-      try {
-        const mic = await (navigator as any).permissions.query({ name: 'microphone' as any });
-        setMicStatus(mic.state);
-        mic.onchange = () => setMicStatus(mic.state);
-      } catch {}
-    }
+  useEffect(() => {
+    const unsub = subscribePermissions((state) => {
+      setGeoStatus(state.geolocation);
+      setMicStatus(state.microphone);
+    });
+    return unsub;
   }, []);
 
   useEffect(() => {
-    checkPermissions();
+    queryBrowserPermissions();
     if (isDrawerOpen) {
-      checkPermissions();
+      queryBrowserPermissions();
     }
-  }, [isDrawerOpen, checkPermissions]);
+  }, [isDrawerOpen]);
 
   const handleRequestPermissions = async () => {
     setIsRequestingPerms(true);
-    // Request GPS
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        () => {
-          setGeoStatus('granted');
-        },
-        (err) => {
-          if (err.code === 1) setGeoStatus('denied');
-        },
-        { timeout: 8000, enableHighAccuracy: true }
-      );
-    }
-    // Request Mic
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
-        setMicStatus('granted');
-      } catch {
-        setMicStatus('denied');
-      }
-    }
-    setTimeout(() => {
-      checkPermissions();
-      setIsRequestingPerms(false);
-    }, 1000);
+    await requestGeolocationPermission();
+    await requestMicrophonePermission();
+    setIsRequestingPerms(false);
   };
 
   // Close drawer on escape key

@@ -16,8 +16,16 @@ import {
   Languages,
   Info,
 } from 'lucide-react';
+import {
+  PermissionStatusType,
+  subscribePermissions,
+  queryBrowserPermissions,
+  requestGeolocationPermission,
+  requestMicrophonePermission,
+  requestAllPermissions,
+} from '../utils/permissions';
 
-export type PermissionStatusType = 'granted' | 'denied' | 'prompt' | 'unknown';
+export type { PermissionStatusType };
 
 interface PermissionsModalProps {
   isOpen: boolean;
@@ -40,45 +48,23 @@ export const PermissionsModal: React.FC<PermissionsModalProps> = ({
     message: string;
   } | null>(null);
 
-  // Query browser permissions API safely
-  const checkCurrentPermissions = useCallback(async () => {
-    let currentGeo: PermissionStatusType = 'unknown';
-    let currentMic: PermissionStatusType = 'unknown';
-
-    if (typeof navigator !== 'undefined' && (navigator as any).permissions) {
-      try {
-        const geoQuery = await (navigator as any).permissions.query({ name: 'geolocation' });
-        currentGeo = (geoQuery.state as PermissionStatusType) || 'unknown';
-        setGeoStatus(currentGeo);
-        geoQuery.onchange = () => {
-          setGeoStatus((geoQuery.state as PermissionStatusType) || 'unknown');
-        };
-      } catch {
-        // Fallback for browsers without permissions.query support for geolocation
+  // Subscribe to real-time permission changes
+  useEffect(() => {
+    const unsub = subscribePermissions((state) => {
+      setGeoStatus(state.geolocation);
+      setMicStatus(state.microphone);
+      if (onPermissionsChange) {
+        onPermissionsChange(state.geolocation, state.microphone);
       }
-
-      try {
-        const micQuery = await (navigator as any).permissions.query({ name: 'microphone' as any });
-        currentMic = (micQuery.state as PermissionStatusType) || 'unknown';
-        setMicStatus(currentMic);
-        micQuery.onchange = () => {
-          setMicStatus((micQuery.state as PermissionStatusType) || 'unknown');
-        };
-      } catch {
-        // Fallback for browsers where 'microphone' is not queryable (e.g. Safari / Firefox)
-      }
-    }
-
-    if (onPermissionsChange) {
-      onPermissionsChange(currentGeo, currentMic);
-    }
+    });
+    return unsub;
   }, [onPermissionsChange]);
 
   useEffect(() => {
     if (isOpen) {
-      checkCurrentPermissions();
+      queryBrowserPermissions();
     }
-  }, [isOpen, checkCurrentPermissions]);
+  }, [isOpen]);
 
   // Handle ESC key to dismiss modal
   useEffect(() => {
@@ -115,91 +101,46 @@ export const PermissionsModal: React.FC<PermissionsModalProps> = ({
     setIsRequestingGeo(true);
     setActionFeedback(null);
 
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setGeoStatus('denied');
-      setIsRequestingGeo(false);
+    const result = await requestGeolocationPermission();
+    setIsRequestingGeo(false);
+
+    if (result.success) {
+      setActionFeedback({
+        type: 'success',
+        message: result.message,
+      });
+      return true;
+    } else {
       setActionFeedback({
         type: 'warning',
-        message: 'Tu navegador no soporta geolocalización o está deshabilitada.',
+        message:
+          result.status === 'denied'
+            ? 'Permiso de ubicación bloqueado. Puedes habilitarlo pulsando el icono del candado 🔒 en la barra de tu navegador.'
+            : result.message,
       });
       return false;
     }
-
-    return new Promise<boolean>((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        () => {
-          setGeoStatus('granted');
-          setIsRequestingGeo(false);
-          setActionFeedback({
-            type: 'success',
-            message: '✓ Permiso de geolocalización concedido con éxito.',
-          });
-          checkCurrentPermissions();
-          resolve(true);
-        },
-        (err) => {
-          setIsRequestingGeo(false);
-          if (err.code === 1) {
-            setGeoStatus('denied');
-            setActionFeedback({
-              type: 'warning',
-              message:
-                'Permiso de ubicación bloqueado. Puedes habilitarlo pulsando el icono del candado en la barra del navegador.',
-            });
-          } else {
-            // Might be timeout or indoor signal, but prompt was shown
-            setActionFeedback({
-              type: 'info',
-              message: 'Búsqueda de satélites iniciada. La ubicación está activada en tu navegador.',
-            });
-          }
-          checkCurrentPermissions();
-          resolve(false);
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
-      );
-    });
   };
 
   const handleRequestMicrophone = async (): Promise<boolean> => {
     setIsRequestingMic(true);
     setActionFeedback(null);
 
-    if (
-      typeof navigator === 'undefined' ||
-      !navigator.mediaDevices ||
-      !navigator.mediaDevices.getUserMedia
-    ) {
-      setMicStatus('denied');
-      setIsRequestingMic(false);
-      setActionFeedback({
-        type: 'warning',
-        message: 'Tu navegador no admite acceso al micrófono desde esta ventana.',
-      });
-      return false;
-    }
+    const result = await requestMicrophonePermission();
+    setIsRequestingMic(false);
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Immediately stop all audio tracks to release microphone hardware
-      stream.getTracks().forEach((track) => track.stop());
-      setMicStatus('granted');
-      setIsRequestingMic(false);
+    if (result.success) {
       setActionFeedback({
         type: 'success',
-        message: '✓ Permiso de micrófono concedido con éxito.',
+        message: result.message,
       });
-      checkCurrentPermissions();
       return true;
-    } catch {
-      setMicStatus('denied');
-      setIsRequestingMic(false);
+    } else {
       setActionFeedback({
         type: 'warning',
         message:
-          'Permiso de micrófono bloqueado. Puedes permitirlo haciendo clic en el icono del candado en la barra de direcciones.',
+          'Permiso de micrófono bloqueado. Puedes permitirlo haciendo clic en el icono del candado 🔒 en la barra de direcciones.',
       });
-      checkCurrentPermissions();
       return false;
     }
   };
@@ -208,14 +149,25 @@ export const PermissionsModal: React.FC<PermissionsModalProps> = ({
     setIsRequestingAll(true);
     setActionFeedback(null);
 
-    if (geoStatus !== 'granted') {
-      await handleRequestGeolocation();
-    }
-    if (micStatus !== 'granted') {
-      await handleRequestMicrophone();
-    }
-
+    const { geoResult, micResult, allGranted } = await requestAllPermissions();
     setIsRequestingAll(false);
+
+    if (allGranted) {
+      setActionFeedback({
+        type: 'success',
+        message: '✓ ¡Todos los permisos han sido concedidos con éxito!',
+      });
+    } else if (geoResult.success || micResult.success) {
+      setActionFeedback({
+        type: 'info',
+        message: `${geoResult.message} ${micResult.message}`,
+      });
+    } else {
+      setActionFeedback({
+        type: 'warning',
+        message: 'Algunos permisos fueron bloqueados por el navegador. Puedes activarlos en el candado 🔒 de la barra de direcciones.',
+      });
+    }
   };
 
   if (!isOpen) return null;
