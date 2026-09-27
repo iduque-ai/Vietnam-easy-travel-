@@ -27,6 +27,8 @@ import {
   HelpCircle,
   ShieldCheck,
   Share2,
+  MapPin,
+  FileText,
 } from 'lucide-react';
 
 interface RestaurantMenuModalProps {
@@ -302,14 +304,27 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-xl bg-stone-900/80 hover:bg-stone-800 text-stone-400 hover:text-white transition cursor-pointer shrink-0 border border-stone-800/60"
-            aria-label="Cerrar carta"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${restaurant.name} ${restaurant.address || restaurant.city || 'Vietnam'}`.trim())}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 hover:text-white border border-stone-800 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title={`Ver ${restaurant.name} en Google Maps`}
+            >
+              <MapPin className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">Ver en Maps</span>
+            </a>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-xl bg-stone-900/80 hover:bg-stone-800 text-stone-400 hover:text-white transition cursor-pointer border border-stone-800/60"
+              aria-label="Cerrar carta"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}
@@ -640,11 +655,11 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                         </div>
 
                         {/* Caption & Author Info */}
-                        <div className="p-3 bg-stone-900 border-t border-stone-800/80">
+                        <div className="p-3 bg-stone-900 border-t border-stone-800/80 space-y-2">
                           <p className="text-xs font-semibold text-stone-200 line-clamp-2 leading-snug">
                             {photo.caption}
                           </p>
-                          <div className="mt-1.5 flex items-center justify-between text-[11px] text-stone-400">
+                          <div className="flex items-center justify-between text-[11px] text-stone-400">
                             <span className="truncate max-w-[140px]">
                               {photo.authorName ? `Foto: ${photo.authorName}` : 'Comensal verificado'}
                             </span>
@@ -653,9 +668,54 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                             )}
                           </div>
                           {photo.reviewSnippet && (
-                            <p className="mt-1 text-[11px] text-amber-200/80 italic line-clamp-2">
+                            <p className="text-[11px] text-amber-200/80 italic line-clamp-2">
                               "{photo.reviewSnippet}"
                             </p>
+                          )}
+
+                          {/* Extracted Legible Dishes from Photo */}
+                          {photo.extractedDishes && photo.extractedDishes.length > 0 && (
+                            <div className="pt-2 border-t border-stone-800 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>Carta extraída de la foto (Legible):</span>
+                              </div>
+                              <div className="space-y-1 max-h-36 overflow-y-auto no-scrollbar">
+                                {photo.extractedDishes.map((dish, dIdx) => (
+                                  <div
+                                    key={dIdx}
+                                    className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-stone-950/70 border border-stone-800 text-[11px]"
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="font-semibold text-stone-200 truncate">{dish.nameVi}</div>
+                                      {dish.nameEs && (
+                                        <div className="text-[10px] text-stone-400 truncate">{dish.nameEs}</div>
+                                      )}
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <span className="font-mono font-bold text-amber-400">
+                                        {(dish.priceVnd / 1000).toLocaleString('es-ES')}k ₫
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setWaiterDish({
+                                          id: `photo-dish-${dIdx}`,
+                                          nameVi: dish.nameVi,
+                                          nameEs: dish.nameEs || dish.nameVi,
+                                          description: dish.notes || dish.nameEs || dish.nameVi,
+                                          priceVnd: dish.priceVnd,
+                                          category: 'Platos Principales',
+                                        })}
+                                        className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[10px] cursor-pointer"
+                                        title="Mostrar al camarero"
+                                      >
+                                        Pedir
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -971,16 +1031,46 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
 
           {/* Lightbox Bottom Info Bar */}
           <div
-            className="px-4 py-2.5 bg-stone-900/80 rounded-xl border border-stone-800 flex items-center justify-between text-xs text-stone-300 z-10 shrink-0"
+            className="px-4 py-2.5 bg-stone-900/90 rounded-xl border border-stone-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-stone-300 z-10 shrink-0"
             onClick={(e) => e.stopPropagation()}
           >
-            <span>
-              🔍 Nivel de zoom: <strong className="text-amber-400">{Math.round(zoomLevel * 100)}%</strong>
-              {zoomLevel > 1 && ' (Arrastra para mover la imagen y leer letras pequeñas)'}
-            </span>
-            <span className="text-[11px] text-stone-400 hidden sm:inline">
-              Usa las flechas del teclado o los botones laterales para navegar
-            </span>
+            <div className="flex items-center gap-3">
+              <span>
+                🔍 Nivel de zoom: <strong className="text-amber-400">{Math.round(zoomLevel * 100)}%</strong>
+                {zoomLevel > 1 && ' (Arrastra para mover)'}
+              </span>
+              {selectedPhotoIndex !== null && menuData.photos[selectedPhotoIndex]?.extractedDishes && (
+                <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" />
+                  Texto y precios transcritos legibles
+                </span>
+              )}
+            </div>
+
+            {selectedPhotoIndex !== null && menuData.photos[selectedPhotoIndex]?.extractedDishes && (
+              <div className="flex items-center gap-1.5 overflow-x-auto max-w-full no-scrollbar">
+                {menuData.photos[selectedPhotoIndex].extractedDishes!.map((dish, dIdx) => (
+                  <button
+                    key={dIdx}
+                    type="button"
+                    onClick={() => setWaiterDish({
+                      id: `lightbox-dish-${dIdx}`,
+                      nameVi: dish.nameVi,
+                      nameEs: dish.nameEs || dish.nameVi,
+                      description: dish.notes || dish.nameEs || dish.nameVi,
+                      priceVnd: dish.priceVnd,
+                      category: 'Platos Principales',
+                    })}
+                    className="px-2 py-1 rounded-lg bg-stone-800 hover:bg-amber-500 hover:text-stone-950 text-stone-200 border border-stone-700 text-[11px] font-semibold transition cursor-pointer whitespace-nowrap flex items-center gap-1"
+                  >
+                    <span>{dish.nameVi}</span>
+                    <span className="font-mono text-amber-300 group-hover:text-stone-950 font-bold">
+                      {(dish.priceVnd / 1000).toLocaleString('es-ES')}k
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

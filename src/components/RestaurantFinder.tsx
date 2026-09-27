@@ -824,13 +824,14 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                   <span>Ver Carta</span>
                 </button>
                 <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${selectedRestaurant.lat},${selectedRestaurant.lng}`}
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedRestaurant.name} ${selectedRestaurant.address || selectedRestaurant.city || 'Vietnam'}`.trim())}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1 border border-stone-700 transition"
+                  title={`Ver ${selectedRestaurant.name} en Google Maps`}
                 >
-                  <Navigation className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Cómo llegar</span>
+                  <MapPin className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Ver en Maps</span>
                 </a>
                 <button
                   type="button"
@@ -1109,14 +1110,14 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                           </button>
 
                           <a
-                            href={`https://www.google.com/maps/dir/?api=1&destination=${restaurant.lat},${restaurant.lng}`}
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${restaurant.name} ${restaurant.address || restaurant.city || 'Vietnam'}`.trim())}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
                             className="px-2.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs transition flex items-center gap-1 cursor-pointer"
-                            title="Abrir indicaciones en Google Maps"
+                            title="Ver restaurante en Google Maps"
                           >
-                            <Navigation className="w-3.5 h-3.5 text-sky-600" />
+                            <MapPin className="w-3.5 h-3.5 text-rose-600" />
                             <span>Maps</span>
                           </a>
 

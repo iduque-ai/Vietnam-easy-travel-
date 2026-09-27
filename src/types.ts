@@ -61,6 +61,13 @@ export interface RestaurantMenuItem {
   imageUrl?: string;
 }
 
+export interface ExtractedDishItem {
+  nameVi: string;
+  nameEs?: string;
+  priceVnd: number;
+  notes?: string;
+}
+
 export interface RestaurantReviewPhoto {
   id: string;
   url: string;
@@ -72,6 +79,8 @@ export interface RestaurantReviewPhoto {
   relativeTime?: string;
   isLegibleMenu?: boolean;
   reviewSnippet?: string;
+  extractedMenuText?: string;
+  extractedDishes?: ExtractedDishItem[];
 }
 
 export interface RestaurantReviewItem {

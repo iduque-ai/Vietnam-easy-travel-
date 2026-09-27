@@ -59,9 +59,9 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
   // Initialize empty
   const [foreignAmount, setForeignAmount] = useState<string>('');
 
-  // Bargaining tool state
+  // Bargaining tool state (fixed at 40% discount)
   const [quotedVnd, setQuotedVnd] = useState<string>('300000');
-  const [targetDiscount, setTargetDiscount] = useState<number>(40); // 40% discount
+  const targetDiscount = 40;
 
   // Banknote guide modal state
   const [isBanknoteGuideOpen, setIsBanknoteGuideOpen] = useState<boolean>(false);
@@ -360,26 +360,22 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
       )}
 
       {/* Main Converter Card */}
-      <div className="bg-white rounded-3xl p-4 sm:p-7 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-5 sm:space-y-6">
-        {/* Currency selection & Title Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-100">
-          <div>
-            <h2 className="font-serif font-bold text-lg sm:text-xl text-stone-900">Conversor Rápido de Divisas</h2>
-            <p className="text-xs text-stone-500 mt-0.5">Introduce importes en Dong vietnamita o en tu divisa de origen</p>
-          </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <label htmlFor="currency-select" className="text-xs font-semibold uppercase tracking-wider text-stone-400">
-              Divisa:
+      <div className="bg-white rounded-3xl p-4 sm:p-6 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-4">
+        {/* Discreet Currency Selector */}
+        <div className="flex items-center justify-end">
+          <div className="inline-flex items-center gap-1.5 text-xs text-stone-400">
+            <label htmlFor="currency-select" className="text-[11px] text-stone-400 font-medium">
+              Moneda:
             </label>
             <select
               id="currency-select"
               value={selectedCurrency}
               onChange={(e) => handleCurrencyChange(e.target.value as CurrencyCode)}
-              className="bg-stone-50 hover:bg-stone-100 font-semibold text-stone-900 text-xs sm:text-sm px-3 py-1.5 rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 cursor-pointer shadow-2xs transition"
+              className="bg-stone-50 hover:bg-stone-100 text-stone-600 text-xs py-1 px-2 rounded-lg border border-stone-200 focus:outline-none focus:ring-1 focus:ring-amber-500/30 cursor-pointer transition font-medium"
             >
               {CURRENCIES.map((curr) => (
                 <option key={curr.code} value={curr.code}>
-                  {curr.flag} {curr.code} ({curr.name} - {curr.symbol})
+                  {curr.flag} {curr.code} ({curr.symbol})
                 </option>
               ))}
             </select>
@@ -624,14 +620,14 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
       {/* Caution Banner: 20k vs 500k Polymer Alert */}
       <div
         onClick={() => setIsBanknoteGuideOpen(true)}
-        className="px-4 py-3 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent hover:bg-amber-500/15 border border-amber-300/80 rounded-2xl flex items-center justify-between gap-3 cursor-pointer transition group shadow-2xs"
+        className="px-4 py-2.5 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent hover:bg-amber-500/15 border border-amber-300/80 rounded-2xl flex items-center justify-between gap-3 cursor-pointer transition group shadow-2xs"
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-700 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-700 shrink-0">
             <AlertTriangle className="w-4 h-4" />
           </div>
           <p className="text-xs text-amber-950 leading-relaxed">
-            <strong className="font-bold">Alerta para viajeros:</strong> No confundir el billete azul de <strong className="font-mono">20.000 ₫</strong> (~0,70 €) con el de <strong className="font-mono">500.000 ₫</strong> (~17 €). Tienen tonalidades parecidas.
+            No confundir el billete azul de <strong className="font-mono">20.000 ₫</strong> con el de <strong className="font-mono">500.000 ₫</strong>. Tienen tonalidades parecidas.
           </p>
         </div>
         <span className="text-xs font-bold text-amber-800 group-hover:text-amber-950 shrink-0 underline whitespace-nowrap">
@@ -641,37 +637,17 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
 
       {/* Bargaining Calculator for Street Markets */}
       <div className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-6 space-y-4 shadow-[0_4px_24px_rgba(28,25,23,0.03)]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700 shrink-0">
-              <TrendingDown className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-serif font-bold text-base sm:text-lg text-stone-900">
-                Asistente de Regateo Callejero
-              </h3>
-              <p className="text-xs text-stone-500">
-                Calcula contraofertas recomendadas para mercados y puestos en Vietnam
-              </p>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700 shrink-0">
+            <TrendingDown className="w-4 h-4" />
           </div>
-
-          {/* Target Discount Buttons */}
-          <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl">
-            {[30, 40, 50].map((pct) => (
-              <button
-                key={pct}
-                type="button"
-                onClick={() => setTargetDiscount(pct)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  targetDiscount === pct
-                    ? 'bg-white text-stone-900 shadow-xs'
-                    : 'text-stone-500 hover:text-stone-900'
-                }`}
-              >
-                -{pct}%
-              </button>
-            ))}
+          <div>
+            <h3 className="font-serif font-bold text-base sm:text-lg text-stone-900 leading-snug">
+              Asistente de Regateo Callejero
+            </h3>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Calcula contraofertas recomendadas (-40%) para puestos callejeros y mercados
+            </p>
           </div>
         </div>
 
@@ -730,50 +706,6 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
           <span>
             <strong>Consejo cultural:</strong> El regateo en Vietnam siempre debe ser alegre y con una sonrisa. Si no bajan de precio, di amablemente <em>"Không, cảm ơn"</em> (No, gracias) y simula marcharte despacio.
           </span>
-        </div>
-      </div>
-
-      {/* Typical Price Reference Benchmarks */}
-      <div className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-6 shadow-[0_4px_24px_rgba(28,25,23,0.03)] space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-serif font-bold text-base sm:text-lg text-stone-900">
-              Precios Habituales de Referencia en Vietnam
-            </h3>
-            <p className="text-xs text-stone-500">
-              Toca cualquier producto típico para cargar su precio exacto en el conversor
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          {[
-            { item: 'Cà phê trứng (Café huevo)', vnd: 35000, desc: 'Bebida en cafetería' },
-            { item: 'Bánh mì thịt (Bocadillo)', vnd: 30000, desc: 'Puesto callejero' },
-            { item: 'Phở bò tái (Sopa Pho)', vnd: 50000, desc: 'Restaurante local' },
-            { item: 'Bia Hơi (Caña cerveza)', vnd: 12000, desc: 'Cerveza fresca' },
-            { item: 'Grab moto (~3 km)', vnd: 25000, desc: 'Trayecto urbano' },
-            { item: 'Masaje (60 min)', vnd: 220000, desc: 'Spa tradicional' },
-            { item: 'SIM 30 días con datos', vnd: 180000, desc: 'Internet 4G/5G' },
-            { item: 'Agua grande (1.5L)', vnd: 12000, desc: 'Tienda de barrio' },
-          ].map((bench) => (
-            <button
-              key={bench.item}
-              type="button"
-              onClick={() => setExactVnd(bench.vnd)}
-              className="p-3 rounded-2xl border border-stone-200/90 bg-stone-50/50 hover:bg-amber-50 hover:border-amber-300 text-left transition cursor-pointer shadow-2xs group active:scale-95"
-            >
-              <div className="font-bold text-xs text-stone-900 group-hover:text-amber-900 truncate">
-                {bench.item}
-              </div>
-              <div className="font-mono font-bold text-sm text-stone-900 mt-1 tabular-nums">
-                {formatVND(bench.vnd)}
-              </div>
-              <div className="text-[11px] font-mono text-stone-500 mt-0.5 tabular-nums">
-                ≈ {formatForeign(bench.vnd / foreignToVndRate, currSymbol)}
-              </div>
-            </button>
-          ))}
         </div>
       </div>
 

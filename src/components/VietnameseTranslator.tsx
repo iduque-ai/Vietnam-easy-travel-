@@ -14,7 +14,8 @@ import {
   ShoppingBag,
   Languages,
   Star,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react';
 import { PhraseItem, DishItem } from '../types';
 import { TRAVEL_PHRASES } from '../data/phrases';
@@ -217,18 +218,28 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
       {/* SEARCH BAR (For phrases & food) */}
       {(subTab === 'phrases' || subTab === 'food') && (
         <div className="relative w-full min-w-0">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <input
             type="text"
             placeholder={
               subTab === 'phrases'
-                ? 'Buscar frase en español o vietnamita (ej. cuenta, gracias, cuánto vale)...'
-                : 'Buscar plato típico (ej. Phở bò, Bánh mì, Bún chả, Cà phê)...'
+                ? 'Buscar frase (ej. cuenta, gracias, cuánto vale)...'
+                : 'Buscar plato típico (ej. Phở, Bánh mì, café)...'
             }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 rounded-2xl border border-stone-300/80 bg-white text-base sm:text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 shadow-xs transition"
+            className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-stone-300/80 bg-white text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs transition"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
+              title="Borrar búsqueda"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       )}
 
@@ -239,33 +250,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
 
       {/* 1. PHRASES TAB */}
       {subTab === 'phrases' && (
-        <div className="space-y-4 w-full min-w-0">
-          {/* Top Status Bar: Dark Noir with Gold Trim */}
-          <div className="bg-[#141210] text-stone-100 rounded-2xl p-3 sm:px-5 sm:py-3.5 border border-stone-800 shadow-md flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-                <BookOpen className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-serif font-bold text-base text-white">Guía de Frases Imprescindibles</span>
-                  <span className="text-[11px] text-amber-300 font-bold bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-800/60">
-                    100% Offline
-                  </span>
-                </div>
-                <p className="text-xs text-stone-400 mt-0.5">
-                  Pronunciación fonética real, tonos y consejos culturales para viajar con tranquilidad
-                </p>
-              </div>
-            </div>
-
-            <div className="text-xs text-stone-300 flex items-center gap-2">
-              <span className="bg-stone-900 px-3 py-1 rounded-xl border border-stone-800 font-medium text-xs text-amber-300 font-mono">
-                {filteredPhrases.length} frases
-              </span>
-            </div>
-          </div>
-
+        <div className="space-y-3 w-full min-w-0">
           {/* Categories bar */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs no-scrollbar w-full max-w-full overscroll-x-contain touch-pan-x">
             {[
@@ -295,16 +280,16 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
 
           {/* Active Search Result Bar */}
           {searchQuery.trim() && (
-            <div className="flex items-center justify-between bg-amber-50 border border-amber-200/80 rounded-xl px-3.5 py-2 text-xs">
+            <div className="flex items-center justify-between bg-amber-50/80 border border-amber-200/80 rounded-xl px-3 py-1.5 text-xs">
               <span className="text-amber-950 font-medium">
-                🔍 {filteredPhrases.length} {filteredPhrases.length === 1 ? 'frase encontrada' : 'frases encontradas'} para <strong className="text-stone-950 font-bold">"{searchQuery}"</strong> en todo el diccionario:
+                {filteredPhrases.length} {filteredPhrases.length === 1 ? 'resultado' : 'resultados'} para <strong className="text-stone-900 font-semibold">"{searchQuery}"</strong>
               </span>
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
                 className="text-amber-800 hover:text-amber-950 font-bold text-xs underline cursor-pointer"
               >
-                Limpiar búsqueda
+                ✕ Limpiar
               </button>
             </div>
           )}

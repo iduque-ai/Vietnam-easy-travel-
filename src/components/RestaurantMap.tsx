@@ -30,6 +30,7 @@ import {
   Plus,
   Minus,
   RefreshCw,
+  MapPin,
 } from 'lucide-react';
 import { speakVietnamese } from '../utils/storage';
 
@@ -898,13 +899,14 @@ export const RestaurantMap: React.FC<RestaurantMapProps> = (props) => {
                     <span>Ver Carta</span>
                   </button>
                   <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${activeInfoWindowItem.lat},${activeInfoWindowItem.lng}`}
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${activeInfoWindowItem.name} ${activeInfoWindowItem.address || activeInfoWindowItem.city || 'Vietnam'}`.trim())}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="py-1.5 px-2.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white font-semibold text-[11px] flex items-center justify-center gap-1 transition"
+                    title={`Ver ${activeInfoWindowItem.name} en Google Maps`}
                   >
-                    <Navigation className="w-3 h-3 text-sky-400" />
-                    <span>Ruta</span>
+                    <MapPin className="w-3 h-3 text-rose-400" />
+                    <span>Maps</span>
                   </a>
                 </div>
               </div>
