@@ -695,27 +695,27 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
 
   return (
     <div className="space-y-6 max-w-4xl w-full mx-auto min-w-0">
-      {/* 1. Header Banner & Saved Cards Navigation */}
-      <div className="bg-gradient-to-br from-rose-950 via-rose-900 to-rose-800 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-rose-700/60 relative overflow-hidden">
-        {/* Subtle decorative background glow */}
-        <div className="absolute -top-12 -right-12 w-48 h-48 bg-rose-500/10 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="p-3 rounded-2xl bg-white/10 text-white backdrop-blur-md border border-white/20 shadow-inner">
-              <ShieldAlert className="w-6 h-6 sm:w-7 sm:h-7 text-rose-300" />
+      {/* 1. Header Status Bar: Luxury Noir with Rose Accent */}
+      <div className="bg-[#141210] text-stone-100 rounded-3xl p-4 sm:px-6 sm:py-4.5 border border-stone-800 shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="p-2.5 rounded-2xl bg-rose-500/15 text-rose-400 border border-rose-500/25 shrink-0 shadow-inner">
+              <ShieldAlert className="w-5 h-5 text-rose-400" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-lg sm:text-xl font-black tracking-tight text-white">
-                  Fichas Médicas de Alérgenos & Intolerancias
+                <h3 className="text-base sm:text-lg font-serif font-bold text-white tracking-wide truncate">
+                  Fichas Médicas de Alérgenos & Dietas
                 </h3>
-                <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-rose-500/40 text-rose-100 border border-rose-400/40 tracking-wider">
-                  Traducción Garantizada
+                <span className="text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono">
+                  Garantía Vital
+                </span>
+                <span className="text-xs text-stone-400 hidden sm:inline font-mono">
+                  · 100% Offline
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-rose-100/90 mt-1 max-w-2xl leading-relaxed">
-                Selecciona ingredientes con el buscador, genera tu tarjeta en vietnamita para el restaurante y activa el <strong>Modo Pantalla Completa</strong> para mostrárselo al cocinero.
+              <p className="text-xs text-stone-400 font-light truncate mt-0.5">
+                Genera tu tarjeta bilingüe y pulsa Pantalla Completa para mostrársela directamente al chef
               </p>
             </div>
           </div>
@@ -723,70 +723,70 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
           <button
             type="button"
             onClick={handleStartNewCard}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-rose-950 hover:bg-rose-50 font-bold text-xs sm:text-sm shadow-sm hover:shadow transition cursor-pointer shrink-0"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-stone-950 font-bold text-xs shadow-sm transition cursor-pointer shrink-0 self-end sm:self-auto"
           >
-            <Plus className="w-4 h-4 text-rose-700" />
+            <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>Nueva Ficha</span>
           </button>
         </div>
+      </div>
 
-        {/* Saved Cards Carousel Tabs */}
-        <div className="mt-5 pt-4 border-t border-white/15">
-          <div className="flex items-center justify-between gap-2 mb-2.5">
-            <span className="text-xs font-bold text-rose-200 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-rose-300" />
-              Tus Fichas Guardadas ({savedCards.length}):
-            </span>
-            <span className="text-[11px] text-rose-200/80 font-medium">
-              100% disponibles sin conexión
-            </span>
-          </div>
+      {/* 2. Saved Cards Navigation Strip */}
+      <div className="bg-white rounded-2xl p-3 sm:p-4 border border-stone-200 shadow-xs space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 text-rose-600" />
+            <span>Tus Fichas Guardadas ({savedCards.length}):</span>
+          </span>
+          <span className="text-[11px] text-stone-400">
+            Listas sin conexión
+          </span>
+        </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x">
-            {savedCards.map((card) => {
-              const isActive = activeCardId === card.id && !isCreatingNew;
-              return (
-                <div
-                  key={card.id}
-                  onClick={() => handleSelectCard(card)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-bold transition cursor-pointer shrink-0 select-none shadow-2xs ${
-                    isActive
-                      ? 'bg-white text-rose-950 border-white shadow-sm'
-                      : 'bg-white/10 text-white border-white/15 hover:bg-white/20'
-                  }`}
-                >
-                  <User className={`w-3.5 h-3.5 ${isActive ? 'text-rose-600' : 'text-rose-300'}`} />
-                  <span className="truncate max-w-[130px] sm:max-w-[170px]">
-                    {card.personName || card.title}
-                  </span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                    isActive ? 'bg-rose-100 text-rose-800' : 'bg-white/20 text-white'
-                  }`}>
-                    {card.conditions?.length || 1}
-                  </span>
-                  {savedCards.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteCard(card.id, e)}
-                      title="Eliminar esta ficha médica"
-                      className={`p-1 rounded-md hover:bg-rose-200/50 transition cursor-pointer ml-1 ${
-                        isActive ? 'text-stone-400 hover:text-rose-700' : 'text-rose-300 hover:text-white'
-                      }`}
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-
-            {isCreatingNew && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 text-amber-950 font-black text-xs shrink-0 shadow-sm animate-pulse">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Configurando nueva ficha...</span>
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar touch-pan-x">
+          {savedCards.map((card) => {
+            const isActive = activeCardId === card.id && !isCreatingNew;
+            return (
+              <div
+                key={card.id}
+                onClick={() => handleSelectCard(card)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer shrink-0 select-none shadow-2xs ${
+                  isActive
+                    ? 'bg-stone-900 text-white border-stone-900 font-bold shadow-xs'
+                    : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200'
+                }`}
+              >
+                <User className={`w-3.5 h-3.5 ${isActive ? 'text-amber-400' : 'text-stone-500'}`} />
+                <span className="truncate max-w-[130px] sm:max-w-[170px]">
+                  {card.personName || card.title}
+                </span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                  isActive ? 'bg-stone-800 text-amber-300' : 'bg-stone-200 text-stone-600'
+                }`}>
+                  {card.conditions?.length || 1}
+                </span>
+                {savedCards.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteCard(card.id, e)}
+                    title="Eliminar esta ficha médica"
+                    className={`p-0.5 rounded hover:bg-rose-500 hover:text-white transition cursor-pointer ml-1 ${
+                      isActive ? 'text-stone-400' : 'text-stone-400'
+                    }`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })}
+
+          {isCreatingNew && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100 border border-amber-300 text-amber-950 font-bold text-xs shrink-0 shadow-2xs animate-pulse">
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+              <span>Configurando nueva ficha...</span>
+            </div>
+          )}
         </div>
       </div>
 

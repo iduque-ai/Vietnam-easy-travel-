@@ -988,196 +988,132 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
         </div>
       )}
 
-      {/* Plan Switcher Bar */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-stone-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        {/* Left: Plan selector dropdown & title */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded">
-              Planificador de Itinerario
-            </span>
-            <span className="text-xs text-stone-400">|</span>
-            <span className="text-xs text-stone-500 font-medium">
-              {plans.length} {plans.length === 1 ? 'itinerario' : 'itinerarios'}
-            </span>
+      {/* Top Status & Plan Control Card - Luxury Noir & Gold */}
+      <div className="bg-[#141210] text-stone-100 rounded-3xl p-5 sm:p-6 border border-stone-800 shadow-md space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Left: Plan selector dropdown & Brand Badge */}
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="p-2.5 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/25 shrink-0 shadow-inner">
+              <Calendar className="w-5 h-5 text-amber-400" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="text-[10px] uppercase font-bold text-amber-400/90 tracking-widest font-mono">
+                  Plan Activo
+                </span>
+                <select
+                  id="select-itinerary-plan"
+                  value={activePlanId}
+                  onChange={(e) => handleSelectPlan(e.target.value)}
+                  className="bg-stone-900/90 hover:bg-stone-800 font-bold text-sm sm:text-base text-white px-3 py-1.5 rounded-xl border border-stone-700/80 focus:outline-none focus:ring-2 focus:ring-amber-500/40 cursor-pointer max-w-[220px] sm:max-w-xs truncate transition shadow-2xs"
+                >
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id} className="bg-[#141210] text-white">
+                      {p.title} ({p.days.length} días)
+                    </option>
+                  ))}
+                </select>
+                <button
+                  id="btn-edit-plan-meta"
+                  onClick={() => {
+                    setEditingPlanData(activePlan);
+                    setIsPlanModalOpen(true);
+                  }}
+                  className="p-1.5 rounded-xl text-stone-400 hover:text-white hover:bg-stone-800/80 border border-transparent hover:border-stone-700 transition cursor-pointer"
+                  title="Editar título y fechas"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {activePlan?.description && (
+                <p className="text-xs text-stone-400 line-clamp-1 mt-1 font-light">
+                  {activePlan.description}
+                </p>
+              )}
+            </div>
           </div>
 
-          <div className="mt-2 flex items-center gap-3">
-            <select
-              id="select-itinerary-plan"
-              value={activePlanId}
-              onChange={(e) => handleSelectPlan(e.target.value)}
-              className="font-bold text-base sm:text-lg text-stone-900 bg-stone-50 border border-stone-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer max-w-full truncate"
+          {/* Right: Quick Plan Actions */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 shrink-0 self-end md:self-auto">
+            <button
+              id="btn-open-templates-modal"
+              onClick={() => setIsTemplatesModalOpen(true)}
+              className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-2xs"
+              title="Explorar rutas recomendadas"
             >
-              {plans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title} ({p.days.length} días)
-                </option>
-              ))}
-            </select>
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Plantillas</span>
+            </button>
 
             <button
-              id="btn-edit-plan-meta"
+              id="btn-export-options"
+              onClick={() => setIsExportModalOpen(true)}
+              className="px-3 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 active:scale-95 text-stone-300 hover:text-white border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-2xs"
+              title="Exportar calendario (.ics) o backup"
+            >
+              <Download className="w-3.5 h-3.5 text-stone-400" />
+              <span className="hidden sm:inline">Exportar</span>
+            </button>
+
+            {onNavigateToMaps && (
+              <button
+                onClick={() => onNavigateToMaps()}
+                className="px-3 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 active:scale-95 text-amber-300 hover:text-amber-200 border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-2xs"
+                title="Ver pines en mapa interactivo"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Mapa</span>
+              </button>
+            )}
+
+            <button
+              id="btn-create-new-plan"
               onClick={() => {
-                setEditingPlanData(activePlan);
+                setEditingPlanData(null);
                 setIsPlanModalOpen(true);
               }}
-              className="p-2 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition cursor-pointer"
-              title="Editar título, fechas y descripción"
+              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-sm shrink-0"
             >
-              <Edit3 className="w-4 h-4" />
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Nuevo Plan</span>
             </button>
           </div>
         </div>
 
-        {/* Right: Actions (Plantillas, Exportar, Nuevo Plan) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 shrink-0">
-          <button
-            id="btn-open-templates-modal"
-            onClick={() => setIsTemplatesModalOpen(true)}
-            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer min-h-[38px] shrink-0"
-            title="Explorar rutas recomendadas para Vietnam"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-            <span>Plantillas</span>
-          </button>
+        {/* Plan 3-Stat Summary Grid */}
+        <div className="grid grid-cols-3 gap-3 pt-3.5 border-t border-stone-800/80">
+          <div className="bg-stone-900/60 border border-stone-800/80 px-3.5 py-2.5 rounded-2xl text-center backdrop-blur-xs">
+            <span className="text-[10px] uppercase font-bold text-stone-400 block tracking-wider font-mono">Duración</span>
+            <span className="text-base sm:text-lg font-black text-amber-400 font-mono tracking-tight">{planStats.totalDays} Días</span>
+            <span className="text-[10px] text-stone-400 block font-mono">{planStats.totalStops} paradas</span>
+          </div>
 
-          <button
-            id="btn-export-options"
-            onClick={() => setIsExportModalOpen(true)}
-            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer min-h-[38px] shrink-0"
-            title="Exportar calendario (.ics), guía offline o backup"
-          >
-            <Download className="w-3.5 h-3.5 text-stone-600" />
-            <span className="hidden sm:inline">Exportar</span>
-          </button>
+          <div className="bg-stone-900/60 border border-stone-800/80 px-3.5 py-2.5 rounded-2xl text-center backdrop-blur-xs">
+            <span className="text-[10px] uppercase font-bold text-stone-400 block tracking-wider font-mono">Progreso</span>
+            <span className="text-base sm:text-lg font-black text-emerald-400 font-mono tracking-tight">{planStats.visitedStops} / {planStats.totalStops}</span>
+            <span className="text-[10px] text-emerald-400/90 font-bold block">{planStats.progressPercent}% completado</span>
+          </div>
 
-          <button
-            id="btn-duplicate-plan"
-            onClick={handleDuplicatePlan}
-            className="p-2 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center shrink-0"
-            title="Duplicar este plan como copia"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-
-          <button
-            id="btn-create-new-plan"
-            onClick={() => {
-              setEditingPlanData(null);
-              setIsPlanModalOpen(true);
-            }}
-            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs min-h-[38px] shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Nuevo</span>
-          </button>
+          <div className="bg-stone-900/60 border border-stone-800/80 px-3.5 py-2.5 rounded-2xl text-center backdrop-blur-xs">
+            <span className="text-[10px] uppercase font-bold text-stone-400 block tracking-wider font-mono">Presupuesto</span>
+            <span className="text-base sm:text-lg font-black text-amber-300 font-mono tracking-tight">{(planStats.totalTicketVnd / 1000).toLocaleString('es-ES')}k ₫</span>
+            <span className="text-[10px] text-stone-400 block font-mono">≈ {(planStats.totalTicketVnd / eurToVnd).toFixed(1)} €</span>
+          </div>
         </div>
+
+        {/* Progress Bar */}
+        {planStats.totalStops > 0 && (
+          <div className="w-full bg-stone-800/90 rounded-full h-2 overflow-hidden border border-stone-700/50 p-0.5">
+            <div
+              className="bg-linear-to-r from-amber-500 to-amber-300 h-full rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+              style={{ width: `${planStats.progressPercent}%` }}
+            />
+          </div>
+        )}
       </div>
 
       {activePlan && (
         <>
-          {/* Active Plan Overview & Summary Cards */}
-          <div className="bg-stone-900 text-stone-100 rounded-2xl p-5 sm:p-6 shadow-md border border-stone-800 space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                  {activePlan.title}
-                </h2>
-                {activePlan.description && (
-                  <p className="text-stone-300 text-xs sm:text-sm mt-1 leading-relaxed max-w-3xl">
-                    {activePlan.description}
-                  </p>
-                )}
-
-                {/* Dates & Destinations pills */}
-                <div className="flex flex-wrap items-center gap-2 mt-3 text-xs">
-                  {(activePlan.startDate || activePlan.endDate) && (
-                    <span className="px-2.5 py-1 rounded-lg bg-stone-800 text-amber-300 font-medium flex items-center gap-1.5 border border-stone-700">
-                      <CalendarDays className="w-3.5 h-3.5 text-amber-400" />
-                      {activePlan.startDate || 'Inicio'} ➔ {activePlan.endDate || 'Fin'}
-                    </span>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {activePlan.destinations.map((dest, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-0.5 rounded-md bg-stone-800 text-stone-300 text-[11px] font-medium border border-stone-700/80"
-                      >
-                        📍 {dest}
-                      </span>
-                    ))}
-                    {onNavigateToMaps && (
-                      <button
-                        onClick={() => onNavigateToMaps()}
-                        className="px-2.5 py-1 rounded-md bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1 transition cursor-pointer shadow-xs"
-                        title="Abrir mapa unificado interactivo para seleccionar pines"
-                      >
-                        <MapPin className="w-3 h-3" />
-                        <span>Ver en Mapa Unificado</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Progress & Cost summary */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 shrink-0">
-                <div className="bg-stone-800/80 border border-stone-700 p-3 rounded-xl text-center">
-                  <div className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">
-                    Duración
-                  </div>
-                  <div className="text-lg font-black text-amber-400 mt-0.5">
-                    {planStats.totalDays} Días
-                  </div>
-                  <div className="text-[10px] text-stone-400">
-                    {planStats.totalStops} paradas totales
-                  </div>
-                </div>
-
-                <div className="bg-stone-800/80 border border-stone-700 p-3 rounded-xl text-center">
-                  <div className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">
-                    Lugares Visitados
-                  </div>
-                  <div className="text-lg font-black text-emerald-400 mt-0.5">
-                    {planStats.visitedStops} / {planStats.totalStops}
-                  </div>
-                  <div className="text-[10px] text-stone-400">
-                    {planStats.progressPercent}% completado
-                  </div>
-                </div>
-
-                <div className="bg-stone-800/80 border border-stone-700 p-3 rounded-xl text-center col-span-2 sm:col-span-1">
-                  <div className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">
-                    Entradas Estimadas
-                  </div>
-                  <div className="text-base sm:text-lg font-mono font-black text-amber-300 mt-0.5">
-                    {(planStats.totalTicketVnd / 1000).toLocaleString('es-ES')}k ₫
-                  </div>
-                  <div className="text-[10px] text-stone-400">
-                    ≈ {(planStats.totalTicketVnd / eurToVnd).toFixed(1)} €
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Overall Progress Bar */}
-            {planStats.totalStops > 0 && (
-              <div className="pt-2 border-t border-stone-800">
-                <div className="flex items-center justify-between text-[11px] text-stone-400 mb-1">
-                  <span>Progreso de visitas en ruta</span>
-                  <span className="font-bold text-amber-400">{planStats.progressPercent}%</span>
-                </div>
-                <div className="w-full bg-stone-800 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-amber-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${planStats.progressPercent}%` }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* View Mode Switcher & Controls */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-stone-200 pb-3">
@@ -1761,8 +1697,8 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar por ciudad, templo, parada o nota..."
-                    className="w-full pl-9 pr-8 py-2 bg-white border border-stone-200 rounded-xl text-xs text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                    placeholder="Buscar en el itinerario..."
+                    className="w-full pl-9 pr-8 py-2 bg-white border border-stone-200 rounded-xl text-base sm:text-xs text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
                   />
                   {searchQuery && (
                     <button

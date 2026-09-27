@@ -157,15 +157,16 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
   return (
     <div className="space-y-6 max-w-4xl w-full mx-auto min-w-0">
       {/* Sub tabs navigation */}
+      {/* SUB-TABS NAVIGATION */}
       <div className="w-full">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-stone-100 p-1.5 rounded-2xl border border-stone-200">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-stone-200/60 p-1.5 rounded-2xl border border-stone-300/70 shadow-2xs">
           <button
             id="subtab-conversation"
             onClick={() => setSubTab('conversation')}
             className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
               subTab === 'conversation'
-                ? 'bg-stone-900 text-white shadow-xs'
-                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/70'
+                ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
           >
             <Languages className="w-4 h-4 shrink-0" />
@@ -177,8 +178,8 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
             onClick={() => setSubTab('phrases')}
             className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
               subTab === 'phrases'
-                ? 'bg-stone-900 text-white shadow-xs'
-                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/70'
+                ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
           >
             <BookOpen className="w-4 h-4 shrink-0" />
@@ -190,8 +191,8 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
             onClick={() => setSubTab('food')}
             className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
               subTab === 'food'
-                ? 'bg-stone-900 text-white shadow-xs'
-                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/70'
+                ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
           >
             <UtensilsCrossed className="w-4 h-4 shrink-0" />
@@ -203,8 +204,8 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
             onClick={() => setSubTab('allergy')}
             className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
               subTab === 'allergy'
-                ? 'bg-stone-900 text-white shadow-xs'
-                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/70'
+                ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
           >
             <ShieldAlert className="w-4 h-4 shrink-0" />
@@ -216,17 +217,17 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
       {/* SEARCH BAR (For phrases & food) */}
       {(subTab === 'phrases' || subTab === 'food') && (
         <div className="relative w-full min-w-0">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <input
             type="text"
             placeholder={
               subTab === 'phrases'
-                ? 'Buscar frase (ej. "¿cuánto cuesta?", "sin azúcar", "cuenta", "hospital")...'
-                : 'Buscar plato o ingrediente (ej. "Phở", "Bánh mì", "café", "cerdo", "vegetariano")...'
+                ? 'Buscar frase en español o vietnamita (ej. cuenta, gracias, cuánto vale)...'
+                : 'Buscar plato típico (ej. Phở bò, Bánh mì, Bún chả, Cà phê)...'
             }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-white text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-xs"
+            className="w-full pl-11 pr-4 py-3 rounded-2xl border border-stone-300/80 bg-white text-base sm:text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 shadow-xs transition"
           />
         </div>
       )}
@@ -239,7 +240,33 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
       {/* 1. PHRASES TAB */}
       {subTab === 'phrases' && (
         <div className="space-y-4 w-full min-w-0">
-          {/* Categories bar (without 'todas' clump, focused by situation) */}
+          {/* Top Status Bar: Dark Noir with Gold Trim */}
+          <div className="bg-[#141210] text-stone-100 rounded-2xl p-3 sm:px-5 sm:py-3.5 border border-stone-800 shadow-md flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <BookOpen className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-serif font-bold text-base text-white">Guía de Frases Imprescindibles</span>
+                  <span className="text-[11px] text-amber-300 font-bold bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-800/60">
+                    100% Offline
+                  </span>
+                </div>
+                <p className="text-xs text-stone-400 mt-0.5">
+                  Pronunciación fonética real, tonos y consejos culturales para viajar con tranquilidad
+                </p>
+              </div>
+            </div>
+
+            <div className="text-xs text-stone-300 flex items-center gap-2">
+              <span className="bg-stone-900 px-3 py-1 rounded-xl border border-stone-800 font-medium text-xs text-amber-300 font-mono">
+                {filteredPhrases.length} frases
+              </span>
+            </div>
+          </div>
+
+          {/* Categories bar */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs no-scrollbar w-full max-w-full overscroll-x-contain touch-pan-x">
             {[
               { id: 'compras', label: '💰 Regateo & Compras', icon: ShoppingBag },
@@ -255,10 +282,10 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-xl whitespace-nowrap font-medium transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                className={`px-3.5 py-2 rounded-xl whitespace-nowrap text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
                   selectedCategory === cat.id
-                    ? 'bg-stone-900 text-white font-bold shadow-xs'
-                    : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                    ? 'bg-[#181614] text-amber-300 font-bold shadow-xs border border-stone-800'
+                    : 'bg-white hover:bg-stone-100 text-stone-700 border border-stone-200/90'
                 }`}
               >
                 <span>{cat.label}</span>
@@ -283,21 +310,21 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
           )}
 
           {/* Phrases list */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full min-w-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0">
             {filteredPhrases.map((phrase) => (
               <div
                 key={phrase.id}
-                className={`rounded-2xl p-4 sm:p-5 border transition flex flex-col justify-between min-w-0 break-words ${
+                className={`rounded-3xl p-5 sm:p-6 border transition-all flex flex-col justify-between min-w-0 break-words ${
                   phrase.isCustom
-                    ? 'bg-amber-50/50 border-amber-300 shadow-xs hover:border-amber-400'
-                    : 'bg-white border-stone-200 shadow-2xs hover:border-amber-400 hover:shadow-xs'
+                    ? 'bg-amber-50/40 border-amber-300 shadow-sm hover:border-amber-400 hover:shadow-md'
+                    : 'bg-white border-stone-200/90 shadow-[0_2px_16px_rgba(28,25,23,0.03)] hover:border-amber-400/80 hover:shadow-md'
                 }`}
               >
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
                       {phrase.isCustom ? (
-                        <span className="text-[10px] text-amber-900 font-bold bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <span className="text-[10px] text-amber-900 font-bold bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
                           <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
                           <span>Tarjeta personal</span>
                         </span>
@@ -308,28 +335,28 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                       )}
                     </div>
                     {phrase.priority && !phrase.isCustom && (
-                      <span className="text-[10px] text-amber-800 font-bold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] text-amber-800 font-bold bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full shadow-2xs">
                         ★ Imprescindible
                       </span>
                     )}
                   </div>
 
-                  <h4 className="font-bold text-base text-stone-900 leading-snug break-words">
+                  <h4 className="font-serif font-bold text-base sm:text-lg text-stone-900 leading-snug break-words">
                     {phrase.spanish}
                   </h4>
 
-                  <div className="bg-amber-50/50 rounded-xl p-3 border border-amber-200/60 min-w-0 space-y-1">
-                    <div className="text-lg font-black text-amber-950 font-sans tracking-wide break-words">
+                  <div className="bg-gradient-to-br from-amber-500/[0.08] to-amber-500/[0.02] rounded-2xl p-3.5 border border-amber-200/70 min-w-0 space-y-1.5 shadow-2xs">
+                    <div className="text-xl font-black text-amber-950 font-sans tracking-wide break-words">
                       {phrase.vietnamese}
                     </div>
-                    <div className="text-xs text-stone-600 font-mono break-words">
-                      <span className="text-stone-400 font-sans">🗣️ Fonética: </span>
+                    <div className="text-xs text-stone-600 font-mono break-words flex items-center gap-1.5">
+                      <span className="text-stone-400 font-sans">🗣️ Fonética:</span>
                       <strong className="text-amber-950 font-bold">{phrase.phonetic}</strong>
                     </div>
                   </div>
 
                   {phrase.toneTip && (
-                    <p className="text-[11px] text-stone-500 leading-relaxed">
+                    <p className="text-[11px] text-stone-500 leading-relaxed bg-stone-50/70 p-2.5 rounded-xl border border-stone-100">
                       💡 {phrase.toneTip}
                     </p>
                   )}
@@ -340,7 +367,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                     {phrase.isCustom && (
                       <button
                         onClick={() => handleDeleteCustom(phrase.id)}
-                        className="flex items-center gap-1 text-[11px] text-stone-400 hover:text-rose-600 transition cursor-pointer p-1 rounded-lg hover:bg-rose-50"
+                        className="flex items-center gap-1 text-[11px] text-stone-400 hover:text-rose-600 transition cursor-pointer p-1.5 rounded-xl hover:bg-rose-50"
                         title="Eliminar esta tarjeta personalizada"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -352,7 +379,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleSpeak(phrase.vietnamese)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-950 text-xs font-semibold transition cursor-pointer border border-amber-200/70"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-950 text-xs font-semibold transition cursor-pointer border border-amber-200/70 shadow-2xs"
                       title="Reproducir pronunciación en vietnamita"
                     >
                       <Volume2 className="w-3.5 h-3.5 text-amber-700" />
@@ -361,13 +388,13 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
 
                     <button
                       onClick={() => handleCopy(phrase.vietnamese, phrase.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 active:scale-95 text-stone-700 text-xs font-semibold transition cursor-pointer"
                       title="Copiar texto en vietnamita"
                     >
                       {copiedId === phrase.id ? (
                         <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-emerald-700">Copiado</span>
+                          <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
+                          <span className="text-emerald-700 font-bold">Copiado</span>
                         </>
                       ) : (
                         <>
@@ -383,7 +410,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
           </div>
 
           {filteredPhrases.length === 0 && (
-            <div className="text-center py-10 px-4 bg-white rounded-2xl border border-stone-200 text-stone-500 text-sm space-y-3">
+            <div className="text-center py-10 px-4 bg-white rounded-3xl border border-stone-200 text-stone-500 text-sm space-y-3">
               <p className="font-semibold text-stone-800">
                 No se encontraron frases que coincidan con "{searchQuery}".
               </p>
@@ -394,14 +421,14 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="px-3.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition cursor-pointer"
                 >
                   Limpiar búsqueda
                 </button>
                 <button
                   type="button"
                   onClick={() => setSubTab('conversation')}
-                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 text-xs font-bold transition cursor-pointer shadow-xs"
                 >
                   Ir al Traductor ➔
                 </button>
@@ -414,13 +441,29 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
       {/* 2. FOOD MENU DECODER TAB */}
       {subTab === 'food' && (
         <div className="space-y-4">
-          <div className="bg-amber-50/80 rounded-2xl p-4 border border-amber-200 text-xs text-amber-950 flex items-start gap-3">
-            <UtensilsCrossed className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <strong className="block font-bold text-sm text-stone-900">Guía gastronómica callejera de Vietnam</strong>
-              <p className="text-stone-600">
-                Descubre qué significa cada plato en los letreros de la calle, qué ingredientes contiene y cómo pedirlo a tu gusto.
-              </p>
+          {/* Top Status Bar: Dark Noir with Gold Trim */}
+          <div className="bg-[#141210] text-stone-100 rounded-2xl p-3 sm:px-5 sm:py-3.5 border border-stone-800 shadow-md flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <UtensilsCrossed className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-serif font-bold text-base text-white">Menú Callejero & Platos Típicos</span>
+                  <span className="text-[11px] text-amber-300 font-bold bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-800/60">
+                    Guía Gastronómica
+                  </span>
+                </div>
+                <p className="text-xs text-stone-400 mt-0.5">
+                  Descifra letreros callejeros, ingredientes, cómo pedir como un local y notas dietéticas
+                </p>
+              </div>
+            </div>
+
+            <div className="text-xs text-stone-300 flex items-center gap-2">
+              <span className="bg-stone-900 px-3 py-1 rounded-xl border border-stone-800 font-medium text-xs text-amber-300 font-mono">
+                {filteredDishes.length} platos catalogados
+              </span>
             </div>
           </div>
 
@@ -428,7 +471,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
             {filteredDishes.map((dish) => (
               <div
                 key={dish.id}
-                className="bg-white rounded-2xl p-5 border border-stone-200 shadow-2xs hover:border-amber-400 hover:shadow-xs transition flex flex-col justify-between min-w-0 break-words"
+                className="bg-white rounded-3xl p-5 sm:p-6 border border-stone-200/90 shadow-[0_2px_16px_rgba(28,25,23,0.03)] hover:border-amber-400/80 hover:shadow-md transition-all flex flex-col justify-between min-w-0 break-words"
               >
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
@@ -436,24 +479,24 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                       <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
                         {dish.category} · {dish.region}
                       </div>
-                      <h3 className="text-xl font-black text-stone-900 mt-1">
+                      <h3 className="text-xl font-black text-stone-900 mt-1 font-serif">
                         {dish.nameVi}
                       </h3>
-                      <p className="text-xs font-medium text-stone-600">
+                      <p className="text-xs font-semibold text-stone-600 mt-0.5">
                         {dish.nameEs}
                       </p>
                     </div>
 
                     <button
                       onClick={() => handleSpeak(dish.nameVi)}
-                      className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200/70 text-amber-900 transition cursor-pointer shrink-0"
+                      className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200/70 text-amber-900 transition cursor-pointer shrink-0 active:scale-95 shadow-2xs"
                       title="Escuchar nombre del plato"
                     >
                       <Volume2 className="w-4 h-4 text-amber-700" />
                     </button>
                   </div>
 
-                  <div className="text-xs text-stone-600 font-mono">
+                  <div className="text-xs text-stone-600 font-mono bg-stone-50 px-3 py-1.5 rounded-xl border border-stone-100">
                     <span className="text-stone-400 font-sans">🗣️ Pronunciación: </span>
                     <strong className="text-amber-950 font-bold">{dish.phonetic}</strong>
                   </div>
@@ -463,13 +506,13 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                   </p>
 
                   {/* Ingredients: Clean unboxed typographic list with middle dots */}
-                  <div className="text-xs text-stone-500">
+                  <div className="text-xs text-stone-500 pt-1">
                     <strong className="text-stone-700 font-semibold">Ingredientes: </strong>
                     <span>{dish.ingredients.join(' · ')}</span>
                   </div>
 
                   {/* How to order */}
-                  <div className="bg-amber-50/60 rounded-xl p-3 border border-amber-200/60 text-xs space-y-1">
+                  <div className="bg-amber-50/50 rounded-2xl p-3.5 border border-amber-200/60 text-xs space-y-1 shadow-2xs">
                     <div className="font-bold text-amber-950 text-[11px]">
                       🍜 Cómo pedirlo:
                     </div>
@@ -478,7 +521,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                 </div>
 
                 {/* Dietary Warning */}
-                <div className="mt-3 pt-3 border-t border-stone-100 text-[11px] text-stone-500 flex items-center gap-1.5">
+                <div className="mt-3.5 pt-3 border-t border-stone-100 text-[11px] text-stone-500 flex items-center gap-1.5">
                   <AlertCircle className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                   <span>{dish.dietaryNotes}</span>
                 </div>

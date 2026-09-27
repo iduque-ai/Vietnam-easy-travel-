@@ -114,8 +114,9 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
   const [mapPinsFilter, setMapPinsFilter] = useState<'all' | 'itinerary' | 'day'>('all');
   const [isDownloadingPack, setIsDownloadingPack] = useState<string | null>(null);
 
-  // Layout view mode: unified split view vs pure map view
+  // Layout view mode: unified split view vs pure map view vs list view
   const [unifiedViewMode, setUnifiedViewMode] = useState<'split' | 'map-only'>('split');
+  const [viewMode, setViewMode] = useState<'split' | 'map' | 'list'>('split');
 
   // Quick add state
   const [targetQuickDayId, setTargetQuickDayId] = useState<string>('');
@@ -603,70 +604,110 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Region Selector & Offline Pack Status */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-stone-200 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg sm:text-xl font-bold text-stone-900 flex items-center gap-2">
-              <Compass className="w-5 h-5 text-amber-600" />
-              <span>Mapas & Lugares de Vietnam</span>
-            </h2>
-            <p className="text-xs text-stone-500 mt-0.5">
-              Toca cualquier pin del mapa para ver detalles y añadir a tu itinerario.
-            </p>
+    <div className="space-y-5 max-w-6xl mx-auto">
+      {/* Top Status Bar: Dark Noir with Gold Trim */}
+      <div className="bg-[#141210] text-stone-100 rounded-2xl p-3 sm:px-5 sm:py-3.5 border border-stone-800 shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Left: Region title & place count */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+              <Compass className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="font-serif font-bold text-base sm:text-lg text-white truncate">
+                  {currentRegion.name}
+                </h2>
+                <span className="text-xs text-amber-300 font-mono font-bold bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-800/60">
+                  {regionPois.length} lugares
+                </span>
+                <span className="text-xs text-stone-400 hidden sm:inline">
+                  · {currentRegion.vietnameseName}
+                </span>
+              </div>
+              <p className="text-xs text-stone-400 truncate mt-0.5">
+                Toca cualquier lugar o pin del mapa para ver detalles y sumar a tu itinerario
+              </p>
+            </div>
           </div>
 
-          {/* Download & View Controls */}
-          <div className="flex items-center gap-2 self-stretch sm:self-auto">
+          {/* Right Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            {/* Engine switcher */}
+            <div className="inline-flex p-0.5 bg-stone-900 rounded-xl border border-stone-800">
+              <button
+                onClick={() => setMapDisplayMode('google')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  mapDisplayMode === 'google'
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-stone-950 font-bold shadow-xs'
+                    : 'text-stone-300 hover:text-white'
+                }`}
+                title="Google Maps con satélite y relieve"
+              >
+                <MapIcon className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Google</span>
+              </button>
+              <button
+                onClick={() => setMapDisplayMode('osm')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  mapDisplayMode === 'osm'
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-stone-950 font-bold shadow-xs'
+                    : 'text-stone-300 hover:text-white'
+                }`}
+                title="Mapa vectorial OpenStreetMap"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Vector</span>
+              </button>
+            </div>
+
+            {/* GPS Locate button */}
             <button
-              onClick={() =>
-                setUnifiedViewMode(unifiedViewMode === 'split' ? 'map-only' : 'split')
-              }
-              className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border min-h-[40px] ${
-                unifiedViewMode === 'split'
-                  ? 'bg-amber-50 text-amber-950 border-amber-300 shadow-2xs'
-                  : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
-              }`}
-              title="Alternar panel de itinerario en mapa"
+              onClick={handleLocateMe}
+              disabled={isLocating}
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 active:scale-95 text-sky-400 hover:text-sky-300 border border-stone-800 transition cursor-pointer text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 shadow-2xs"
+              title="Mi ubicación GPS"
             >
-              <Calendar className="w-3.5 h-3.5 text-amber-600" />
-              <span>
-                {unifiedViewMode === 'split' ? 'Ocultar Itinerario' : 'Ver Itinerario'}
-              </span>
+              <Locate className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isLocating ? 'GPS...' : 'GPS'}</span>
             </button>
 
+            {/* Download pack button */}
             <button
               onClick={() => handleToggleDownloadPack(selectedRegionId)}
               disabled={isDownloadingPack !== null}
-              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs min-h-[40px] ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95 ${
                 isCurrentPackDownloaded
-                  ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 hover:bg-emerald-100'
-                  : 'bg-amber-500 hover:bg-amber-600 text-stone-950'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                  : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-bold'
               }`}
             >
               {isDownloadingPack === selectedRegionId ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3 h-3 border-2 border-stone-950 border-t-transparent rounded-full animate-spin" />
                   <span>Guardando...</span>
                 </>
               ) : isCurrentPackDownloaded ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>Guardado ({currentRegion.sizeMb})</span>
+                  <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" />
+                  <span>Guardado</span>
                 </>
               ) : (
                 <>
-                  <Download className="w-3.5 h-3.5" />
+                  <Download className="w-3.5 h-3.5 stroke-[2.2]" />
                   <span>Descargar ({currentRegion.sizeMb})</span>
                 </>
               )}
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Region Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+      {/* Main Filter & View Bar (Matching RestaurantFinder) */}
+      <div className="bg-white rounded-3xl p-4 sm:p-5 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-3.5">
+        {/* Row 1: Region Selection Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          <span className="text-xs font-bold text-stone-400 mr-1 shrink-0 uppercase tracking-wider">Región:</span>
           {REGION_PACKS.map((pack) => {
             const isSelected = selectedRegionId === pack.id;
             const isDownloaded = downloadedPacks.includes(pack.id);
@@ -679,22 +720,99 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                   const firstPoi = POINTS_OF_INTEREST.find((p) => p.regionId === pack.id);
                   if (firstPoi) setSelectedPoi(firstPoi);
                 }}
-                className={`px-3 py-2 rounded-xl border text-left transition cursor-pointer shrink-0 min-h-[42px] flex items-center gap-2 ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
                   isSelected
-                    ? 'border-amber-500 bg-amber-500 text-stone-950 font-bold shadow-xs'
-                    : 'border-stone-200 bg-stone-50 hover:bg-white text-stone-700'
+                    ? 'bg-[#181614] text-amber-300 font-bold shadow-xs border border-stone-800'
+                    : 'bg-stone-100 hover:bg-stone-200/80 text-stone-700'
                 }`}
               >
                 <span>{pack.name}</span>
-                {isDownloaded && (
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-stone-950' : 'bg-emerald-500'}`}
-                    title="Guardado offline"
-                  />
-                )}
+                {isDownloaded && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-2xs" />}
               </button>
             );
           })}
+        </div>
+
+        {/* Row 2: Category Filter Pills + Itinerary toggle + View Mode switch */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2.5 border-t border-stone-100">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+            <span className="text-xs font-semibold text-stone-400 mr-1 shrink-0">Filtrar:</span>
+            {[
+              { id: 'todas', label: 'Todos' },
+              { id: 'templos', label: '⛩️ Templos' },
+              { id: 'naturaleza', label: '🌿 Naturaleza' },
+              { id: 'cultura', label: '🏛️ Cultura' },
+              { id: 'miradores', label: '🔭 Miradores' },
+            ].map((cat) => {
+              const isSelected = activeCategoryFilter === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategoryFilter(cat.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
+                    isSelected
+                      ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                      : 'bg-stone-100 hover:bg-stone-200 text-stone-600'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+            {/* Itinerary panel toggle */}
+            <button
+              onClick={() =>
+                setUnifiedViewMode(unifiedViewMode === 'split' ? 'map-only' : 'split')
+              }
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border ${
+                unifiedViewMode === 'split'
+                  ? 'bg-amber-50 text-amber-950 border-amber-300'
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-600 border-stone-200'
+              }`}
+              title="Mostrar u ocultar la tira de paradas de tu itinerario en el mapa"
+            >
+              <Calendar className="w-3.5 h-3.5 text-amber-600" />
+              <span>{unifiedViewMode === 'split' ? 'Ocultar Ruta' : 'Ver Ruta'}</span>
+            </button>
+
+            {/* View Mode Toggle: Dividido / Mapa / Lista */}
+            <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200 text-xs font-semibold">
+              <button
+                onClick={() => setViewMode('split')}
+                className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                  viewMode === 'split'
+                    ? 'bg-white text-stone-900 shadow-xs font-bold'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <span>Dividido</span>
+              </button>
+              <button
+                onClick={() => setViewMode('map')}
+                className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                  viewMode === 'map'
+                    ? 'bg-white text-stone-900 shadow-xs font-bold'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <MapIcon className="w-3.5 h-3.5" />
+                <span>Mapa</span>
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                  viewMode === 'list'
+                    ? 'bg-white text-stone-900 shadow-xs font-bold'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <span>Lista</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -718,9 +836,10 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
       )}
 
       {/* Main Map Viewer & POIs Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className={`grid gap-6 items-start ${viewMode === 'split' ? 'grid-cols-1 lg:grid-cols-12' : 'grid-cols-1'}`}>
         {/* LEFT / TOP: Interactive Map Canvas & Highlights */}
-        <div className="lg:col-span-7 space-y-3">
+        {viewMode !== 'list' && (
+          <div className={viewMode === 'split' ? 'lg:col-span-7 space-y-3' : 'w-full space-y-3'}>
           {/* Interactive Map Container */}
           <div className="bg-stone-900 text-stone-100 rounded-2xl p-3 sm:p-4 border border-stone-800 shadow-md relative overflow-hidden space-y-2.5">
             <div className="flex items-center justify-between gap-2">
@@ -1058,10 +1177,12 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
             </div>
           </div>
         </div>
+        )}
 
         {/* RIGHT: Selected Point of Interest Detailed Inspector Card */}
-        <div className="lg:col-span-5">
-          {selectedPoi ? (
+        {viewMode !== 'map' && (
+          <div className={viewMode === 'split' ? 'lg:col-span-5' : 'w-full'}>
+            {selectedPoi ? (
             <div id="poi-detail-inspector" className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-sm space-y-4 sticky top-24">
               {/* Header with Title and Speech */}
               <div>
@@ -1348,6 +1469,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* Floating Toast Notification */}

@@ -12,6 +12,8 @@ import { DownloadableMaps } from './components/DownloadableMaps';
 import { ItineraryPlanner } from './components/ItineraryPlanner';
 import { FreeTourGuide } from './components/FreeTourGuide';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { PermissionsModal } from './components/PermissionsModal';
+import { EmergencyModal } from './components/EmergencyModal';
 import { ExchangeRatesData, ActiveTabType, PointOfInterest } from './types';
 import { getSavedRates, saveRates, isRatesStale } from './utils/storage';
 import { fetchLiveExchangeRates } from './utils/currencyApi';
@@ -36,6 +38,8 @@ export default function App() {
   const [offlineToast, setOfflineToast] = useState<string | null>(null);
   const [isMapsQuotaExceeded, setIsMapsQuotaExceeded] = useState<boolean>(false);
   const [freeTourTargetPoi, setFreeTourTargetPoi] = useState<PointOfInterest | null>(null);
+  const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState<boolean>(false);
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState<boolean>(false);
 
   // Centralized shared itinerary state for Maps & Planner
   const itineraryState = useItineraryState();
@@ -254,7 +258,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-[100dvh] bg-stone-100 text-stone-800 flex flex-col font-sans overflow-x-hidden w-full max-w-full">
+    <div className="min-h-[100dvh] bg-[#FAF8F5] text-stone-900 flex flex-col font-sans overflow-x-hidden w-full max-w-full">
       {/* Quota Exceeded Sticky Banner */}
       {isMapsQuotaExceeded && (
         <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
@@ -283,6 +287,24 @@ export default function App() {
         onRefreshRates={() => refreshRates(true, true)}
         onOpenConversationMode={handleOpenConversationMode}
         onToggleOnlineMode={handleToggleOnlineMode}
+        onOpenPermissionsModal={() => setIsPermissionsModalOpen(true)}
+        onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+        vietnamTime={vietnamTime}
+        spainTime={spainTime}
+      />
+
+      {/* Permissions Modal (Contextual only when requested) */}
+      <PermissionsModal
+        isOpen={isPermissionsModalOpen}
+        onClose={() => setIsPermissionsModalOpen(false)}
+      />
+
+      {/* Emergency & Consular Assistance Modal */}
+      <EmergencyModal
+        isOpen={isEmergencyModalOpen}
+        onClose={() => setIsEmergencyModalOpen(false)}
+        vietnamTime={vietnamTime}
+        spainTime={spainTime}
       />
 
       {/* Floating Offline Notification Toast (positioned above mobile bottom nav) */}
@@ -320,6 +342,10 @@ export default function App() {
             itineraryState={itineraryState}
             onNavigateToItinerary={() => setActiveTab('itinerary')}
             onToggleOnlineMode={handleToggleOnlineMode}
+            onNavigateToAllergies={() => {
+              setTranslatorSubTab('allergy');
+              setActiveTab('translator');
+            }}
           />
         )}
 
@@ -358,54 +384,54 @@ export default function App() {
 
       {/* Bottom Sticky Footer with Dual Time and Emergency Numbers */}
       <footer
-        className="bg-stone-900 text-stone-400 border-t border-stone-800 pt-3.5 pb-28 md:py-3.5 text-xs"
-        style={{ paddingBottom: 'calc(6.75rem + env(safe-area-inset-bottom, 0px))' }}
+        className="bg-[#141210] text-stone-400 border-t border-stone-800/80 pt-3.5 md:py-3.5 text-xs"
+        style={{ paddingBottom: 'calc(4.75rem + env(safe-area-inset-bottom, 0px))' }}
       >
         <div className="max-w-6xl mx-auto px-4">
           <div className="grid grid-cols-2 gap-2 sm:gap-4 max-w-lg mx-auto sm:max-w-none sm:flex sm:items-center sm:justify-center">
-            {/* Row 1: Vietnam & Ambulancia */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between sm:justify-start gap-2 bg-stone-800/90 px-3 py-1.5 rounded-lg border border-stone-700/80 text-[11px] text-stone-300 shadow-2xs">
+            {/* Row 1: Vietnam & Spain Dual Time */}
+            <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-3">
+              <div className="flex items-center justify-between sm:justify-start gap-2 bg-stone-900/90 px-3 py-1.5 rounded-xl border border-stone-800 text-[11px] text-stone-300 shadow-xs">
                 <div className="flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="font-medium">Vietnam:</span>
+                  <span className="font-medium text-stone-300">Vietnam:</span>
                 </div>
                 <strong className="font-mono text-amber-300 ml-auto">{vietnamTime || '--:--:--'}</strong>
               </div>
 
-              <div className="flex items-center justify-between sm:justify-start gap-2 bg-stone-800/90 px-3 py-1.5 rounded-lg border border-stone-700/80 text-[11px] text-stone-300 shadow-2xs">
+              <div className="flex items-center justify-between sm:justify-start gap-2 bg-stone-900/90 px-3 py-1.5 rounded-xl border border-stone-800 text-[11px] text-stone-300 shadow-xs">
                 <div className="flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span className="font-medium">España:</span>
+                  <span className="font-medium text-stone-300">España:</span>
                 </div>
                 <strong className="font-mono text-sky-300 ml-auto">{spainTime || '--:--:--'}</strong>
               </div>
             </div>
 
             {/* Row 2 / Col 2: Ambulancia & Policía */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-3">
               <a
                 href="tel:115"
-                className="flex items-center justify-between sm:justify-start gap-2 bg-stone-800/90 hover:bg-stone-700/90 px-3 py-1.5 rounded-lg border border-stone-700/80 text-[11px] text-stone-300 shadow-2xs transition"
+                className="flex items-center justify-between sm:justify-start gap-2 bg-stone-900/90 hover:bg-stone-800/90 px-3 py-1.5 rounded-xl border border-rose-900/40 text-[11px] text-stone-300 shadow-xs transition active:scale-95"
                 title="Llamar a Ambulancia / Emergencias médicas (115)"
               >
                 <div className="flex items-center gap-1.5">
                   <HeartPulse className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                  <span className="font-medium">Ambulancia:</span>
+                  <span className="font-medium text-stone-300">Ambulancia:</span>
                 </div>
-                <strong className="font-mono text-rose-300 font-bold ml-auto">115</strong>
+                <strong className="font-mono text-rose-400 font-bold ml-auto">115</strong>
               </a>
 
               <a
                 href="tel:113"
-                className="flex items-center justify-between sm:justify-start gap-2 bg-stone-800/90 hover:bg-stone-700/90 px-3 py-1.5 rounded-lg border border-stone-700/80 text-[11px] text-stone-300 shadow-2xs transition"
+                className="flex items-center justify-between sm:justify-start gap-2 bg-stone-900/90 hover:bg-stone-800/90 px-3 py-1.5 rounded-xl border border-emerald-900/40 text-[11px] text-stone-300 shadow-xs transition active:scale-95"
                 title="Llamar a Policía de Vietnam (113)"
               >
                 <div className="flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="font-medium">Policía:</span>
+                  <span className="font-medium text-stone-300">Policía:</span>
                 </div>
-                <strong className="font-mono text-emerald-300 font-bold ml-auto">113</strong>
+                <strong className="font-mono text-emerald-400 font-bold ml-auto">113</strong>
               </a>
             </div>
           </div>

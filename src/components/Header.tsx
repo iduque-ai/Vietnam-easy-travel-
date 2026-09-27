@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Wifi,
   WifiOff,
@@ -13,6 +13,14 @@ import {
   ChevronRight,
   Sparkles,
   UtensilsCrossed,
+  Mic,
+  Navigation,
+  CheckCircle2,
+  AlertCircle,
+  HelpCircle,
+  ShieldCheck,
+  ShieldAlert,
+  PhoneCall,
 } from 'lucide-react';
 import { ExchangeRatesData, ActiveTabType } from '../types';
 
@@ -25,6 +33,10 @@ interface HeaderProps {
   onRefreshRates: () => void;
   onOpenConversationMode?: () => void;
   onToggleOnlineMode?: () => void;
+  onOpenPermissionsModal?: () => void;
+  onOpenEmergencyModal?: () => void;
+  vietnamTime?: string;
+  spainTime?: string;
 }
 
 const NAV_ITEMS: {
@@ -87,8 +99,68 @@ export const Header: React.FC<HeaderProps> = ({
   onRefreshRates,
   onOpenConversationMode,
   onToggleOnlineMode,
+  onOpenPermissionsModal,
+  onOpenEmergencyModal,
+  vietnamTime,
+  spainTime,
 }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [geoStatus, setGeoStatus] = useState<'prompt' | 'granted' | 'denied' | 'unknown'>('unknown');
+  const [micStatus, setMicStatus] = useState<'prompt' | 'granted' | 'denied' | 'unknown'>('unknown');
+  const [isRequestingPerms, setIsRequestingPerms] = useState(false);
+
+  const checkPermissions = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && (navigator as any).permissions) {
+      try {
+        const geo = await (navigator as any).permissions.query({ name: 'geolocation' });
+        setGeoStatus(geo.state);
+        geo.onchange = () => setGeoStatus(geo.state);
+      } catch {}
+
+      try {
+        const mic = await (navigator as any).permissions.query({ name: 'microphone' as any });
+        setMicStatus(mic.state);
+        mic.onchange = () => setMicStatus(mic.state);
+      } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    checkPermissions();
+    if (isDrawerOpen) {
+      checkPermissions();
+    }
+  }, [isDrawerOpen, checkPermissions]);
+
+  const handleRequestPermissions = async () => {
+    setIsRequestingPerms(true);
+    // Request GPS
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          setGeoStatus('granted');
+        },
+        (err) => {
+          if (err.code === 1) setGeoStatus('denied');
+        },
+        { timeout: 8000, enableHighAccuracy: true }
+      );
+    }
+    // Request Mic
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+        setMicStatus('granted');
+      } catch {
+        setMicStatus('denied');
+      }
+    }
+    setTimeout(() => {
+      checkPermissions();
+      setIsRequestingPerms(false);
+    }, 1000);
+  };
 
   // Close drawer on escape key
   useEffect(() => {
@@ -132,43 +204,47 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      <header className="bg-stone-900 text-stone-100 border-b border-stone-800/90 sticky top-0 z-40 shadow-xs backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-3 sm:px-5">
-          {/* Desktop Navigation Row (md and above) - Slightly larger and more spacious */}
+      <header className="bg-[#141210]/95 text-stone-100 border-b border-stone-800/80 sticky top-0 z-40 shadow-sm backdrop-blur-xl transition-all">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6">
+          {/* Desktop Navigation Row (md and above) */}
           <div className="hidden md:flex items-center justify-between h-16 gap-4">
             {/* Brand Identity with interactive Online/Offline mode toggle */}
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="text-xl leading-none" role="img" aria-label="Vietnam">🇻🇳</span>
-              <div className="flex items-center gap-2">
-                <span className="font-bold tracking-tight text-stone-100 text-base">Vietnam Travel</span>
-                <button
-                  type="button"
-                  onClick={onToggleOnlineMode}
-                  className={`group inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer border shadow-2xs select-none ${
-                    isOnline
-                      ? 'bg-emerald-950/80 border-emerald-600/70 text-emerald-300 hover:bg-emerald-900 hover:border-emerald-400'
-                      : 'bg-amber-950/80 border-amber-600/70 text-amber-300 hover:bg-amber-900 hover:border-amber-400'
-                  }`}
-                  title={
-                    isOnline
-                      ? 'Modo Online activo (Google Maps y búsqueda completa en vivo). Haz clic para cambiar a Modo Offline.'
-                      : 'Modo Offline activo (Sin consumo de datos, catálogo guardado). Haz clic para cambiar a Modo Online.'
-                  }
-                  aria-label={isOnline ? 'Cambiar a modo offline' : 'Cambiar a modo online'}
-                >
-                  <span className="relative flex h-2 w-2">
-                    {isOnline && (
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    )}
-                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500/20 via-amber-600/10 to-transparent border border-amber-500/30 flex items-center justify-center shadow-xs">
+                <span className="text-xl leading-none" role="img" aria-label="Vietnam">🇻🇳</span>
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="font-serif font-bold tracking-tight text-stone-100 text-lg sm:text-xl leading-none">
+                    Vietnam Travel
                   </span>
-                  <span>{isOnline ? 'Online' : 'Offline'}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={onToggleOnlineMode}
+                    className={`group inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer border shadow-2xs select-none ${
+                      isOnline
+                        ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80 hover:border-emerald-400'
+                        : 'bg-amber-950/70 border-amber-500/50 text-amber-300 hover:bg-amber-900/80 hover:border-amber-400'
+                    }`}
+                    title={
+                      isOnline
+                        ? 'Modo Online activo (Mapas en vivo e IA). Haz clic para cambiar a Modo Offline.'
+                        : 'Modo Offline activo (Sin consumo de datos). Haz clic para cambiar a Modo Online.'
+                    }
+                    aria-label={isOnline ? 'Cambiar a modo offline' : 'Cambiar a modo online'}
+                  >
+                    <span className={`inline-flex rounded-full h-1.5 w-1.5 ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                    <span>{isOnline ? 'Online' : 'Offline'}</span>
+                  </button>
+                </div>
+                <span className="text-[10px] text-stone-400 tracking-wider uppercase font-medium mt-0.5">
+                  Guía Esencial & Asistente Offline
+                </span>
               </div>
             </div>
 
-            {/* Centered Navigation Tabs - Increased padding, icon size & typography */}
-            <nav className="flex items-center gap-1.5 bg-stone-800/80 p-1.5 rounded-xl border border-stone-700/60" aria-label="Tabs">
+            {/* Centered Navigation Tabs - Refined Segmented Control */}
+            <nav className="flex items-center gap-1 bg-stone-900/90 p-1 rounded-xl border border-stone-800/80 backdrop-blur-xs" aria-label="Tabs">
               {NAV_ITEMS.map((item) => {
                 const IconComponent = item.icon;
                 const isActive = activeTab === item.id;
@@ -177,82 +253,137 @@ export const Header: React.FC<HeaderProps> = ({
                     key={item.id}
                     id={`tab-${item.id}`}
                     onClick={() => setActiveTab(item.id)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       isActive
-                        ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
-                        : 'text-stone-300 hover:text-white hover:bg-stone-700/60'
+                        ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-stone-950 font-bold shadow-xs shadow-amber-500/20'
+                        : 'text-stone-300 hover:text-white hover:bg-stone-800/70'
                     }`}
                   >
-                    <IconComponent className="w-4 h-4 shrink-0" />
+                    <IconComponent className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-stone-950 stroke-[2.2]' : 'text-stone-400'}`} />
                     <span>{item.shortLabel}</span>
                   </button>
                 );
               })}
             </nav>
 
-            {/* Right Action: Drawer Toggle / Refresh */}
+            {/* Right Action: SOS Emergencias / Permissions / Refresh */}
             <div className="flex items-center gap-2 shrink-0">
+              {onOpenEmergencyModal && (
+                <button
+                  id="btn-open-emergency-desktop"
+                  onClick={onOpenEmergencyModal}
+                  title="Teléfonos de emergencia 24h (115, 113) y protección consular"
+                  aria-label="Emergencias y Asistencia Consular"
+                  className="px-3 py-1.5 rounded-xl bg-rose-950/70 hover:bg-rose-900/90 border border-rose-600/50 text-rose-200 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold active:scale-95 shadow-xs"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span>SOS 115 / 113</span>
+                </button>
+              )}
+
+              {onOpenPermissionsModal && (
+                <button
+                  id="btn-open-permissions-desktop"
+                  onClick={onOpenPermissionsModal}
+                  title="Gestionar Permisos (GPS y Micrófono)"
+                  aria-label="Gestionar Permisos"
+                  className={`p-2 rounded-xl border transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
+                    geoStatus === 'granted' && micStatus === 'granted'
+                      ? 'bg-stone-900/80 hover:bg-stone-800 text-emerald-400 border-stone-800'
+                      : 'bg-stone-900/80 hover:bg-stone-800 text-amber-300 border-stone-800'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  <span className="hidden lg:inline text-stone-200">
+                    {geoStatus === 'granted' && micStatus === 'granted' ? 'Permisos' : 'Permisos'}
+                  </span>
+                </button>
+              )}
+
               <button
                 id="btn-refresh-rates-desktop"
                 onClick={onRefreshRates}
                 disabled={isRefreshing || !isOnline}
                 title="Actualizar tasa de cambio"
                 aria-label="Actualizar tasa de cambio"
-                className="p-2 rounded-lg bg-stone-800 hover:bg-stone-700 disabled:opacity-30 text-stone-300 hover:text-amber-400 border border-stone-700 transition cursor-pointer"
+                className="p-2 rounded-xl bg-stone-900/80 hover:bg-stone-800 disabled:opacity-30 text-stone-300 hover:text-amber-400 border border-stone-800 transition cursor-pointer"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-              </button>
-
-              <button
-                id="btn-open-drawer-desktop"
-                onClick={() => setIsDrawerOpen(true)}
-                title="Abrir menú lateral"
-                aria-label="Abrir menú lateral"
-                className="p-2 rounded-lg bg-stone-800/80 hover:bg-stone-700 text-stone-300 hover:text-white border border-stone-700 transition cursor-pointer"
-              >
-                <Menu className="w-4 h-4" />
               </button>
             </div>
           </div>
 
           {/* Mobile Header (< md) */}
-          <div className="md:hidden py-2 flex items-center justify-between gap-2">
+          <div className="md:hidden py-2.5 flex items-center justify-between gap-2">
             {/* Top Bar with Brand & Mode toggle */}
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-lg leading-none shrink-0">🇻🇳</span>
-              <span className="font-bold text-sm text-stone-100 truncate">Vietnam Travel</span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <span className="text-base leading-none">🇻🇳</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-serif font-bold text-sm text-stone-100 truncate leading-tight">
+                  Vietnam Travel
+                </span>
+                <span className="text-[9px] text-stone-400 tracking-wider uppercase font-medium">
+                  Guía Esencial
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={onToggleOnlineMode}
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer border shadow-2xs select-none shrink-0 ${
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold transition cursor-pointer border shadow-2xs select-none shrink-0 ml-1 ${
                   isOnline
-                    ? 'bg-emerald-950/80 border-emerald-600/70 text-emerald-300 active:scale-95'
-                    : 'bg-amber-950/80 border-amber-600/70 text-amber-300 active:scale-95'
+                    ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 active:scale-95'
+                    : 'bg-amber-950/80 border-amber-500/50 text-amber-300 active:scale-95'
                 }`}
                 title={
                   isOnline
-                    ? 'Modo Online activo (Google Maps en vivo). Toca para cambiar a Modo Offline.'
-                    : 'Modo Offline activo (Sin consumo de datos). Toca para cambiar a Modo Online.'
+                    ? 'Modo Online activo. Toca para cambiar a Modo Offline.'
+                    : 'Modo Offline activo. Toca para cambiar a Modo Online.'
                 }
                 aria-label={isOnline ? 'Cambiar a modo offline' : 'Cambiar a modo online'}
               >
-                <span className="relative flex h-2 w-2 shrink-0">
-                  {isOnline && (
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  )}
-                  <span className={`relative inline-flex rounded-full h-2 w-2 ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
-                </span>
+                <span className={`inline-flex rounded-full h-1.5 w-1.5 ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
                 <span>{isOnline ? 'Online' : 'Offline'}</span>
               </button>
             </div>
 
-            {/* Drawer Toggle */}
+            {/* Mobile Actions: SOS + Permissions + Drawer */}
             <div className="flex items-center gap-1.5 shrink-0">
+              {onOpenEmergencyModal && (
+                <button
+                  id="btn-open-mobile-emergency"
+                  onClick={onOpenEmergencyModal}
+                  className="px-2.5 py-1 rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-600/50 text-rose-200 flex items-center gap-1 text-[11px] font-bold cursor-pointer active:scale-95 transition"
+                  title="Emergencias y Embajada"
+                  aria-label="Emergencias y Embajada"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+                  <span>SOS</span>
+                </button>
+              )}
+
+              {onOpenPermissionsModal && (
+                <button
+                  id="btn-open-mobile-permissions"
+                  onClick={onOpenPermissionsModal}
+                  className={`p-1.5 rounded-xl border flex items-center justify-center cursor-pointer active:scale-95 transition ${
+                    geoStatus === 'granted' && micStatus === 'granted'
+                      ? 'bg-stone-900 text-emerald-400 border-stone-800'
+                      : 'bg-stone-900 text-amber-300 border-stone-800'
+                  }`}
+                  title="Gestionar Permisos de la App (GPS y Micrófono)"
+                  aria-label="Permisos del dispositivo"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                </button>
+              )}
+
               {/* Hamburger button */}
               <button
                 id="btn-open-mobile-drawer"
                 onClick={() => setIsDrawerOpen(true)}
-                className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 flex items-center justify-center cursor-pointer active:scale-95"
+                className="p-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 border border-stone-800 flex items-center justify-center cursor-pointer active:scale-95 transition"
                 aria-label="Abrir menú lateral"
               >
                 <Menu className="w-5 h-5 text-stone-200" />
@@ -338,6 +469,26 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
+            {/* Quick SOS Card in Drawer */}
+            {onOpenEmergencyModal && (
+              <div className="px-4 py-3 border-b border-stone-800 bg-rose-950/20">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDrawerOpen(false);
+                    onOpenEmergencyModal();
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-700/70 text-rose-200 text-xs font-bold flex items-center justify-between transition cursor-pointer shadow-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-rose-400" />
+                    <span>Emergencias & Embajada 24h</span>
+                  </div>
+                  <span className="text-[10px] bg-rose-800 text-rose-100 px-2 py-0.5 rounded-md">115 / 113</span>
+                </button>
+              </div>
+            )}
+
             {/* Navigation Options List */}
             <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
               <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider px-3 py-1">
@@ -385,10 +536,89 @@ export const Header: React.FC<HeaderProps> = ({
               })}
             </div>
 
+            {/* Permissions Status & Tester Card */}
+            <div className="p-3.5 border-t border-stone-800 bg-stone-950/60">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+                  Permisos del dispositivo
+                </span>
+                {onOpenPermissionsModal ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDrawerOpen(false);
+                      onOpenPermissionsModal();
+                    }}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                  >
+                    Ver detalles
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRequestPermissions}
+                    disabled={isRequestingPerms}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer disabled:opacity-50"
+                  >
+                    {isRequestingPerms ? 'Comprobando...' : 'Activar / Probar'}
+                  </button>
+                )}
+              </div>
+
+              <div
+                onClick={() => {
+                  if (onOpenPermissionsModal) {
+                    setIsDrawerOpen(false);
+                    onOpenPermissionsModal();
+                  }
+                }}
+                className={`grid grid-cols-2 gap-2 text-xs ${onOpenPermissionsModal ? 'cursor-pointer' : ''}`}
+                title="Toca para gestionar los permisos de geolocalización y micrófono"
+              >
+                {/* Geolocation status */}
+                <div className="bg-stone-900/90 p-2 rounded-lg border border-stone-800 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Navigation className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <span className="text-[11px] text-stone-300 font-medium truncate">GPS</span>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      geoStatus === 'granted'
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50'
+                        : geoStatus === 'denied'
+                        ? 'bg-rose-950 text-rose-300 border border-rose-800/50'
+                        : 'bg-stone-800 text-stone-400'
+                    }`}
+                  >
+                    {geoStatus === 'granted' ? 'Activo' : geoStatus === 'denied' ? 'Bloqueado' : 'Pendiente'}
+                  </span>
+                </div>
+
+                {/* Microphone status */}
+                <div className="bg-stone-900/90 p-2 rounded-lg border border-stone-800 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Mic className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="text-[11px] text-stone-300 font-medium truncate">Micro</span>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      micStatus === 'granted'
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50'
+                        : micStatus === 'denied'
+                        ? 'bg-rose-950 text-rose-300 border border-rose-800/50'
+                        : 'bg-stone-800 text-stone-400'
+                    }`}
+                  >
+                    {micStatus === 'granted' ? 'Activo' : micStatus === 'denied' ? 'Bloqueado' : 'Pendiente'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Drawer Footer */}
-            <div className="p-4 border-t border-stone-800 bg-stone-950/40 text-center text-xs text-stone-500">
+            <div className="p-3 border-t border-stone-800 bg-stone-950/80 text-center text-xs text-stone-500">
               <p>🇻🇳 Guía Offline de Viaje a Vietnam</p>
-              <p className="text-[11px] text-stone-600 mt-0.5">Tasas, mapas y datos guardados localmente</p>
+              <p className="text-[10px] text-stone-600 mt-0.5">Tasas, mapas y datos guardados localmente</p>
             </div>
           </aside>
         </div>

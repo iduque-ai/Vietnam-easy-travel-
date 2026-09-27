@@ -271,41 +271,41 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-stone-950/80 backdrop-blur-md overflow-hidden animate-fade-in">
       {/* Modal Container */}
-      <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col bg-stone-900 border border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden text-stone-100">
+      <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col bg-[#141210] border border-stone-800 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] overflow-hidden text-stone-100">
         
         {/* Top Header Banner */}
-        <div className="relative px-4 py-3.5 sm:px-6 sm:py-4 bg-gradient-to-r from-stone-950 via-stone-900 to-amber-950/40 border-b border-stone-800 flex items-start justify-between gap-3 shrink-0">
+        <div className="relative px-5 py-4 sm:px-7 sm:py-5 bg-gradient-to-r from-stone-950 via-[#141210] to-amber-950/20 border-b border-stone-800/80 flex items-start justify-between gap-4 shrink-0">
           <div className="min-w-0 pr-2">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[11px] font-bold tracking-wide uppercase flex items-center gap-1 border border-amber-500/30">
+            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-[10px] font-bold tracking-wider uppercase flex items-center gap-1.5 border border-amber-500/30 font-mono">
                 <UtensilsCrossed className="w-3 h-3 text-amber-400" />
                 Carta & Menú Oficial
               </span>
               {restaurant.michelinGuide && (
-                <span className="px-2 py-0.5 rounded-md bg-red-950/80 text-red-300 text-[11px] font-semibold border border-red-500/30">
+                <span className="px-2.5 py-0.5 rounded-full bg-red-950/80 text-red-300 text-[10px] font-bold border border-red-500/30 font-mono uppercase tracking-wider">
                   Michelin {restaurant.michelinGuide}
                 </span>
               )}
               {menuData.source === 'google_places_live' && (
-                <span className="px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-300 text-[11px] font-semibold flex items-center gap-1 border border-emerald-500/30">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 text-[10px] font-bold flex items-center gap-1 border border-emerald-500/30 font-mono uppercase tracking-wider">
                   <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  Fotos de reviews en vivo
+                  Reviews en vivo
                 </span>
               )}
             </div>
 
-            <h2 className="text-lg sm:text-2xl font-black text-stone-100 tracking-tight flex items-center gap-2 truncate">
+            <h2 className="text-xl sm:text-2xl font-serif font-bold text-stone-100 tracking-wide flex items-center gap-2 truncate">
               {restaurant.name}
             </h2>
-            <p className="text-xs sm:text-sm text-stone-400 truncate mt-0.5">
-              <span className="text-amber-300/90 font-medium italic">{restaurant.nameVi}</span> • {restaurant.district}, {restaurant.city}
+            <p className="text-xs sm:text-sm text-stone-400 truncate mt-1 font-light">
+              <span className="text-amber-300 font-serif italic">{restaurant.nameVi}</span> • {restaurant.district}, {restaurant.city}
             </p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl bg-stone-800/80 hover:bg-stone-700 text-stone-400 hover:text-white transition cursor-pointer shrink-0"
+            className="p-2 rounded-xl bg-stone-900/80 hover:bg-stone-800 text-stone-400 hover:text-white transition cursor-pointer shrink-0 border border-stone-800/60"
             aria-label="Cerrar carta"
           >
             <X className="w-5 h-5" />

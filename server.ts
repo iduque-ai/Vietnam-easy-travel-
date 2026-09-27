@@ -1801,6 +1801,81 @@ app.get('/api/location/detect', async (req, res) => {
   }
 });
 
+// Live Geocoding City Search across Vietnam (OpenStreetMap Nominatim)
+app.get('/api/cities/search', async (req, res) => {
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  if (!query || query.length < 2) {
+    return res.json({ success: true, cities: [] });
+  }
+
+  try {
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Vietnam')}&format=json&addressdetails=1&limit=8&countrycodes=vn`;
+    const response = await fetch(nominatimUrl, {
+      headers: {
+        'User-Agent': 'VietnamTravelCompanion/1.0 (Travel Planner & Guide)',
+        'Accept-Language': 'vi,en,es',
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const seenNames = new Set<string>();
+        const cities = data
+          .filter((item: any) => {
+            const lat = parseFloat(item.lat);
+            const lon = parseFloat(item.lon);
+            return !isNaN(lat) && !isNaN(lon) && lat >= 8.0 && lat <= 24.0 && lon >= 102.0 && lon <= 110.0;
+          })
+          .map((item: any) => {
+            const addr = item.address || {};
+            const rawName =
+              addr.city ||
+              addr.town ||
+              addr.village ||
+              addr.municipality ||
+              addr.county ||
+              item.name ||
+              query;
+            const state = addr.state || addr.province || 'Vietnam';
+            const lat = parseFloat(item.lat);
+            const lng = parseFloat(item.lon);
+
+            return {
+              id: `osm-${item.place_id || Math.random().toString(36).substring(7)}`,
+              name: rawName,
+              nameVi: item.name || rawName,
+              nameEs: `${rawName} (${state})`,
+              region: `${state} • Vietnam`,
+              regionId: lat > 18 ? 'reg-hanoi-north' : lat > 13 ? 'reg-central' : 'reg-saigon-south',
+              lat,
+              lng,
+              zoom: item.type === 'city' ? 13 : 14,
+              icon: '📍',
+              badge: 'En vivo OSM',
+              description: item.display_name,
+              highlights: [rawName, state],
+              famousDishes: ['Comida callejera y mercados', 'Especialidades locales'],
+            };
+          })
+          .filter((city: any) => {
+            if (seenNames.has(city.name.toLowerCase())) return false;
+            seenNames.add(city.name.toLowerCase());
+            return true;
+          });
+
+        if (cities.length > 0) {
+          return res.json({ success: true, cities, source: 'nominatim' });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Nominatim geocoding error:', err);
+  }
+
+  return res.json({ success: true, cities: [] });
+});
+
 // Live Online Restaurant Search Endpoint
 app.post('/api/restaurants/search', async (req, res) => {
   const { query, city, lat, lng } = req.body || {};

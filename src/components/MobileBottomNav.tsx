@@ -45,7 +45,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-stone-900/95 backdrop-blur-lg border-t border-stone-800/90 shadow-[0_-8px_25px_rgba(0,0,0,0.4)] select-none will-change-transform"
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#141210]/92 backdrop-blur-2xl border-t border-stone-800/80 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] select-none will-change-transform"
       style={{
         paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))',
         transform: 'translate3d(0, 0, 0)',
@@ -53,7 +53,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       }}
       aria-label="Navegación principal móvil"
     >
-      <div className="flex items-center justify-around px-1 pt-1.5">
+      <div className="flex items-center justify-around px-1 pt-1.5 pb-1">
         {BOTTOM_NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -74,17 +74,17 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             >
               {/* Active Golden Glow & Pip */}
               {isActive && (
-                <span className="absolute -top-1.5 w-6 h-1 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)] animate-fade-in" />
+                <span className="absolute -top-1.5 w-6 h-0.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 shadow-[0_0_10px_rgba(251,191,36,0.9)] animate-fade-in" />
               )}
 
               <div
-                className={`p-1 rounded-lg transition-colors ${
+                className={`p-1 rounded-xl transition-all duration-150 ${
                   isActive
-                    ? 'bg-amber-400/15 text-amber-300'
+                    ? 'bg-amber-400/15 text-amber-300 scale-105'
                     : 'text-stone-400 group-hover:text-stone-200'
                 }`}
               >
-                <Icon className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${isActive ? 'scale-110' : ''}`} />
+                <Icon className="w-4 h-4 sm:w-5 sm:h-5 transition-transform" />
               </div>
 
               <span

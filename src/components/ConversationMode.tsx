@@ -816,7 +816,18 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       (window as any).msSpeechRecognition;
 
     if (!SpeechRecognition) {
-      showToast('⚠️ Tu navegador no soporta reconocimiento por voz directo. Puedes escribir o usar Google Translate.');
+      // Fallback: test mic via getUserMedia
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach((track) => track.stop());
+          showToast('⚠️ Micrófono detectado pero tu navegador no admite transcripción directa. Escribe en el campo de texto.');
+        } catch {
+          showToast('⚠️ Permiso de micrófono no concedido o no disponible.');
+        }
+      } else {
+        showToast('⚠️ Tu navegador no soporta reconocimiento por voz directo.');
+      }
       return;
     }
 
@@ -828,19 +839,6 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       }
       setIsListening(false);
       return;
-    }
-
-    // Explicit microphone permission check
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-      } catch (err: any) {
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          showToast('⚠️ Permiso de micrófono denegado. Permítelo en ajustes.');
-          return;
-        }
-      }
     }
 
     try {
@@ -890,12 +888,24 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
         }
       };
 
-      recognition.onerror = (e: any) => {
+      recognition.onerror = async (e: any) => {
         setIsListening(false);
-        if (e.error === 'not-allowed') {
-          showToast('⚠️ Acceso al micrófono bloqueado. Permítelo en tu navegador.');
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          // If blocked or not yet prompted, attempt getUserMedia to trigger native prompt
+          if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              stream.getTracks().forEach((track) => track.stop());
+              showToast('✅ Permiso de micrófono concedido. Pulsa de nuevo para dictar.');
+              return;
+            } catch {
+              showToast('⚠️ Permiso de micrófono bloqueado. Toca el icono de candado 🔒 en la barra de Chrome para permitirlo.');
+              return;
+            }
+          }
+          showToast('⚠️ Permiso de micrófono bloqueado. Permítelo en los ajustes del navegador.');
         } else if (e.error === 'no-speech') {
-          showToast('No se detectó voz. Inténtalo de nuevo.');
+          showToast('No se detectó voz. Pulsa el botón para hablar de nuevo.');
         } else if (e.error === 'network') {
           showToast('Error de red en el procesado de voz.');
         }
@@ -908,8 +918,19 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       recognition.start();
     } catch (err) {
       console.warn('SpeechRecognition start error:', err);
-      setIsListening(false);
-      showToast('No se pudo iniciar el micrófono.');
+      // Try requesting mic permission via getUserMedia
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach((track) => track.stop());
+          showToast('✅ Micrófono activado.');
+        } catch {
+          showToast('⚠️ Permiso de micrófono no concedido.');
+        }
+      } else {
+        setIsListening(false);
+        showToast('No se pudo iniciar el micrófono.');
+      }
     }
   };
 
@@ -966,16 +987,16 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       )}
 
       {/* 1. COMPACT STATUS & CONTROLS HEADER */}
-      <div className="bg-stone-900 text-stone-100 rounded-2xl px-4 py-3 border border-stone-800 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
+      <div className="bg-[#141210] text-stone-100 rounded-2xl px-4 py-3 sm:px-5 sm:py-3.5 border border-stone-800 shadow-md flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
             <Languages className="w-4 h-4" />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-sm text-white">Traductor</span>
-            <span className="flex items-center gap-1.5 text-xs text-stone-300">
-              <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-              <span className="text-[11px]">{isOnline ? 'Online IA' : 'Offline'}</span>
+          <div className="flex items-center gap-2.5">
+            <span className="font-serif font-bold text-base text-white">Modo Conversación Bidireccional</span>
+            <span className="flex items-center gap-1.5 text-xs text-stone-300 bg-stone-900 px-2.5 py-0.5 rounded-full border border-stone-800">
+              <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span className="text-[11px] font-medium">{isOnline ? 'Online con IA' : 'Offline'}</span>
             </span>
           </div>
         </div>
@@ -984,7 +1005,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
         <button
           id="btn-open-google-translate"
           onClick={() => openGoogleTranslate(travelerLang === 'es' ? 'es' : 'en', 'vi', inputText)}
-          className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white border border-stone-700 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
+          className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-white border border-stone-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
           title="Abrir en Google Translate oficial"
         >
           <ExternalLink className="w-3 h-3 text-amber-400" />
@@ -993,17 +1014,17 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       </div>
 
       {/* 2. MAIN TRANSLATOR BOARD */}
-      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xs space-y-5">
+      <div className="bg-white rounded-3xl p-5 sm:p-7 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-6">
         {/* Top Control Bar: Direction + Language toggle + Audio preference */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-100">
           {/* Direction segmented pills */}
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="inline-flex p-1 bg-stone-100 rounded-xl border border-stone-200 text-xs font-semibold">
+            <div className="inline-flex p-1 bg-stone-100 rounded-2xl border border-stone-200 text-xs font-semibold">
               <button
                 onClick={() => setDirection('traveler-to-vi')}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
                   direction === 'traveler-to-vi'
-                    ? 'bg-white text-stone-900 shadow-xs font-bold'
+                    ? 'bg-white text-stone-950 shadow-xs font-bold'
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
@@ -1015,16 +1036,16 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
               <button
                 onClick={handleToggleDirection}
                 title="Invertir dirección"
-                className="px-2 py-1.5 rounded-lg hover:bg-stone-200 text-stone-600 transition cursor-pointer"
+                className="px-2 py-1.5 rounded-xl hover:bg-stone-200 text-stone-600 transition cursor-pointer active:scale-95"
               >
                 <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600" />
               </button>
 
               <button
                 onClick={() => setDirection('vi-to-traveler')}
-                className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
                   direction === 'vi-to-traveler'
-                    ? 'bg-white text-stone-900 shadow-xs font-bold'
+                    ? 'bg-white text-stone-950 shadow-xs font-bold'
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
@@ -1035,14 +1056,14 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
             </div>
 
             {/* Tourist Language Picker (ES / EN) */}
-            <div className="inline-flex p-1 bg-stone-100 rounded-xl border border-stone-200 text-xs font-semibold">
+            <div className="inline-flex p-1 bg-stone-100 rounded-2xl border border-stone-200 text-xs font-semibold">
               <button
                 onClick={() => {
                   setTravelerLang('es');
                   if (inputText === 'How much is this?') setInputText('¿Cuánto cuesta esto?');
                 }}
-                className={`px-2.5 py-1.5 rounded-lg transition cursor-pointer ${
-                  travelerLang === 'es' ? 'bg-white text-stone-900 shadow-xs font-bold' : 'text-stone-600 hover:text-stone-900'
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                  travelerLang === 'es' ? 'bg-white text-stone-950 shadow-xs font-bold' : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 🇪🇸 ES
@@ -1052,8 +1073,8 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   setTravelerLang('en');
                   if (inputText === '¿Cuánto cuesta esto?') setInputText('How much is this?');
                 }}
-                className={`px-2.5 py-1.5 rounded-lg transition cursor-pointer ${
-                  travelerLang === 'en' ? 'bg-white text-stone-900 shadow-xs font-bold' : 'text-stone-600 hover:text-stone-900'
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                  travelerLang === 'en' ? 'bg-white text-stone-950 shadow-xs font-bold' : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 🇬🇧 EN
@@ -1069,18 +1090,18 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
               onChange={(e) => setAutoSpeak(e.target.checked)}
               className="rounded border-stone-300 text-amber-600 focus:ring-amber-500 h-4 w-4 cursor-pointer"
             />
-            <span className="font-medium">Audio automático</span>
+            <span className="font-semibold text-stone-700">Pronunciación automática</span>
           </label>
         </div>
 
         {/* Dual Input/Output Translation Cards */}
         <div ref={translationBoardRef} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch scroll-mt-6">
           {/* Card 1: Input Box (Source) */}
-          <div className="rounded-2xl border border-stone-200 bg-stone-50/70 p-4 sm:p-5 flex flex-col justify-between focus-within:border-amber-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-amber-500/20 transition shadow-2xs min-h-[250px]">
+          <div className="rounded-3xl border-2 border-stone-200/90 bg-stone-50/60 p-5 flex flex-col justify-between focus-within:border-amber-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-amber-500/10 transition-all shadow-xs min-h-[260px]">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-stone-200/80">
               <div className="flex items-center gap-2">
-                <span className="text-xl">{isTravelerToVi ? (travelerLang === 'es' ? '🇪🇸' : '🇬🇧') : '🇻🇳'}</span>
+                <span className="text-xl leading-none">{isTravelerToVi ? (travelerLang === 'es' ? '🇪🇸' : '🇬🇧') : '🇻🇳'}</span>
                 <div>
                   <span className="text-xs font-bold text-stone-900 block leading-tight">
                     {isTravelerToVi ? (travelerLang === 'es' ? 'Español' : 'English') : 'Tiếng Việt'}
@@ -1093,10 +1114,10 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
               <button
                 type="button"
                 onClick={toggleMic}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
                   isListening
-                    ? 'bg-rose-600 text-white animate-pulse shadow-sm ring-2 ring-rose-300'
-                    : 'bg-white hover:bg-stone-100 text-stone-700 border border-stone-200'
+                    ? 'bg-rose-600 text-white animate-pulse shadow-sm ring-4 ring-rose-200'
+                    : 'bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 active:scale-95'
                 }`}
                 title={isListening ? 'Detener micrófono' : 'Dictar por voz'}
               >
@@ -1148,7 +1169,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                 id="btn-submit-translate"
                 onClick={() => handleTranslate()}
                 disabled={isTranslating || !inputText.trim()}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-stone-950 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-stone-950 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
               >
                 <Sparkles className={`w-3.5 h-3.5 ${isTranslating ? 'animate-spin' : ''}`} />
                 <span>{isTranslating ? 'Traduciendo...' : 'Traducir'}</span>
@@ -1157,11 +1178,11 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
           </div>
 
           {/* Card 2: Output Box (Target / Presentation) */}
-          <div className="rounded-2xl border border-amber-300/90 bg-amber-50/50 p-4 sm:p-5 flex flex-col justify-between shadow-2xs min-h-[250px] relative">
+          <div className="rounded-3xl border-2 border-amber-300/90 bg-gradient-to-br from-amber-500/[0.08] via-amber-500/[0.03] to-transparent p-5 flex flex-col justify-between shadow-xs min-h-[260px] relative">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-amber-200/70">
               <div className="flex items-center gap-2">
-                <span className="text-xl">{isTravelerToVi ? '🇻🇳' : (travelerLang === 'es' ? '🇪🇸' : '🇬🇧')}</span>
+                <span className="text-xl leading-none">{isTravelerToVi ? '🇻🇳' : (travelerLang === 'es' ? '🇪🇸' : '🇬🇧')}</span>
                 <div>
                   <span className="text-xs font-bold text-amber-950 block leading-tight">
                     {isTravelerToVi ? 'Tiếng Việt' : (travelerLang === 'es' ? 'Español' : 'English')}
@@ -1176,7 +1197,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   type="button"
                   onClick={handleToggleSaveCurrentCard}
                   disabled={!translatedText}
-                  className={`px-2.5 py-1.5 rounded-xl border transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
+                  className={`px-3 py-1.5 rounded-xl border transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold active:scale-95 shadow-2xs ${
                     isCurrentCardSaved
                       ? 'bg-amber-100 text-amber-950 border-amber-300 font-bold'
                       : 'bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border-amber-200'
@@ -1197,7 +1218,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   type="button"
                   onClick={handleSpeakOutput}
                   disabled={!translatedText}
-                  className="p-1.5 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer"
+                  className="p-2 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer active:scale-95 shadow-2xs"
                   title="Escuchar pronunciación"
                 >
                   <Volume2 className="w-4 h-4 text-amber-700" />
@@ -1207,18 +1228,18 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   type="button"
                   onClick={handleCopy}
                   disabled={!translatedText}
-                  className="p-1.5 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer"
+                  className="p-2 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer active:scale-95 shadow-2xs"
                   title="Copiar texto"
                 >
-                  {isCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-stone-600" />}
+                  {isCopied ? <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" /> : <Copy className="w-4 h-4 text-stone-600" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setIsFullscreenOutput(true)}
                   disabled={!translatedText}
-                  className="p-1.5 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer"
-                  title="Pantalla completa"
+                  className="p-2 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer active:scale-95 shadow-2xs"
+                  title="Pantalla completa para mostrar al local"
                 >
                   <Maximize2 className="w-4 h-4 text-amber-800" />
                 </button>

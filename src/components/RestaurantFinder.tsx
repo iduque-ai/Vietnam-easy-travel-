@@ -19,6 +19,7 @@ import {
   Globe,
   BookOpen,
   ExternalLink,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   RestaurantItem,
@@ -50,6 +51,7 @@ interface RestaurantFinderProps {
   itineraryState: ReturnType<typeof useItineraryState>;
   onNavigateToItinerary?: () => void;
   onToggleOnlineMode?: () => void;
+  onNavigateToAllergies?: () => void;
 }
 
 const CITY_COORDINATES = CITY_COORDINATES_MAP;
@@ -60,6 +62,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
   itineraryState,
   onNavigateToItinerary,
   onToggleOnlineMode,
+  onNavigateToAllergies,
 }) => {
   // Budget & Filter State
   const [budgetPref, setBudgetPref] = useState<BudgetPreference>('all');
@@ -81,8 +84,6 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
     } catch {}
   }, []);
 
-  // View state: 'split' | 'map' | 'list'
-  const [viewMode, setViewMode] = useState<'split' | 'map' | 'list'>('split');
   const [selectedRestaurant, setSelectedRestaurant] = useState<RestaurantItem | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
 
@@ -97,8 +98,8 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
   const [isCityModalOpen, setIsCityModalOpen] = useState<boolean>(false);
   const [cityModalReason, setCityModalReason] = useState<string | null>(null);
 
-  // Quality Rating Filter State: strict (>=4.5★ & >=10 reviews) vs flexible (>=4.0★ & >=5 reviews)
-  const [strictRatingFilter, setStrictRatingFilter] = useState<boolean>(true);
+  // Quality Rating Filter: always strictly active (>=4.5★ & >=10 reviews)
+  const strictRatingFilter = true;
 
   // Geolocation State
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
@@ -584,25 +585,25 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
       )}
 
       {/* Clean Streamlined Filter Bar */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-stone-200/90 shadow-xs space-y-3.5">
+      <div className="bg-white rounded-3xl p-5 sm:p-7 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-4">
         {/* Row 1: Header Title & City Selector */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
-          <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-amber-500/10 text-amber-600 border border-amber-500/20">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700 shrink-0">
               <UtensilsCrossed className="w-5 h-5" />
-            </span>
+            </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-bold text-stone-900 leading-tight">
+              <h2 className="font-serif font-bold text-xl sm:text-2xl text-stone-900 leading-tight">
                 Dónde Comer en Vietnam
               </h2>
-              <p className="text-xs text-stone-500">
-                Locales auténticos seleccionados con más de 4.5★
+              <p className="text-xs text-stone-500 mt-0.5">
+                Selección gastronómica verificada con más de 4.5★ y platos emblemáticos
               </p>
             </div>
           </div>
 
-          {/* City Selection Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          {/* Action buttons: GPS + City Selector (opens modal) */}
+          <div className="flex items-center gap-2 shrink-0">
             {/* Real-time Continuous Live GPS Toggle Button */}
             <button
               type="button"
@@ -613,12 +614,12 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                   ? 'Rastreo en tiempo real activo. Haz clic para pausar.'
                   : 'Activar sensor GPS en tiempo real para seguir mi posición mientras camino o me muevo'
               }
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95 shadow-2xs ${
                 isLiveTracking
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs ring-2 ring-emerald-400/50'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-4 ring-emerald-100'
                   : userCoords && selectedCity === 'Cerca de mí'
-                  ? 'bg-sky-500 hover:bg-sky-600 text-white shadow-xs'
-                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                  ? 'bg-sky-600 hover:bg-sky-700 text-white'
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200'
               }`}
             >
               {isLiveTracking ? (
@@ -632,63 +633,57 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
               ) : (
                 <>
                   <Crosshair className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin text-sky-500' : ''}`} />
-                  <span>{isLocating ? 'GPS...' : userCoords ? 'GPS Activo' : 'GPS Tiempo Real'}</span>
+                  <span>{isLocating ? 'GPS...' : userCoords ? 'GPS Activo' : 'GPS'}</span>
                 </>
               )}
             </button>
 
-            {/* Manual City Selector Modal Trigger */}
+            {/* City Selector Button (Opens the city modal) */}
             <button
               type="button"
               onClick={() => {
                 setCityModalReason(null);
                 setIsCityModalOpen(true);
               }}
-              title="Abrir modal para seleccionar manualmente tu ciudad (Sapa, Hanói, Đà Nẵng, etc.)"
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-2xs"
+              title="Cambiar ciudad actual en Vietnam"
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 transition cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0 active:scale-95"
             >
-              <MapPin className="w-3.5 h-3.5 text-amber-600" />
-              <span>Elegir ciudad...</span>
+              <MapPin className="w-3.5 h-3.5 stroke-[2.2]" />
+              <span className="font-bold">{selectedCity}</span>
+              <span className="text-[10px] opacity-70">▼</span>
             </button>
-
-            {/* Quick Frequent Destinations */}
-            {Array.from(
-              new Set([
-                'Sa Pa',
-                'Hà Nội',
-                'Ninh Bình',
-                'Đà Nẵng',
-                'Hội An',
-                'Huế',
-                'TP. Hồ Chí Minh',
-                ...(selectedCity !== 'Cerca de mí' && selectedCity !== 'Todo Vietnam' ? [selectedCity] : []),
-                'Todo Vietnam',
-              ])
-            ).map((city) => {
-              const isSelected = selectedCity === city;
-              return (
-                <button
-                  key={city}
-                  type="button"
-                  onClick={() => handleSelectCity(city)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition cursor-pointer shrink-0 ${
-                    isSelected
-                      ? 'bg-stone-900 text-white font-bold shadow-xs'
-                      : 'bg-stone-100 hover:bg-stone-200 text-stone-600'
-                  }`}
-                >
-                  {city}
-                </button>
-              );
-            })}
           </div>
         </div>
 
-        {/* Row 2: Budget Pills, Search & View Toggle */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Budget Selector Pills & Quality Filter */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-            <span className="text-xs font-semibold text-stone-400 mr-1 shrink-0">Presupuesto:</span>
+        {/* Row 2: Search Input & Budget Pills (Combined view always, strict filter always active) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Search Bar: short, clean placeholder that is 100% visible on mobile */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar plato o restaurante..."
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              className="w-full pl-9 pr-8 py-2 bg-stone-50 border border-stone-200 rounded-xl text-base sm:text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition font-medium"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-0.5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Budget Selector Pills & Allergy Trigger */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 shrink-0">
+            <span className="text-xs font-semibold text-stone-400 mr-1 shrink-0">Precio:</span>
             {(['all', 'budget', 'moderate', 'fine'] as BudgetPreference[]).map((tierKey) => {
               const isSelected = budgetPref === tierKey;
               const labels: Record<BudgetPreference, string> = {
@@ -704,7 +699,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                   onClick={() => setBudgetPref(tierKey)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
                     isSelected
-                      ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                      ? 'bg-stone-900 text-white font-bold shadow-xs'
                       : 'bg-stone-100 hover:bg-stone-200 text-stone-600'
                   }`}
                 >
@@ -713,87 +708,17 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
               );
             })}
 
-            {/* Quality Rating Filter Toggle */}
-            <button
-              type="button"
-              onClick={() => setStrictRatingFilter((prev) => !prev)}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 shadow-2xs ${
-                strictRatingFilter
-                  ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300'
-                  : 'bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200'
-              }`}
-              title={
-                strictRatingFilter
-                  ? 'Filtro de calidad estricto activo: solo locales con ≥4.5★ y ≥10 reseñas. Haz clic para activar filtro flexible (≥4.0★)'
-                  : 'Filtro flexible activo: mostrando locales desde 4.0★. Haz clic para activar filtro estricto (≥4.5★)'
-              }
-            >
-              <Star className={`w-3.5 h-3.5 ${strictRatingFilter ? 'text-amber-500 fill-amber-500' : 'text-stone-400'}`} />
-              <span>{strictRatingFilter ? 'Filtro: ≥ 4.5★ (Estricto)' : 'Filtro: ≥ 4.0★ (Flexible)'}</span>
-            </button>
-          </div>
-
-          {/* Search Bar + View Toggle */}
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 sm:w-56">
-              <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={
-                  isOnline
-                    ? "Buscar en vivo (ej: TÉP, vegetariano, phở...)"
-                    : "Buscar en catálogo offline..."
-                }
-                className="w-full pl-8 pr-7 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-0.5 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* View Mode Toggle */}
-            <div className="inline-flex p-1 bg-stone-100 rounded-xl shrink-0">
+            {onNavigateToAllergies && (
               <button
                 type="button"
-                onClick={() => setViewMode('split')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${
-                  viewMode === 'split' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-900'
-                }`}
-                title="Vista Mapa + Lista"
+                onClick={onNavigateToAllergies}
+                title="Abrir tarjetas de alergias alimentarias en vietnamita para mostrar al camarero"
+                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1.5 transition cursor-pointer shrink-0 active:scale-95 shadow-2xs ml-1"
               >
-                <MapIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Ambos</span>
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                <span>Alergias Camarero</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${
-                  viewMode === 'list' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-900'
-                }`}
-                title="Solo Lista"
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>Lista</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('map')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${
-                  viewMode === 'map' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-900'
-                }`}
-                title="Solo Mapa"
-              >
-                <MapIcon className="w-3.5 h-3.5" />
-                <span>Mapa</span>
-              </button>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -803,7 +728,6 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
         <div className="px-3.5 py-2 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-2 bg-stone-900 text-stone-100 border-stone-800 shadow-xs animate-fade-in">
           <div className="flex items-center gap-2 min-w-0">
             <span className="relative flex h-2 w-2 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
             <div className="text-stone-300 text-[11px] truncate">
@@ -831,124 +755,108 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
         </div>
       )}
 
-      {/* Main Content: Map & Uncluttered Cards */}
+      {/* Main Content: Map & Cards in Unified Combined View */}
       <div className="space-y-4">
-        {/* Interactive Map (when in split or map mode) */}
-        {viewMode !== 'list' && (
-          <div id="restaurant-map-section" className="bg-white rounded-2xl p-2 sm:p-3 border border-stone-200/90 shadow-xs space-y-2">
-            <div className="flex items-center justify-between px-2 pt-1 pb-0.5 text-xs">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                <span className="text-stone-600 truncate">
-                  Centro: <strong className="text-stone-900 font-bold">{selectedCity === 'Cerca de mí' ? 'GPS' : selectedCity}</strong>
-                </span>
-                <span className="text-stone-400 hidden sm:inline">· {sortedScoredEntries.length} restaurantes</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setCityModalReason(null);
-                  setIsCityModalOpen(true);
-                }}
-                className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 hover:underline flex items-center gap-1 cursor-pointer shrink-0 ml-2"
-                title="Ajustar manualmente la ciudad y el centro del mapa"
-              >
-                <span>Cambiar ciudad</span>
-                <span>→</span>
-              </button>
+        {/* Interactive Map */}
+        <div id="restaurant-map-section" className="bg-white rounded-2xl p-2 sm:p-3 border border-stone-200/90 shadow-xs space-y-2">
+          <div className="flex items-center justify-between px-2 pt-1 pb-0.5 text-xs">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span className="text-stone-700 font-semibold truncate">
+                {selectedCity === 'Cerca de mí' ? 'Cerca de tu ubicación GPS' : selectedCity} · {sortedScoredEntries.length} locales seleccionados (≥ 4.5★)
+              </span>
             </div>
+          </div>
 
-            <RestaurantMap
-              center={currentMapCenter}
-              zoom={selectedCity === 'Cerca de mí' ? 15 : (CITY_COORDINATES[selectedCity]?.zoom || 14)}
-              items={sortedScoredEntries}
-              selectedRestaurantId={selectedRestaurant?.id}
-              onSelectRestaurant={(restaurant) => {
-                setSelectedRestaurant(restaurant);
-                const cardEl = document.getElementById(`restaurant-card-${restaurant.id}`);
-                if (cardEl) {
-                  cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                }
-              }}
-              onDeselectRestaurant={() => {
-                setSelectedRestaurant(null);
-              }}
-              onViewMenu={(r) => {
-                setViewingMenuRestaurant(r);
-              }}
-              userLocation={userCoords}
-              userLocationLabel={isLiveTracking ? 'Tu posición en tiempo real' : 'Tu ubicación'}
-              isLiveTracking={isLiveTracking}
-              onToggleLiveTracking={toggleLiveTracking}
-              className={viewMode === 'map' ? 'h-[580px]' : 'h-[360px] sm:h-[400px]'}
-            />
+          <RestaurantMap
+            center={currentMapCenter}
+            zoom={selectedCity === 'Cerca de mí' ? 15 : (CITY_COORDINATES[selectedCity]?.zoom || 14)}
+            items={sortedScoredEntries}
+            selectedRestaurantId={selectedRestaurant?.id}
+            onSelectRestaurant={(restaurant) => {
+              setSelectedRestaurant(restaurant);
+              const cardEl = document.getElementById(`restaurant-card-${restaurant.id}`);
+              if (cardEl) {
+                cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }
+            }}
+            onDeselectRestaurant={() => {
+              setSelectedRestaurant(null);
+            }}
+            onViewMenu={(r) => {
+              setViewingMenuRestaurant(r);
+            }}
+            userLocation={userCoords}
+            userLocationLabel={isLiveTracking ? 'Tu posición en tiempo real' : 'Tu ubicación'}
+            isLiveTracking={isLiveTracking}
+            onToggleLiveTracking={toggleLiveTracking}
+            className="h-[320px] sm:h-[380px]"
+          />
 
-            {/* Selected Restaurant Quick Action Pill directly under the map */}
-            {selectedRestaurant && (
-              <div className="mt-2.5 p-3 sm:p-3.5 bg-stone-900 text-white rounded-xl shadow-lg border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
-                <div className="flex items-start gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-amber-500 text-stone-950 font-bold text-xs flex items-center justify-center shrink-0 shadow-md">
-                    {Math.max(1, sortedScoredEntries.findIndex((e) => e.restaurant.id === selectedRestaurant.id) + 1)}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-bold text-sm text-stone-100 truncate">{selectedRestaurant.name}</h4>
-                      <span className="text-[11px] text-stone-400 italic shrink-0">({selectedRestaurant.nameVi})</span>
-                      <span className="inline-flex items-center text-amber-400 font-bold text-xs shrink-0">
-                        ★ {selectedRestaurant.rating.toFixed(1)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-amber-300 font-medium truncate mt-0.5">
-                      🍲 {selectedRestaurant.mustOrderDish} • <span className="text-stone-300 font-mono">{(selectedRestaurant.avgPriceVnd / 1000).toLocaleString('es-ES')}k ₫</span> ({formatVndToEur(selectedRestaurant.avgPriceVnd)})
-                    </p>
-                  </div>
+          {/* Selected Restaurant Quick Action Pill directly under the map */}
+          {selectedRestaurant && (
+            <div className="mt-2.5 p-3 sm:p-3.5 bg-stone-900 text-white rounded-xl shadow-lg border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-amber-500 text-stone-950 font-bold text-xs flex items-center justify-center shrink-0 shadow-md">
+                  {Math.max(1, sortedScoredEntries.findIndex((e) => e.restaurant.id === selectedRestaurant.id) + 1)}
                 </div>
-                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                  <button
-                    type="button"
-                    onClick={() => setViewingMenuRestaurant(selectedRestaurant)}
-                    className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1 border border-amber-500/40 transition cursor-pointer shadow-xs"
-                    title="Ver carta de platos, precios y fotos de reviews"
-                  >
-                    <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Ver Carta</span>
-                  </button>
-                  <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${selectedRestaurant.lat},${selectedRestaurant.lng}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1 border border-stone-700 transition"
-                  >
-                    <Navigation className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Cómo llegar</span>
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddToItineraryModal(selectedRestaurant)}
-                    className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Añadir</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRestaurant(null)}
-                    className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition cursor-pointer flex items-center gap-1 text-xs"
-                    title="Cerrar y mantener zoom"
-                    aria-label="Cerrar restaurante seleccionado"
-                  >
-                    <X className="w-4 h-4" />
-                    <span className="hidden sm:inline text-[11px]">Cerrar</span>
-                  </button>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-bold text-sm text-stone-100 truncate">{selectedRestaurant.name}</h4>
+                    <span className="text-[11px] text-stone-400 italic shrink-0">({selectedRestaurant.nameVi})</span>
+                    <span className="inline-flex items-center text-amber-400 font-bold text-xs shrink-0">
+                      ★ {selectedRestaurant.rating.toFixed(1)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-300 font-medium truncate mt-0.5">
+                    🍲 {selectedRestaurant.mustOrderDish} • <span className="text-stone-300 font-mono">{(selectedRestaurant.avgPriceVnd / 1000).toLocaleString('es-ES')}k ₫</span> ({formatVndToEur(selectedRestaurant.avgPriceVnd)})
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
-        )}
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setViewingMenuRestaurant(selectedRestaurant)}
+                  className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1 border border-amber-500/40 transition cursor-pointer shadow-xs"
+                  title="Ver carta de platos, precios y fotos de reviews"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Ver Carta</span>
+                </button>
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${selectedRestaurant.lat},${selectedRestaurant.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1 border border-stone-700 transition"
+                >
+                  <Navigation className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Cómo llegar</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowAddToItineraryModal(selectedRestaurant)}
+                  className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Añadir</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRestaurant(null)}
+                  className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition cursor-pointer flex items-center gap-1 text-xs"
+                  title="Cerrar y mantener zoom"
+                  aria-label="Cerrar restaurante seleccionado"
+                >
+                  <X className="w-4 h-4" />
+                  <span className="hidden sm:inline text-[11px]">Cerrar</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
-        {/* Clean Restaurant Cards List (when in split or list mode) */}
-        {viewMode !== 'map' && (
-          <div className="space-y-3">
+        {/* Clean Restaurant Cards List (Always visible in combined view) */}
+        <div className="space-y-3">
             {/* Active search query feedback banner */}
             {searchQuery.trim() && (
               <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-stone-800 animate-fade-in">
@@ -977,31 +885,18 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                 <UtensilsCrossed className="w-8 h-8 text-stone-300 mx-auto" />
                 <h4 className="font-bold text-stone-800 text-sm">No hay restaurantes con los filtros actuales</h4>
                 <p className="text-xs text-stone-500 max-w-md mx-auto leading-relaxed">
-                  {strictRatingFilter
-                    ? 'El algoritmo está aplicando el filtro de calidad estricto (mínimo 4.5★ y 10 reseñas verificadas). Si buscas un local con menor puntuación o pocas reseñas, puedes activar el modo flexible.'
-                    : 'Prueba a cambiar el término de búsqueda o selecciona "Todos" en presupuesto.'}
+                  Prueba a limpiar la búsqueda o selecciona "Todos" en la categoría de precio.
                 </p>
                 <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
-                  {strictRatingFilter && (
-                    <button
-                      type="button"
-                      onClick={() => setStrictRatingFilter(false)}
-                      className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold rounded-xl text-xs transition cursor-pointer shadow-xs"
-                    >
-                      Mostrar opciones desde 4.0★
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => {
                       setSearchQuery('');
                       setBudgetPref('all');
-                      setStrictRatingFilter(true);
-                      setSelectedCity('Sa Pa');
                     }}
-                    className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-xl text-xs transition cursor-pointer"
+                    className="px-3.5 py-1.5 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-xs"
                   >
-                    Restablecer filtros
+                    Restablecer búsqueda y precio
                   </button>
                 </div>
               </div>
@@ -1021,12 +916,12 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                       key={restaurant.id}
                       id={`restaurant-card-${restaurant.id}`}
                       onClick={() => handleSelectRestaurant(restaurant, false)}
-                      className={`bg-white rounded-2xl p-4 border transition-all duration-200 flex flex-col justify-between cursor-pointer ${
+                      className={`bg-white rounded-3xl p-5 border transition-all duration-200 flex flex-col justify-between cursor-pointer ${
                         isSelected
-                          ? 'border-amber-500 ring-2 ring-amber-400 bg-amber-50/20 shadow-md'
+                          ? 'border-amber-500 ring-4 ring-amber-400/20 bg-amber-50/[0.15] shadow-lg'
                           : isTop1
-                          ? 'border-amber-400 ring-1 ring-amber-400/40 shadow-xs hover:border-amber-500'
-                          : 'border-stone-200/90 hover:border-amber-300 hover:shadow-xs'
+                          ? 'border-amber-400/90 shadow-md hover:border-amber-500'
+                          : 'border-stone-200/90 hover:border-amber-300 hover:shadow-md shadow-[0_2px_16px_rgba(28,25,23,0.03)]'
                       }`}
                     >
                       <div>
@@ -1048,12 +943,12 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {isTop1 && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-stone-950">
+                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-stone-950 shadow-2xs">
                                     Recomendado #1
                                   </span>
                                 )}
                                 {restaurant.michelinGuide && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 shadow-2xs">
                                     Michelin {restaurant.michelinGuide}
                                   </span>
                                 )}
@@ -1075,9 +970,14 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                                     📍 En {restaurant.city}
                                   </span>
                                 )}
+                                {restaurant.hasAirConditioning && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-800 border border-sky-200" title="Local climatizado con aire acondicionado">
+                                    ❄️ A/C
+                                  </span>
+                                )}
                               </div>
 
-                              <h3 className="font-bold text-sm sm:text-base text-stone-900 leading-snug mt-1">
+                              <h3 className="font-serif font-bold text-base sm:text-lg text-stone-900 leading-snug mt-1">
                                 {restaurant.name}
                               </h3>
 
@@ -1191,24 +1091,22 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                           </button>
 
                           {/* Quick button to locate on map */}
-                          {viewMode !== 'list' && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSelectRestaurant(restaurant, true);
-                              }}
-                              className={`px-2.5 py-1.5 rounded-xl font-semibold text-xs transition flex items-center gap-1 cursor-pointer ${
-                                isSelected
-                                  ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
-                                  : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80'
-                              }`}
-                              title={`Ubicar #${number} en el mapa interactivo`}
-                            >
-                              <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                              <span>{isSelected ? `Pin #${number}` : `Ubicar #${number}`}</span>
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectRestaurant(restaurant, true);
+                            }}
+                            className={`px-2.5 py-1.5 rounded-xl font-semibold text-xs transition flex items-center gap-1 cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                                : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80'
+                            }`}
+                            title={`Ubicar #${number} en el mapa interactivo`}
+                          >
+                            <MapPin className="w-3.5 h-3.5 text-amber-600" />
+                            <span>{isSelected ? `Pin #${number}` : `Ubicar #${number}`}</span>
+                          </button>
 
                           <a
                             href={`https://www.google.com/maps/dir/?api=1&destination=${restaurant.lat},${restaurant.lng}`}
@@ -1245,7 +1143,6 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
               </div>
             )}
           </div>
-        )}
       </div>
 
       {/* Add Restaurant to Itinerary Modal */}
@@ -1363,31 +1260,6 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
         onRetryGps={handleRequestLocation}
         isLocatingGps={isLocating}
       />
-
-      {/* Mobile Floating Map / List Toggle */}
-      <div className="md:hidden fixed bottom-20 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
-        <button
-          type="button"
-          onClick={() => {
-            const nextMode = viewMode === 'map' ? 'list' : 'map';
-            setViewMode(nextMode);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          className="px-4 py-2.5 rounded-full bg-stone-900/95 backdrop-blur-md text-white font-bold text-xs shadow-xl border border-stone-700/80 flex items-center gap-2 active:scale-95 transition-transform"
-        >
-          {viewMode === 'map' ? (
-            <>
-              <List className="w-4 h-4 text-amber-400" />
-              <span>Ver Lista</span>
-            </>
-          ) : (
-            <>
-              <MapIcon className="w-4 h-4 text-amber-400" />
-              <span>Ver Mapa ({sortedScoredEntries.length})</span>
-            </>
-          )}
-        </button>
-      </div>
     </div>
   );
 };
