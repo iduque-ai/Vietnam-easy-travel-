@@ -329,7 +329,7 @@ export default function App() {
       )}
 
       {/* Main Content Area: with bottom padding for mobile navigation */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-8 min-w-0 overflow-x-hidden pb-24 md:pb-8">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-2.5 sm:px-4 pt-2.5 sm:pt-4 min-w-0 overflow-x-hidden pb-20 md:pb-6">
         {activeTab === 'converter' && (
           <CurrencyConverter
             ratesData={ratesData}

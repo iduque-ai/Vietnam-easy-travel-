@@ -6,6 +6,7 @@ import {
   RestaurantMenuData,
 } from '../types';
 import { CURATED_RESTAURANT_MENUS, generateSmartMenuForRestaurant } from '../data/restaurantMenus';
+import { speakVietnameseNatural } from '../utils/speechSynthesis';
 import {
   X,
   UtensilsCrossed,
@@ -164,16 +165,7 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
 
   // Voice synthesis for Vietnamese dish pronunciation
   const speakVietnamese = (text: string) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'vi-VN';
-      utterance.rate = 0.88;
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.warn('Speech synthesis not available:', e);
-    }
+    speakVietnameseNatural(text, `menu-${text.slice(0, 20)}`);
   };
 
   // Filtered dishes

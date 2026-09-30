@@ -20,6 +20,9 @@ import {
   Trash2,
   Star,
   Sliders,
+  Zap,
+  Banknote,
+  Coins,
 } from 'lucide-react';
 import {
   speakVietnamese,
@@ -40,24 +43,176 @@ import { requestMicrophonePermission } from '../utils/permissions';
 import { VoiceSettingsModal } from './VoiceSettingsModal';
 import { AudioWaveIndicator } from './AudioWaveIndicator';
 
+export interface ConversationTargetPhrase {
+  es: string;
+  vi: string;
+  phonetic?: string;
+  tip?: string;
+}
+
 interface ConversationModeProps {
   isOnline: boolean;
+  targetPhrase?: ConversationTargetPhrase | null;
+  onClearTargetPhrase?: () => void;
 }
 
 export interface QuickPhrase {
   id?: string;
   label: string;
-  category: 'precios' | 'comida' | 'transporte' | 'cortesia' | 'emergencia';
+  category: 'frecuentes' | 'precios' | 'comida' | 'transporte' | 'cortesia' | 'emergencia';
   en: string;
   es: string;
   vi: string;
   phonetic: string;
   tip?: string;
   isCustom?: boolean;
+  isBanknote?: boolean;
+  banknoteColor?: string;
+  banknoteDong?: string;
+  banknoteEur?: string;
 }
 
 const QUICK_PHRASES: QuickPhrase[] = [
-  // --- 1. PRECIOS & COMPRAS ---
+  // --- 0. FRECUENTES (TOP 8 ACCIONES RÁPIDAS) ---
+  {
+    label: '¿Cuánto cuesta esto?',
+    category: 'frecuentes',
+    en: 'How much is this?',
+    es: '¿Cuánto cuesta esto?',
+    vi: 'Cái này bao nhiêu tiền vậy ạ?',
+    phonetic: 'Cai nay bao nyew tien vay ah?',
+    tip: 'Pregunta universal para puestos callejeros y tiendas.',
+  },
+  {
+    label: 'La cuenta, por favor',
+    category: 'frecuentes',
+    en: 'Can I have the bill please?',
+    es: 'La cuenta, por favor',
+    vi: 'Em ơi, tính tiền giúp anh / chị với!',
+    phonetic: 'Em oy, tin tien zoop anh voy!',
+    tip: '"Em ơi" es el llamado cortés y universal a camareros jóvenes.',
+  },
+  {
+    label: 'Sin picante ni guindilla',
+    category: 'frecuentes',
+    en: 'No spicy, no chili please',
+    es: 'Sin picante ni guindilla por favor',
+    vi: 'Làm ơn đừng cho ớt và không cay nhé!',
+    phonetic: 'Lam on dung cho ot va khong cay nye!',
+    tip: 'Imprescindible en sopas callejeras donde suelen poner rodajas de guindilla.',
+  },
+  {
+    label: '1 Cà phê sữa đá',
+    category: 'frecuentes',
+    en: 'One iced milk coffee please',
+    es: 'Un café con leche condensada y hielo',
+    vi: 'Cho tôi một ly cà phê sữa đá nhé!',
+    phonetic: 'Cho toi mot ly ca fe sua da nye!',
+    tip: 'El emblemático café vietnamita con leche condensada espesa y hielo picado.',
+  },
+  {
+    label: 'Hola / Buenos días',
+    category: 'frecuentes',
+    en: 'Hello / Good morning',
+    es: 'Hola / Buenos días',
+    vi: 'Xin chào bạn!',
+    phonetic: 'Sin chao ban!',
+    tip: 'Saludo cortés y amigable universal para cualquier situación.',
+  },
+  {
+    label: 'Muchas gracias',
+    category: 'frecuentes',
+    en: 'Thank you very much',
+    es: 'Muchas gracias',
+    vi: 'Cảm ơn bạn rất nhiều!',
+    phonetic: 'Cam on ban rut nyew!',
+    tip: 'Acompaña con una sonrisa o ligera inclinación de cabeza.',
+  },
+  {
+    label: '¿Dónde está el baño?',
+    category: 'frecuentes',
+    en: 'Where is the restroom?',
+    es: '¿Dónde está el baño / servicio?',
+    vi: 'Nhà vệ sinh ở đâu vậy ạ?',
+    phonetic: 'Nya vee sin o dau vay ah?',
+    tip: 'En carteles verás a menudo "WC" o "Nhà vệ sinh".',
+  },
+  {
+    label: 'Lléveme a esta dirección',
+    category: 'frecuentes',
+    en: 'Please take me to this address',
+    es: 'Por favor lléveme a esta dirección',
+    vi: 'Làm ơn chở tôi đến địa chỉ này nhé!',
+    phonetic: 'Lam on cho toi den dia chi nay nye!',
+    tip: 'Muestra la pantalla con la dirección de tu hotel o mapa.',
+  },
+
+  // --- 1. PRECIOS & BILLETES ---
+  {
+    label: '20.000 ₫',
+    category: 'precios',
+    isBanknote: true,
+    banknoteDong: '20.000 ₫',
+    banknoteEur: '~0,75 €',
+    banknoteColor: 'border-blue-300 bg-blue-50 text-blue-900',
+    en: 'Twenty thousand VND',
+    es: 'Veinte mil dongs',
+    vi: 'Hai mươi nghìn',
+    phonetic: 'Hai muoi nghin',
+    tip: '20k VND. Billete azul de polímero. Típico de un té helado (trà đá) o agua.',
+  },
+  {
+    label: '50.000 ₫',
+    category: 'precios',
+    isBanknote: true,
+    banknoteDong: '50.000 ₫',
+    banknoteEur: '~1,90 €',
+    banknoteColor: 'border-rose-300 bg-rose-50 text-rose-900',
+    en: 'Fifty thousand VND',
+    es: 'Cincuenta mil dongs',
+    vi: 'Năm mươi nghìn',
+    phonetic: 'Nam muoi nghin',
+    tip: '50k VND. Billete rosa rojizo. Precio habitual de un phở o bún chả.',
+  },
+  {
+    label: '100.000 ₫',
+    category: 'precios',
+    isBanknote: true,
+    banknoteDong: '100.000 ₫',
+    banknoteEur: '~3,80 €',
+    banknoteColor: 'border-emerald-300 bg-emerald-50 text-emerald-900',
+    en: 'One hundred thousand VND',
+    es: 'Cien mil dongs',
+    vi: 'Một trăm nghìn',
+    phonetic: 'Mot tram nghin',
+    tip: '100k VND. Billete verde de polímero. Muy común para compras medias.',
+  },
+  {
+    label: '200.000 ₫',
+    category: 'precios',
+    isBanknote: true,
+    banknoteDong: '200.000 ₫',
+    banknoteEur: '~7,60 €',
+    banknoteColor: 'border-amber-300 bg-amber-50 text-amber-950',
+    en: 'Two hundred thousand VND',
+    es: 'Doscientos mil dongs',
+    vi: 'Hai trăm nghìn',
+    phonetic: 'Hai tram nghin',
+    tip: '200k VND. Billete granate rojizo. Frecuente en transportes y souvenirs.',
+  },
+  {
+    label: '500.000 ₫',
+    category: 'precios',
+    isBanknote: true,
+    banknoteDong: '500.000 ₫',
+    banknoteEur: '~19,00 €',
+    banknoteColor: 'border-teal-300 bg-teal-50 text-teal-950',
+    en: 'Five hundred thousand VND',
+    es: 'Quinientos mil dongs',
+    vi: 'Năm trăm nghìn',
+    phonetic: 'Nam tram nghin',
+    tip: '500k VND. El billete de mayor valor (azul/verde cian).',
+  },
   {
     label: '¿Cuánto cuesta esto?',
     category: 'precios',
@@ -102,51 +257,6 @@ const QUICK_PHRASES: QuickPhrase[] = [
     vi: 'Cây ATM gần nhất ở đâu vậy ạ?',
     phonetic: 'Cay ATM gun nyut o dau vay ah?',
     tip: 'Cajeros de TPBank, VPBank o BIDV suelen admitir tarjetas extranjeras.',
-  },
-  {
-    label: '20.000 ₫ (0,75 €)',
-    category: 'precios',
-    en: 'Twenty thousand VND',
-    es: 'Veinte mil dongs',
-    vi: 'Hai mươi nghìn',
-    phonetic: 'Hai muoi nghin',
-    tip: '20k VND. Billete azul de papel/polímero. Típico de un té helado (trà đá).',
-  },
-  {
-    label: '50.000 ₫ (1,90 €)',
-    category: 'precios',
-    en: 'Fifty thousand VND',
-    es: 'Cincuenta mil dongs',
-    vi: 'Năm mươi nghìn',
-    phonetic: 'Nam muoi nghin',
-    tip: '50k VND. Billete rosa rojizo. Precio habitual de un plato de phở o bún chả.',
-  },
-  {
-    label: '100.000 ₫ (3,80 €)',
-    category: 'precios',
-    en: 'One hundred thousand VND',
-    es: 'Cien mil dongs',
-    vi: 'Một trăm nghìn',
-    phonetic: 'Mot tram nghin',
-    tip: '100k VND. Billete verde de polímero. Muy común para compras medias.',
-  },
-  {
-    label: '200.000 ₫ (7,60 €)',
-    category: 'precios',
-    en: 'Two hundred thousand VND',
-    es: 'Doscientos mil dongs',
-    vi: 'Hai trăm nghìn',
-    phonetic: 'Hai tram nghin',
-    tip: '200k VND. Billete granate rojizo. Frecuente en transportes y souvenirs.',
-  },
-  {
-    label: '500.000 ₫ (19,00 €)',
-    category: 'precios',
-    en: 'Five hundred thousand VND',
-    es: 'Quinientos mil dongs',
-    vi: 'Năm trăm nghìn',
-    phonetic: 'Nam tram nghin',
-    tip: '500k VND. El billete de mayor valor (azul/verde cian). Cuidado al dar cambio.',
   },
 
   // --- 2. COMIDA & CAFÉ ---
@@ -428,7 +538,11 @@ const QUICK_PHRASES: QuickPhrase[] = [
   },
 ];
 
-export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) => {
+export const ConversationMode: React.FC<ConversationModeProps> = ({
+  isOnline,
+  targetPhrase,
+  onClearTargetPhrase,
+}) => {
   // Mode direction: 'traveler-to-vi' (Tourist speaks -> Vietnamese) or 'vi-to-traveler' (Vendor speaks -> Tourist)
   const [direction, setDirection] = useState<'traveler-to-vi' | 'vi-to-traveler'>('traveler-to-vi');
   const [travelerLang, setTravelerLang] = useState<'es' | 'en'>('es');
@@ -443,7 +557,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
   const [isCopied, setIsCopied] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [isFullscreenOutput, setIsFullscreenOutput] = useState(false);
-  const [quickCategory, setQuickCategory] = useState<string>('precios');
+  const [quickCategory, setQuickCategory] = useState<string>('frecuentes');
   const [customCards, setCustomCards] = useState<CustomTranslationCard[]>(() => getSavedCustomCards());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
@@ -463,6 +577,26 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
     });
     return unsub;
   }, []);
+
+  // Handle incoming phrase from Guía & Diccionario
+  useEffect(() => {
+    if (targetPhrase) {
+      setInputText(targetPhrase.es);
+      setTranslatedText(targetPhrase.vi);
+      setPhoneticText(targetPhrase.phonetic || '');
+      setTipText(targetPhrase.tip || '');
+      setDirection('traveler-to-vi');
+      if (autoSpeak) {
+        speakVietnamese(targetPhrase.vi, 'conversation-incoming-phrase');
+      }
+      setTimeout(() => {
+        if (translationBoardRef.current) {
+          translationBoardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 80);
+      onClearTargetPhrase?.();
+    }
+  }, [targetPhrase, autoSpeak, onClearTargetPhrase]);
 
   // Modal for creating custom cards
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
@@ -508,7 +642,9 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       showToast('Tarjeta eliminada de tus guardadas');
     } else {
       const validCategory: 'precios' | 'comida' | 'transporte' | 'cortesia' | 'emergencia' =
-        quickCategory === 'guardadas' ? 'cortesia' : (quickCategory as any) || 'cortesia';
+        quickCategory === 'guardadas' || quickCategory === 'frecuentes'
+          ? 'cortesia'
+          : (quickCategory as any) || 'cortesia';
 
       const labelText = (travelerLang === 'es' ? inputText : inputText).trim() || translatedText.slice(0, 30);
       const newCard: CustomTranslationCard = {
@@ -597,7 +733,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
 
     const updated = saveCustomCard(newCard);
     setCustomCards(updated);
-    setQuickCategory(customFormCategory);
+    setQuickCategory('guardadas');
 
     // Also populate in current translator board
     setInputText(newCard.es);
@@ -624,7 +760,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Speech synthesis cleanup
+  // Speech recognition cleanup
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
@@ -639,7 +775,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
     if (direction === 'traveler-to-vi') {
       setDirection('vi-to-traveler');
       setInputText(translatedText || 'Năm mươi nghìn');
-      setTranslatedText(travelerLang === 'es' ? 'Cincuenta mil dongs (1,90 €)' : 'Fifty thousand VND (1.90 €)');
+      setTranslatedText(travelerLang === 'es' ? 'Cincuenta mil dongs (~1,90 €)' : 'Fifty thousand VND (~1.90 €)');
       setPhoneticText('Nam muoi nghin');
       setTipText('50.000 dongs vietnamitas');
     } else {
@@ -758,7 +894,6 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
           phoText = 'Lam on zoop toi voy duoc khong?';
           tip = 'Petición cortés de auxilio o ayuda.';
         } else {
-          // Genuine polite Vietnamese phrase for requesting something
           viText = 'Xin chào, tôi cần sự giúp đỡ.';
           phoText = 'Sin chao, toi can su zoop do.';
           tip = 'Modo sin conexión. Puedes seleccionar frases rápidas directamente desde el menú inferior.';
@@ -840,7 +975,6 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
   };
 
   const toggleMic = async () => {
-    // Request or verify microphone access
     const micPerm = await requestMicrophonePermission();
     if (!micPerm.success && micPerm.status === 'denied') {
       showToast('⚠️ Permiso de micrófono bloqueado. Actívalo en el icono de candado 🔒 de la barra del navegador.');
@@ -854,7 +988,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       (window as any).msSpeechRecognition;
 
     if (!SpeechRecognition) {
-      showToast('⚠️ Micrófono activado. Escribe o selecciona una frase rápida para traducir con audio.');
+      showToast('⚠️ Micrófono no soportado en este navegador. Escribe o selecciona un atajo rápido.');
       return;
     }
 
@@ -918,7 +1052,6 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       recognition.onerror = async (e: any) => {
         setIsListening(false);
         if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-          // If blocked or not yet prompted, attempt getUserMedia to trigger native prompt
           if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
             try {
               const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -926,11 +1059,11 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
               showToast('✅ Permiso de micrófono concedido. Pulsa de nuevo para dictar.');
               return;
             } catch {
-              showToast('⚠️ Permiso de micrófono bloqueado. Toca el icono de candado 🔒 en la barra de Chrome para permitirlo.');
+              showToast('⚠️ Permiso de micrófono bloqueado en Chrome.');
               return;
             }
           }
-          showToast('⚠️ Permiso de micrófono bloqueado. Permítelo en los ajustes del navegador.');
+          showToast('⚠️ Permiso de micrófono bloqueado.');
         } else if (e.error === 'no-speech') {
           showToast('No se detectó voz. Pulsa el botón para hablar de nuevo.');
         } else if (e.error === 'network') {
@@ -945,19 +1078,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       recognition.start();
     } catch (err) {
       console.warn('SpeechRecognition start error:', err);
-      // Try requesting mic permission via getUserMedia
-      if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          stream.getTracks().forEach((track) => track.stop());
-          showToast('✅ Micrófono activado.');
-        } catch {
-          showToast('⚠️ Permiso de micrófono no concedido.');
-        }
-      } else {
-        setIsListening(false);
-        showToast('No se pudo iniciar el micrófono.');
-      }
+      setIsListening(false);
     }
   };
 
@@ -965,7 +1086,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
 
   // Custom cards for active category
   const activeCustomCards = customCards.filter(
-    (c) => quickCategory === 'guardadas' || c.category === quickCategory
+    (c) => quickCategory === 'guardadas' || quickCategory === 'frecuentes' || c.category === quickCategory
   );
 
   const activeDefaultCards =
@@ -973,12 +1094,12 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       ? []
       : QUICK_PHRASES.filter((p) => p.category === quickCategory);
 
-  // Custom cards come FIRST!
+  // Custom cards come FIRST in displayed list
   const displayedPhrases: QuickPhrase[] = [
     ...activeCustomCards.map((c) => ({
       id: c.id,
       label: c.label,
-      category: c.category,
+      category: c.category as any,
       en: c.en,
       es: c.es,
       vi: c.vi,
@@ -994,9 +1115,10 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
   ];
 
   const categoryTabs = [
-    { id: 'precios', label: '💰 Precios' },
+    { id: 'frecuentes', label: '⚡ Frecuentes' },
+    { id: 'precios', label: '💰 Billetes & Precios' },
     { id: 'comida', label: '🍜 Comida & Café' },
-    { id: 'transporte', label: '🚗 Transporte & Grab' },
+    { id: 'transporte', label: '🚗 Grab & Transporte' },
     { id: 'cortesia', label: '💬 Cortesía' },
     { id: 'emergencia', label: '🚨 Ayuda & Baño' },
     ...(customCards.length > 0
@@ -1014,17 +1136,28 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
       )}
 
       {/* 1. COMPACT STATUS & CONTROLS HEADER */}
-      <div className="bg-[#141210] text-stone-100 rounded-2xl px-4 py-3 sm:px-5 sm:py-3.5 border border-stone-800 shadow-md flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+      <div className="bg-gradient-to-r from-[#181614] via-[#201d19] to-[#181614] text-stone-100 rounded-2xl p-3.5 sm:px-5 sm:py-4 border border-amber-500/20 shadow-[0_4px_20px_rgba(0,0,0,0.25)] flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
             <Languages className="w-4 h-4" />
           </div>
-          <div className="flex items-center gap-2.5">
-            <span className="font-serif font-bold text-base text-white">Modo Conversación Bidireccional</span>
-            <span className="flex items-center gap-1.5 text-xs text-stone-300 bg-stone-900 px-2.5 py-0.5 rounded-full border border-stone-800">
-              <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-              <span className="text-[11px] font-medium">{isOnline ? 'Online con IA' : 'Offline'}</span>
-            </span>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-serif font-bold text-sm sm:text-base text-white tracking-tight">Traductor en Vivo</span>
+              <span className={`flex items-center gap-1.5 text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-full border shadow-2xs ${
+                isOnline
+                  ? 'bg-stone-900/90 text-stone-300 border-stone-800'
+                  : 'bg-amber-950/80 text-amber-300 border-amber-800/80'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <span className="font-medium">{isOnline ? 'Online (IA)' : 'Sin conexión (Modo Local)'}</span>
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-stone-400 mt-0.5">
+              {isOnline
+                ? 'Habla o escribe para traducir al instante con IA y voz'
+                : 'Traductor offline: utiliza las Respuestas Rápidas o escribe palabras clave'}
+            </p>
           </div>
         </div>
 
@@ -1033,294 +1166,299 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
           <button
             type="button"
             onClick={() => setIsVoiceModalOpen(true)}
-            className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
-            title="Ajustar velocidad, tono y motor de voz natural"
+            className="px-3 py-1.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+            title="Ajustar velocidad y tipo de voz"
           >
-            <Sliders className="w-3 h-3 text-amber-400" />
-            <span>Voz Natural</span>
+            <Sliders className="w-3.5 h-3.5 text-amber-400" />
+            <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
           </button>
 
           <button
             id="btn-open-google-translate"
             onClick={() => openGoogleTranslate(travelerLang === 'es' ? 'es' : 'en', 'vi', inputText)}
-            className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-white border border-stone-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+            className="px-3 py-1.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-stone-300 hover:text-white border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
             title="Abrir en Google Translate oficial"
           >
-            <ExternalLink className="w-3 h-3 text-amber-400" />
+            <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
             <span>Google Translate ↗</span>
           </button>
         </div>
       </div>
 
+      {/* OFFLINE NOTICE BANNER */}
+      {!isOnline && (
+        <div className="bg-amber-50 border border-amber-300/90 rounded-2xl p-3 sm:px-4 text-xs text-amber-950 flex items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="text-base">📡</span>
+            <div>
+              <strong className="font-bold">Modo sin conexión activo:</strong> La traducción libre de frases largas con IA y el dictado por voz requieren internet. Las <strong className="underline">Respuestas Rápidas</strong>, los billetes, el audio y el diccionario funcionan al 100% offline.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 2. MAIN TRANSLATOR BOARD */}
       <div className="bg-white rounded-3xl p-5 sm:p-7 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-6">
-        {/* Top Control Bar: Direction + Language toggle + Audio preference */}
+        {/* Top Control Bar: Unified Direction, Language Toggle & Voice Auto-Play */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-100">
-          {/* Direction segmented pills */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="inline-flex p-1 bg-stone-100 rounded-2xl border border-stone-200 text-xs font-semibold">
-              <button
-                onClick={() => setDirection('traveler-to-vi')}
-                className={`px-3.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
-                  direction === 'traveler-to-vi'
-                    ? 'bg-white text-stone-950 shadow-xs font-bold'
-                    : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                <span>🗣️ Tú</span>
-                <span className="text-stone-400">➔</span>
-                <span>🇻🇳 Local</span>
-              </button>
-
-              <button
-                onClick={handleToggleDirection}
-                title="Invertir dirección"
-                className="px-2 py-1.5 rounded-xl hover:bg-stone-200 text-stone-600 transition cursor-pointer active:scale-95"
-              >
-                <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600" />
-              </button>
-
-              <button
-                onClick={() => setDirection('vi-to-traveler')}
-                className={`px-3.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
-                  direction === 'vi-to-traveler'
-                    ? 'bg-white text-stone-950 shadow-xs font-bold'
-                    : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                <span>🇻🇳 Local</span>
-                <span className="text-stone-400">➔</span>
-                <span>🗣️ Tú</span>
-              </button>
+          {/* Unified Language Direction Switcher */}
+          <div className="flex items-center gap-2 bg-stone-100/90 p-1.5 rounded-2xl border border-stone-200/80 shadow-2xs max-w-full overflow-x-auto">
+            {/* Left / Source Language Card */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-stone-900 font-bold text-xs shadow-xs border border-stone-200/60">
+              {direction === 'traveler-to-vi' ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-stone-400">🗣️</span>
+                  <span>{travelerLang === 'es' ? '🇪🇸 Español' : '🇬🇧 English'}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = travelerLang === 'es' ? 'en' : 'es';
+                      setTravelerLang(next);
+                      if (next === 'en' && inputText === '¿Cuánto cuesta esto?') setInputText('How much is this?');
+                      if (next === 'es' && inputText === 'How much is this?') setInputText('¿Cuánto cuesta esto?');
+                    }}
+                    className="text-[10px] text-amber-800 font-bold bg-amber-50 hover:bg-amber-100 px-1.5 py-0.5 rounded-md border border-amber-200 ml-1 transition cursor-pointer"
+                    title="Cambiar entre Español e Inglés"
+                  >
+                    {travelerLang === 'es' ? 'EN' : 'ES'}
+                  </button>
+                </div>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <span>🇻🇳 Tiếng Việt (Local)</span>
+                </span>
+              )}
             </div>
 
-            {/* Tourist Language Picker (ES / EN) */}
-            <div className="inline-flex p-1 bg-stone-100 rounded-2xl border border-stone-200 text-xs font-semibold">
-              <button
-                onClick={() => {
-                  setTravelerLang('es');
-                  if (inputText === 'How much is this?') setInputText('¿Cuánto cuesta esto?');
-                }}
-                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
-                  travelerLang === 'es' ? 'bg-white text-stone-950 shadow-xs font-bold' : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                🇪🇸 ES
-              </button>
-              <button
-                onClick={() => {
-                  setTravelerLang('en');
-                  if (inputText === '¿Cuánto cuesta esto?') setInputText('How much is this?');
-                }}
-                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
-                  travelerLang === 'en' ? 'bg-white text-stone-950 shadow-xs font-bold' : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                🇬🇧 EN
-              </button>
+            {/* Central Swap Button */}
+            <button
+              type="button"
+              onClick={handleToggleDirection}
+              title="Invertir quién habla"
+              className="p-2 rounded-xl bg-white hover:bg-amber-400 text-stone-700 hover:text-stone-950 border border-stone-200/80 transition-all cursor-pointer active:scale-90 shadow-2xs group"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5 text-stone-700 group-hover:text-stone-950 group-hover:rotate-180 transition-transform duration-200" />
+            </button>
+
+            {/* Right / Target Language Card */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-stone-900 font-bold text-xs shadow-xs border border-stone-200/60">
+              {direction === 'traveler-to-vi' ? (
+                <span className="flex items-center gap-1.5">
+                  <span>🇻🇳 Tiếng Việt (Local)</span>
+                </span>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-stone-400">🗣️</span>
+                  <span>{travelerLang === 'es' ? '🇪🇸 Español' : '🇬🇧 English'}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = travelerLang === 'es' ? 'en' : 'es';
+                      setTravelerLang(next);
+                    }}
+                    className="text-[10px] text-amber-800 font-bold bg-amber-50 hover:bg-amber-100 px-1.5 py-0.5 rounded-md border border-amber-200 ml-1 transition cursor-pointer"
+                    title="Cambiar entre Español e Inglés"
+                  >
+                    {travelerLang === 'es' ? 'EN' : 'ES'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Auto voice playback toggle */}
-          <label className="inline-flex items-center gap-2 text-xs text-stone-600 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={autoSpeak}
-              onChange={(e) => setAutoSpeak(e.target.checked)}
-              className="rounded border-stone-300 text-amber-600 focus:ring-amber-500 h-4 w-4 cursor-pointer"
-            />
-            <span className="font-semibold text-stone-700">Pronunciación automática</span>
-          </label>
+          {/* Auto voice playback pill toggle */}
+          <button
+            type="button"
+            onClick={() => setAutoSpeak(!autoSpeak)}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-semibold border transition cursor-pointer active:scale-95 shadow-2xs select-none ${
+              autoSpeak
+                ? 'bg-amber-50 border-amber-300 text-amber-950 font-bold'
+                : 'bg-stone-50 border-stone-200 text-stone-500 hover:bg-stone-100'
+            }`}
+            title="Activar o pausar la voz automática al traducir"
+          >
+            <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${autoSpeak ? 'bg-amber-500 text-stone-950 font-black' : 'bg-stone-300 text-transparent'}`}>
+              ✓
+            </div>
+            <span>Voz automática</span>
+          </button>
         </div>
 
         {/* Dual Input/Output Translation Cards */}
         <div ref={translationBoardRef} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch scroll-mt-6">
           {/* Card 1: Input Box (Source) */}
-          <div className="rounded-3xl border-2 border-stone-200/90 bg-stone-50/60 p-5 flex flex-col justify-between focus-within:border-amber-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-amber-500/10 transition-all shadow-xs min-h-[260px]">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-stone-200/80">
-              <div className="flex items-center gap-2">
-                <span className="text-xl leading-none">{isTravelerToVi ? (travelerLang === 'es' ? '🇪🇸' : '🇬🇧') : '🇻🇳'}</span>
-                <div>
-                  <span className="text-xs font-bold text-stone-900 block leading-tight">
-                    {isTravelerToVi ? (travelerLang === 'es' ? 'Español' : 'English') : 'Tiếng Việt'}
-                  </span>
-                  <span className="text-[10px] text-stone-500 font-medium">Idioma de entrada</span>
-                </div>
+          <div className="rounded-3xl border-2 border-stone-200/90 bg-stone-50/60 p-5 flex flex-col justify-between focus-within:border-amber-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-amber-500/10 transition-all">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-stone-500">
+                <span className="flex items-center gap-1.5">
+                  <span>{isTravelerToVi ? (travelerLang === 'es' ? '🇪🇸 Tu frase (Español)' : '🇬🇧 Your text (English)') : '🇻🇳 Tiếng Việt (Local)'}</span>
+                </span>
+                {inputText && (
+                  <button
+                    type="button"
+                    onClick={() => setInputText('')}
+                    className="text-stone-400 hover:text-stone-700 text-[11px] font-semibold cursor-pointer"
+                  >
+                    Borrar
+                  </button>
+                )}
               </div>
 
-              {/* Mic Speech Button */}
-              <button
-                type="button"
-                onClick={toggleMic}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                  isListening
-                    ? 'bg-rose-600 text-white animate-pulse shadow-sm ring-4 ring-rose-200'
-                    : 'bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 active:scale-95'
-                }`}
-                title={isListening ? 'Detener micrófono' : 'Dictar por voz'}
-              >
-                {isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5 text-amber-600" />}
-                <span className="text-[11px]">{isListening ? 'Escuchando...' : 'Voz'}</span>
-              </button>
-            </div>
-
-            {/* Body: Textarea */}
-            <div className="my-3 flex-1 flex flex-col justify-center">
               <textarea
-                id="input-translate-text"
-                rows={3}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     handleTranslate();
                   }
                 }}
                 placeholder={
                   isTravelerToVi
-                    ? (travelerLang === 'es' ? 'Escribe o dicta en español...' : 'Type or speak in English...')
-                    : 'Nhập hoặc nói tiếng Việt...'
+                    ? travelerLang === 'es'
+                      ? 'Escribe o pulsa el micro para hablar...'
+                      : 'Type or tap microphone to speak...'
+                    : 'Nói hoặc gõ tiếng Việt...'
                 }
-                className="w-full flex-1 text-base sm:text-lg font-medium text-stone-900 bg-transparent border-none focus:outline-none resize-none placeholder-stone-400 leading-snug"
+                rows={3}
+                className="w-full bg-transparent border-0 resize-none text-stone-900 placeholder:text-stone-400 font-sans text-base sm:text-lg focus:outline-none leading-snug"
               />
             </div>
 
-            {/* Footer Toolbar */}
-            <div className="pt-3 border-t border-stone-200/80 flex items-center justify-between text-xs">
-              <div>
-                {inputText ? (
-                  <button
-                    type="button"
-                    onClick={() => setInputText('')}
-                    className="text-stone-400 hover:text-stone-700 text-xs underline cursor-pointer"
-                  >
-                    Borrar
-                  </button>
-                ) : (
-                  <span className="text-stone-400 text-[11px]">Ctrl+Enter para traducir rápido</span>
-                )}
-              </div>
+            {/* Input Action Controls */}
+            <div className="flex items-center justify-between pt-3 border-t border-stone-200/60 mt-2 gap-2">
+              <button
+                type="button"
+                onClick={toggleMic}
+                disabled={!isOnline}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold transition shadow-2xs ${
+                  !isOnline
+                    ? 'bg-stone-100 text-stone-400 border border-stone-200 opacity-60 cursor-not-allowed'
+                    : isListening
+                    ? 'bg-rose-600 text-white animate-pulse ring-4 ring-rose-300 cursor-pointer active:scale-95'
+                    : 'bg-white hover:bg-stone-100 text-stone-800 border border-stone-300/80 cursor-pointer active:scale-95'
+                }`}
+                title={!isOnline ? 'Dictado por voz requiere conexión a internet' : 'Hablar por micrófono'}
+              >
+                {isListening ? <MicOff className="w-4 h-4 text-white" /> : <Mic className={`w-4 h-4 ${isOnline ? 'text-amber-600' : 'text-stone-400'}`} />}
+                <span>{isListening ? 'Escuchando...' : !isOnline ? 'Voz (Online)' : 'Hablar'}</span>
+              </button>
 
               <button
                 type="button"
-                id="btn-submit-translate"
                 onClick={() => handleTranslate()}
                 disabled={isTranslating || !inputText.trim()}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-stone-950 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-stone-950 font-bold text-xs transition cursor-pointer active:scale-95 shadow-xs"
+                title={isOnline ? 'Traducir con IA' : 'Buscar coincidencia en diccionario local'}
               >
-                <Sparkles className={`w-3.5 h-3.5 ${isTranslating ? 'animate-spin' : ''}`} />
-                <span>{isTranslating ? 'Traduciendo...' : 'Traducir'}</span>
+                <Sparkles className={`w-4 h-4 ${isTranslating ? 'animate-spin' : ''}`} />
+                <span>{isTranslating ? 'Traduciendo...' : isOnline ? 'Traducir' : 'Buscar local'}</span>
               </button>
             </div>
           </div>
 
-          {/* Card 2: Output Box (Target / Presentation) */}
-          <div className="rounded-3xl border-2 border-amber-300/90 bg-gradient-to-br from-amber-500/[0.08] via-amber-500/[0.03] to-transparent p-5 flex flex-col justify-between shadow-xs min-h-[260px] relative">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-amber-200/70">
-              <div className="flex items-center gap-2">
-                <span className="text-xl leading-none">{isTravelerToVi ? '🇻🇳' : (travelerLang === 'es' ? '🇪🇸' : '🇬🇧')}</span>
-                <div>
-                  <span className="text-xs font-bold text-amber-950 block leading-tight">
-                    {isTravelerToVi ? 'Tiếng Việt' : (travelerLang === 'es' ? 'Español' : 'English')}
-                  </span>
-                  <span className="text-[10px] text-amber-800 font-medium">Traducción</span>
+          {/* Card 2: Output Box (Target) */}
+          <div className="rounded-3xl border-2 border-amber-300/80 bg-gradient-to-br from-amber-50/70 via-amber-50/30 to-amber-100/20 p-5 flex flex-col justify-between relative shadow-xs">
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-bold text-amber-900">
+                <span className="flex items-center gap-1.5">
+                  <span>{isTravelerToVi ? '🇻🇳 Traducción (Tiếng Việt)' : travelerLang === 'es' ? '🇪🇸 Traducción (Español)' : '🇬🇧 Translation (English)'}</span>
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleToggleSaveCurrentCard}
+                    className={`p-1.5 rounded-xl transition cursor-pointer ${
+                      isCurrentCardSaved
+                        ? 'bg-amber-400 text-stone-950 font-bold'
+                        : 'text-amber-800 hover:bg-amber-200/60'
+                    }`}
+                    title={isCurrentCardSaved ? 'Eliminar de tus guardadas' : 'Guardar frase'}
+                  >
+                    <Star className={`w-3.5 h-3.5 ${isCurrentCardSaved ? 'fill-stone-950' : ''}`} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsFullscreenOutput(true)}
+                    className="p-1.5 rounded-xl text-amber-800 hover:bg-amber-200/60 transition cursor-pointer"
+                    title="Mostrar en pantalla completa"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
 
-              {/* Action Buttons: Audio, Copy, Fullscreen, Save */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleToggleSaveCurrentCard}
-                  disabled={!translatedText}
-                  className={`px-3 py-1.5 rounded-xl border transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold active:scale-95 shadow-2xs ${
-                    isCurrentCardSaved
-                      ? 'bg-amber-100 text-amber-950 border-amber-300 font-bold'
-                      : 'bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border-amber-200'
-                  }`}
-                  title={isCurrentCardSaved ? 'Tarjeta guardada (clic para quitar)' : 'Guardar esta traducción como tarjeta personal'}
-                >
-                  {isCurrentCardSaved ? (
-                    <BookmarkCheck className="w-3.5 h-3.5 text-amber-700" />
-                  ) : (
-                    <Bookmark className="w-3.5 h-3.5 text-stone-600" />
-                  )}
-                  <span className="text-[11px] hidden sm:inline">
-                    {isCurrentCardSaved ? 'Guardada ⭐' : 'Guardar'}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSpeakOutput}
-                  disabled={!translatedText}
-                  className={`p-2 rounded-xl border transition cursor-pointer active:scale-95 shadow-2xs flex items-center justify-center ${
-                    speakingState.isSpeaking && speakingState.speakingId === 'conversation-main-output'
-                      ? 'bg-amber-400 text-stone-950 border-amber-300 ring-2 ring-amber-400/30'
-                      : 'bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border-amber-200'
-                  }`}
-                  title="Pronunciación en voz natural"
-                >
-                  <AudioWaveIndicator
-                    isPlaying={speakingState.isSpeaking && speakingState.speakingId === 'conversation-main-output'}
-                    size="md"
-                    colorClass="text-amber-950"
-                  />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  disabled={!translatedText}
-                  className="p-2 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer active:scale-95 shadow-2xs"
-                  title="Copiar texto"
-                >
-                  {isCopied ? <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" /> : <Copy className="w-4 h-4 text-stone-600" />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsFullscreenOutput(true)}
-                  disabled={!translatedText}
-                  className="p-2 rounded-xl bg-white hover:bg-amber-100 text-stone-700 hover:text-amber-900 border border-amber-200 transition cursor-pointer active:scale-95 shadow-2xs"
-                  title="Pantalla completa para mostrar al local"
-                >
-                  <Maximize2 className="w-4 h-4 text-amber-800" />
-                </button>
-              </div>
-            </div>
-
-            {/* Body: Translation and phonetics */}
-            <div className="my-3 flex-1 flex flex-col justify-center space-y-2">
-              <p className="text-xl sm:text-2xl font-bold font-sans text-stone-950 leading-snug break-words">
+              <p className="font-serif font-black text-xl sm:text-2xl text-stone-950 leading-snug break-words">
                 {translatedText || '...'}
               </p>
 
               {phoneticText && (
-                <div className="text-xs font-mono text-stone-700 flex items-center gap-1.5 flex-wrap pt-1">
+                <div className="text-xs font-mono text-stone-700 flex items-center gap-1.5 flex-wrap pt-0.5">
                   <span className="text-stone-400 font-sans">🗣️ Fonética:</span>
                   <strong className="text-amber-950 font-semibold">{phoneticText}</strong>
                 </div>
               )}
 
               {tipText && (
-                <p className="text-[11px] text-amber-900/90 leading-relaxed font-medium">
+                <p className="text-[11px] text-amber-900/90 leading-relaxed font-medium bg-amber-100/40 p-2 rounded-xl border border-amber-200/60">
                   💡 {tipText}
                 </p>
               )}
             </div>
+
+            {/* Output Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-amber-200/70 mt-3 gap-2">
+              <button
+                type="button"
+                onClick={handleSpeakOutput}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold transition cursor-pointer active:scale-95 shadow-2xs ${
+                  speakingState.isSpeaking && speakingState.speakingId === 'conversation-main-output'
+                    ? 'bg-amber-400 text-stone-950 ring-2 ring-amber-400/40'
+                    : 'bg-white hover:bg-stone-100 text-stone-900 border border-amber-200/80'
+                }`}
+                title="Reproducir pronunciación"
+              >
+                <AudioWaveIndicator
+                  isPlaying={speakingState.isSpeaking && speakingState.speakingId === 'conversation-main-output'}
+                  size="sm"
+                  colorClass="text-stone-950"
+                />
+                <span>
+                  {speakingState.isSpeaking && speakingState.speakingId === 'conversation-main-output'
+                    ? 'Reproduciendo...'
+                    : 'Escuchar'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-white/80 hover:bg-white text-stone-700 text-xs font-semibold border border-amber-200/80 transition cursor-pointer active:scale-95"
+                title="Copiar traducción"
+              >
+                {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{isCopied ? 'Copiado' : 'Copiar'}</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* 3. QUICK PHRASES (Categorized cards, user-saved cards first) */}
+        {/* 3. ONE-TAP FAST SHORTCUTS / PRESETS SECTION */}
         <div className="space-y-3.5 pt-3 border-t border-stone-100">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
-              Frases rápidas
-            </span>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
+                <span className="text-xs font-bold uppercase tracking-wider text-stone-800">
+                  Respuestas Rápidas
+                </span>
+              </div>
+              <p className="text-[11px] text-stone-500 font-normal">
+                Toca cualquier atajo para traducirlo y reproducirlo al instante
+              </p>
+            </div>
 
             {/* Category tabs + Nueva */}
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
@@ -1331,7 +1469,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   onClick={() => setQuickCategory(tab.id)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                     quickCategory === tab.id
-                      ? 'bg-stone-900 text-white shadow-xs'
+                      ? 'bg-stone-900 text-amber-300 font-bold shadow-xs border border-stone-800'
                       : 'text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200/80'
                   }`}
                 >
@@ -1344,15 +1482,15 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                 type="button"
                 onClick={() => {
                   setCustomFormCategory(
-                    quickCategory === 'guardadas' ? 'precios' : (quickCategory as any) || 'precios'
+                    quickCategory === 'guardadas' || quickCategory === 'frecuentes' ? 'precios' : (quickCategory as any) || 'precios'
                   );
                   setIsCustomModalOpen(true);
                 }}
                 className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-stone-950 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer shrink-0 shadow-2xs whitespace-nowrap"
-                title="Crear una tarjeta de traducción personalizada"
+                title="Crear un atajo de traducción personalizado"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Nueva</span>
+                <span>Nuevo</span>
               </button>
             </div>
           </div>
@@ -1361,9 +1499,9 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
           {displayedPhrases.length === 0 ? (
             <div className="p-8 text-center bg-stone-50 border border-stone-200 rounded-2xl space-y-2">
               <Star className="w-6 h-6 text-amber-500 mx-auto opacity-70" />
-              <p className="text-xs font-bold text-stone-700">No tienes tarjetas guardadas todavía.</p>
+              <p className="text-xs font-bold text-stone-700">No tienes atajos guardados todavía.</p>
               <p className="text-[11px] text-stone-500">
-                Guarda cualquier traducción pulsando el botón "Guardar ⭐" o pulsa "+ Nueva" para crear una tarjeta personalizada.
+                Guarda cualquier traducción pulsando el botón ⭐ en el traductor o en la Guía & Diccionario.
               </p>
             </div>
           ) : (
@@ -1374,12 +1512,49 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   (inputText && (phrase.es.trim().toLowerCase() === inputText.trim().toLowerCase() || phrase.vi.trim().toLowerCase() === inputText.trim().toLowerCase()))
                 );
 
+                // Distinct visual rendering for banknotes
+                if (phrase.isBanknote) {
+                  return (
+                    <button
+                      key={phrase.id || phrase.label}
+                      type="button"
+                      onClick={() => handleQuickPhraseClick(phrase)}
+                      className={`p-3 rounded-2xl text-left transition-all duration-150 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[92px] h-full group relative shadow-2xs border ${
+                        isSelected
+                          ? 'border-2 border-amber-500 bg-amber-50/95 ring-2 ring-amber-500/20 shadow-xs'
+                          : phrase.banknoteColor || 'border-stone-200 bg-stone-50 hover:bg-amber-50/70'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 w-full">
+                        <div className="flex items-center gap-1.5 font-bold text-sm text-stone-900">
+                          <Banknote className="w-4 h-4 text-amber-700 shrink-0" />
+                          <span>{phrase.banknoteDong}</span>
+                        </div>
+                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-stone-900/10 text-stone-800">
+                          {phrase.banknoteEur}
+                        </span>
+                      </div>
+
+                      <div className="pt-2 mt-2 border-t border-black/10 flex flex-col gap-0.5">
+                        <div className="text-xs font-semibold text-stone-900 leading-snug">
+                          {phrase.vi}
+                        </div>
+                        {phrase.phonetic && (
+                          <div className="text-[10px] text-stone-600 font-mono italic leading-tight">
+                            {phrase.phonetic}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                }
+
                 return (
                   <button
                     key={phrase.id || phrase.label}
                     type="button"
                     onClick={() => handleQuickPhraseClick(phrase)}
-                    className={`p-3 sm:p-3.5 rounded-2xl text-left transition-all duration-150 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[96px] h-full group relative shadow-2xs ${
+                    className={`p-3 sm:p-3.5 rounded-2xl text-left transition-all duration-150 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[92px] h-full group relative shadow-2xs ${
                       isSelected
                         ? 'border-2 border-amber-500 bg-amber-50/95 ring-2 ring-amber-500/20 shadow-xs'
                         : phrase.isCustom
@@ -1430,7 +1605,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
         </div>
       </div>
 
-      {/* 5. CREATE CUSTOM CARD MODAL */}
+      {/* 4. CREATE CUSTOM CARD MODAL */}
       {isCustomModalOpen && (
         <div className="fixed inset-0 z-50 bg-stone-950/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xl max-w-md w-full space-y-4 animate-scale-in">
@@ -1439,7 +1614,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                 <div className="p-1.5 rounded-lg bg-amber-100 text-amber-800">
                   <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
                 </div>
-                <h3 className="font-bold text-sm text-stone-900">Nueva tarjeta de traducción</h3>
+                <h3 className="font-bold text-sm text-stone-900">Nuevo atajo de conversación</h3>
               </div>
               <button
                 type="button"
@@ -1506,21 +1681,21 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
 
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  Categoría de la tarjeta:
+                  Categoría del atajo:
                 </label>
                 <select
                   value={customFormCategory}
                   onChange={(e) => setCustomFormCategory(e.target.value as any)}
                   className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 text-xs text-stone-900 font-medium bg-white cursor-pointer"
                 >
-                  <option value="precios">💰 Precios & Compras</option>
+                  <option value="precios">💰 Billetes & Precios</option>
                   <option value="comida">🍜 Comida & Café</option>
-                  <option value="transporte">🚗 Transporte & Grab</option>
-                  <option value="cortesia">💬 Cortesía & Saludos</option>
+                  <option value="transporte">🚗 Grab & Transporte</option>
+                  <option value="cortesia">💬 Cortesía</option>
                   <option value="emergencia">🚨 Ayuda & Baño</option>
                 </select>
                 <p className="text-[10px] text-stone-500 mt-1">
-                  Saldrá la primera en esta sección destacada con la etiqueta ⭐ Personal.
+                  Saldrá en la sección destacada con la etiqueta ⭐ Personal.
                 </p>
               </div>
 
@@ -1537,7 +1712,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
                   disabled={!customFormEs.trim() || !customFormVi.trim()}
                   className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-stone-950 font-bold transition cursor-pointer shadow-xs"
                 >
-                  Guardar tarjeta
+                  Guardar atajo
                 </button>
               </div>
             </form>

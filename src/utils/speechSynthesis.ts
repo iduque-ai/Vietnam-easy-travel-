@@ -2,12 +2,15 @@
  * Natural & Soft Voice Synthesis Engine for Vietnam Travel Companion
  * 
  * Features:
- * - High-Definition Neural Speech Synthesis via /api/tts (Gemini 3.8 Flash TTS + Google Neural)
+ * - High-Definition Neural Speech Synthesis via /api/tts (Google Neural MP3 Chunker)
  * - Rock-solid HTML5 Audio & Web Audio compatibility for all mobile & desktop browsers
- * - Intelligent Prosody & Cadence Optimizer (human breathing pauses, tonal softness)
+ * - Concurrency Safe: Strict atomic session tokens prevent double narrations or overlapping audio on rapid clicks
+ * - Real-time Progress Tracking (currentTime, duration, progress percentage)
+ * - True Play / Pause / Resume / Seek / Speed controls
+ * - Intelligent Prosody & Cadence Optimizer (abbreviations, numbers, phonetic naturalness)
  * - Advanced Natural Voice Ranker for Web Speech API offline fallback
- * - In-memory and browser cache for instant sub-millisecond audio response
- * - Reactive state for UI wave animations and instant stop/resume
+ * - Sub-millisecond in-memory audio blob caching
+ * - Reactive state for UI wave animations and synchronized playback
  */
 
 export type VoiceLanguage = 'vi-VN' | 'es-ES' | 'en-US' | 'vi' | 'es' | 'en';
@@ -28,7 +31,7 @@ const SETTINGS_KEY = 'vietnam_travel_speech_settings_v2';
 export const DEFAULT_SPEECH_SETTINGS: SpeechSettings = {
   engineMode: 'auto',
   speedPreset: 'natural',
-  speedValue: 0.92,
+  speedValue: 1.05,
   gender: 'female',
   autoPlaySample: false,
 };
@@ -54,32 +57,37 @@ export function saveSpeechSettings(settings: Partial<SpeechSettings>): SpeechSet
   return updated;
 }
 
-// Global Event Emitter for speech state and settings
-type SpeechStateListener = (state: {
+export interface GlobalSpeakingState {
   isSpeaking: boolean;
+  isLoading: boolean;
+  isPaused: boolean;
   speakingId: string | null;
   speakingText: string | null;
   lang: string | null;
   source: 'neural' | 'browser' | null;
-}) => void;
+  currentTime: number;
+  duration: number;
+  progress: number; // 0 to 1
+}
 
+// Global Event Emitter for speech state and settings
+type SpeechStateListener = (state: GlobalSpeakingState) => void;
 type SettingsListener = (settings: SpeechSettings) => void;
 
 const stateListeners = new Set<SpeechStateListener>();
 const settingsListeners = new Set<SettingsListener>();
 
-let globalSpeakingState: {
-  isSpeaking: boolean;
-  speakingId: string | null;
-  speakingText: string | null;
-  lang: string | null;
-  source: 'neural' | 'browser' | null;
-} = {
+let globalSpeakingState: GlobalSpeakingState = {
   isSpeaking: false,
+  isLoading: false,
+  isPaused: false,
   speakingId: null,
   speakingText: null,
   lang: null,
   source: null,
+  currentTime: 0,
+  duration: 0,
+  progress: 0,
 };
 
 function notifyStateChanged() {
@@ -110,8 +118,16 @@ export function isSpeechActive(): boolean {
   return globalSpeakingState.isSpeaking;
 }
 
+export function isSpeechPaused(): boolean {
+  return globalSpeakingState.isPaused;
+}
+
 export function getActiveSpeakingId(): string | null {
   return globalSpeakingState.speakingId;
+}
+
+export function getGlobalSpeakingState(): GlobalSpeakingState {
+  return globalSpeakingState;
 }
 
 // In-Memory Audio Cache (stores generated audio Blob URLs)
@@ -119,8 +135,11 @@ const audioBlobCache = new Map<string, { blobUrl: string; mimeType: string }>();
 
 // Currently playing audio instance
 let currentHtmlAudio: HTMLAudioElement | null = null;
-let currentSourceNode: AudioBufferSourceNode | null = null;
-let currentGainNode: GainNode | null = null;
+let currentUtterance: SpeechSynthesisUtterance | null = null;
+
+// Concurrency session token & abort controller
+let currentPlaybackSession = 0;
+let currentAbortController: AbortController | null = null;
 
 /**
  * Text Preprocessing & Prosody Softener
@@ -149,7 +168,6 @@ export function preprocessTextForNaturalSpeech(text: string, lang: string): stri
   if (isVi) {
     // Expand Vietnamese abbreviations and currency for melodic pronunciation
     cleaned = cleaned
-      // 50k, 100k -> 50 nghìn, 100 nghìn
       .replace(/(\d+)\s*[kK]\b/g, '$1 nghìn ')
       .replace(/(\d+)\s*[đ₫]\b/g, '$1 đồng ')
       .replace(/\bVND\b/gi, 'đồng')
@@ -162,16 +180,24 @@ export function preprocessTextForNaturalSpeech(text: string, lang: string): stri
       .replace(/!+/g, '. ')
       .replace(/\?+/g, '? ');
   } else if (isEs) {
-    // Expand Spanish abbreviations
+    // Expand Spanish abbreviations, currency, metrics and dates
     cleaned = cleaned
       .replace(/(\d+)\s*[kK]\s*(?:₫|vnd|dongs?)?/gi, '$1 mil dongs ')
       .replace(/(\d+)\s*[đ₫]/g, '$1 dongs ')
-      .replace(/\bVND\b/gi, 'dongs vietnamitas')
+      .replace(/\bVND\b/gi, 'dongs')
       .replace(/\bATM\b/gi, 'cajero automático')
       .replace(/\bp\.?\s*ej\.?\b/gi, 'por ejemplo')
       .replace(/\baprox\.?\b/gi, 'aproximadamente')
       .replace(/\bmin\b/gi, 'minutos')
-      .replace(/\bkm\b/gi, 'kilómetros');
+      .replace(/\bkm\/h\b/gi, 'kilómetros por hora')
+      .replace(/\bkm\b/gi, 'kilómetros')
+      .replace(/\bmts?\.?\b/gi, 'metros')
+      .replace(/\bn[ºo]\.?\s*(\d+)/gi, 'número $1')
+      .replace(/\bs\.\s*XXI\b/gi, 'siglo veintiuno')
+      .replace(/\bs\.\s*XX\b/gi, 'siglo veinte')
+      .replace(/\bs\.\s*XIX\b/gi, 'siglo diecinueve')
+      .replace(/\bs\.\s*XVIII\b/gi, 'siglo dieciocho')
+      .replace(/\bUNESCO\b/gi, 'Unesco');
   }
 
   return cleaned.trim();
@@ -188,41 +214,6 @@ function base64ToUint8Array(base64: string): Uint8Array {
     bytes[i] = binaryString.charCodeAt(i);
   }
   return bytes;
-}
-
-/**
- * Encapsulates raw 16-bit PCM (24000Hz mono) into standard RIFF WAVE Blob
- */
-function pcmToWavBlob(pcmBytes: Uint8Array, sampleRate = 24000, numChannels = 1): Blob {
-  const byteLength = pcmBytes.byteLength;
-  const buffer = new ArrayBuffer(44 + byteLength);
-  const view = new DataView(buffer);
-
-  // RIFF identifier 'RIFF'
-  view.setUint8(0, 0x52); view.setUint8(1, 0x49); view.setUint8(2, 0x46); view.setUint8(3, 0x46);
-  // file length 36 + byteLength
-  view.setUint32(4, 36 + byteLength, true);
-  // 'WAVE'
-  view.setUint8(8, 0x57); view.setUint8(9, 0x41); view.setUint8(10, 0x56); view.setUint8(11, 0x45);
-
-  // 'fmt ' chunk
-  view.setUint8(12, 0x66); view.setUint8(13, 0x6d); view.setUint8(14, 0x74); view.setUint8(15, 0x20);
-  view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
-  view.setUint16(20, 1, true);  // AudioFormat (1 for PCM)
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * numChannels * 2, true); // byte rate
-  view.setUint16(32, numChannels * 2, true); // block align
-  view.setUint16(34, 16, true); // bits per sample (16-bit)
-
-  // 'data' chunk
-  view.setUint8(36, 0x64); view.setUint8(37, 0x61); view.setUint8(38, 0x74); view.setUint8(39, 0x61);
-  view.setUint32(40, byteLength, true);
-
-  // copy pcm audio bytes
-  new Uint8Array(buffer, 44).set(pcmBytes);
-
-  return new Blob([buffer], { type: 'audio/wav' });
 }
 
 /**
@@ -278,8 +269,9 @@ export function findBestNaturalVoice(lang: string, gender: VoiceGender = 'female
       (v) => v.lang.toLowerCase().startsWith('es') || /spanish|español/i.test(v.name)
     );
     if (esVoices.length > 0) {
+      // Prioritize modern high-fidelity neural and natural voices
       const premiumEs = esVoices.find((v) =>
-        /google|natural|neural|online|jorge|monica|alvaro|elvira|siri/i.test(v.name)
+        /google español|natural|neural|online|elvira|alvaro|jorge|monica|salome|carlos|paulina|marta|siri|wavenet|neural2/i.test(v.name)
       );
       if (premiumEs) return premiumEs;
 
@@ -299,9 +291,18 @@ export function findBestNaturalVoice(lang: string, gender: VoiceGender = 'female
 }
 
 /**
- * Stops any ongoing speech immediately across all audio engines
+ * Stops any ongoing speech immediately across all audio engines and cancels any in-flight requests
  */
 export function stopAllSpeech(): void {
+  // Invalidate any in-flight async request
+  currentPlaybackSession++;
+  if (currentAbortController) {
+    try {
+      currentAbortController.abort();
+    } catch {}
+    currentAbortController = null;
+  }
+
   // 1. HTML5 Audio stop
   if (currentHtmlAudio) {
     try {
@@ -312,30 +313,94 @@ export function stopAllSpeech(): void {
     currentHtmlAudio = null;
   }
 
-  // 2. Web Audio Source stop
-  if (currentSourceNode) {
-    try {
-      currentSourceNode.stop();
-      currentSourceNode.disconnect();
-    } catch {}
-    currentSourceNode = null;
-  }
-
-  // 3. Browser Speech Synthesis stop
+  // 2. Browser Speech Synthesis stop
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     try {
       window.speechSynthesis.cancel();
     } catch {}
+    currentUtterance = null;
   }
 
   globalSpeakingState = {
     isSpeaking: false,
+    isLoading: false,
+    isPaused: false,
     speakingId: null,
     speakingText: null,
     lang: null,
     source: null,
+    currentTime: 0,
+    duration: 0,
+    progress: 0,
   };
   notifyStateChanged();
+}
+
+/**
+ * Pauses current speech playback
+ */
+export function pauseSpeech(): void {
+  if (currentHtmlAudio && !currentHtmlAudio.paused) {
+    try {
+      currentHtmlAudio.pause();
+      globalSpeakingState.isPaused = true;
+      notifyStateChanged();
+    } catch {}
+  } else if (typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.speaking) {
+    try {
+      window.speechSynthesis.pause();
+      globalSpeakingState.isPaused = true;
+      notifyStateChanged();
+    } catch {}
+  }
+}
+
+/**
+ * Resumes paused speech playback
+ */
+export function resumeSpeech(): void {
+  if (currentHtmlAudio && currentHtmlAudio.paused && globalSpeakingState.speakingId) {
+    try {
+      currentHtmlAudio.play();
+      globalSpeakingState.isPaused = false;
+      notifyStateChanged();
+    } catch {}
+  } else if (typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.paused) {
+    try {
+      window.speechSynthesis.resume();
+      globalSpeakingState.isPaused = false;
+      notifyStateChanged();
+    } catch {}
+  }
+}
+
+/**
+ * Changes playback rate in real time without cutting audio
+ */
+export function setSpeechPlaybackRate(speed: number, lang?: string): void {
+  const isEs = lang ? lang.toLowerCase().startsWith('es') : (globalSpeakingState.lang?.toLowerCase().startsWith('es') ?? true);
+  const calibrated = isEs ? speed * 1.16 : speed;
+  const safeSpeed = Math.max(0.75, Math.min(1.7, calibrated));
+  if (currentHtmlAudio) {
+    try {
+      currentHtmlAudio.playbackRate = safeSpeed;
+    } catch {}
+  }
+}
+
+/**
+ * Seeks playback to a specific timestamp in seconds
+ */
+export function seekSpeech(timeInSeconds: number): void {
+  if (currentHtmlAudio && currentHtmlAudio.duration) {
+    try {
+      const safeTime = Math.max(0, Math.min(currentHtmlAudio.duration, timeInSeconds));
+      currentHtmlAudio.currentTime = safeTime;
+      globalSpeakingState.currentTime = safeTime;
+      globalSpeakingState.progress = currentHtmlAudio.duration > 0 ? safeTime / currentHtmlAudio.duration : 0;
+      notifyStateChanged();
+    } catch {}
+  }
 }
 
 export interface PlayNaturalSpeechOptions {
@@ -347,14 +412,16 @@ export interface PlayNaturalSpeechOptions {
   engineMode?: VoiceEngineMode;
   onStart?: () => void;
   onEnd?: () => void;
+  onTimeUpdate?: (currentTime: number, duration: number, progress: number) => void;
   onError?: (err: any) => void;
+  sessionId?: number;
 }
 
 /**
  * High-Level Natural Speech Playback Function
- * 1. Tries Neural HD TTS (Gemini/Google) via /api/tts.
+ * 1. Tries Neural HD TTS (Google Neural MP3 Chunker) via /api/tts.
  * 2. Plays with HTML5 Audio & Blob URL for 100% universal device playback.
- * 3. Gracefully falls back to Calibrated Browser Speech Synthesis if offline.
+ * 3. Gracefully falls back to Calibrated Browser Speech Synthesis if offline or network failure.
  */
 export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Promise<boolean> {
   const {
@@ -366,6 +433,7 @@ export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Prom
     engineMode,
     onStart,
     onEnd,
+    onTimeUpdate,
     onError,
   } = options;
 
@@ -379,13 +447,35 @@ export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Prom
   const cleanText = preprocessTextForNaturalSpeech(text, lang);
   if (!cleanText) return false;
 
-  // Toggle stop if already speaking this exact item
+  // Toggle stop/pause if already speaking this exact item
   if (globalSpeakingState.isSpeaking && globalSpeakingState.speakingId === id) {
-    stopAllSpeech();
-    return true;
+    if (globalSpeakingState.isPaused) {
+      resumeSpeech();
+      return true;
+    } else {
+      stopAllSpeech();
+      return true;
+    }
   }
 
+  // Atomically cancel any ongoing or pending speech and start new session token
   stopAllSpeech();
+  const thisSessionId = ++currentPlaybackSession;
+
+  // Immediate visual feedback: mark as loading right away
+  globalSpeakingState = {
+    isSpeaking: false,
+    isLoading: true,
+    isPaused: false,
+    speakingId: id,
+    speakingText: cleanText,
+    lang,
+    source: null,
+    currentTime: 0,
+    duration: 0,
+    progress: 0,
+  };
+  notifyStateChanged();
 
   // Try Tier 1: Neural Voice Engine via server /api/tts (when online & engine is auto or neural)
   const canAttemptNeural =
@@ -405,8 +495,8 @@ export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Prom
       }
 
       if (!blobUrl) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        currentAbortController = new AbortController();
+        const timeoutId = setTimeout(() => currentAbortController?.abort(), 3500);
 
         const res = await fetch('/api/tts', {
           method: 'POST',
@@ -417,81 +507,110 @@ export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Prom
             gender: effectiveGender,
             speed: effectiveSpeed,
           }),
-          signal: controller.signal,
+          signal: currentAbortController.signal,
         });
         clearTimeout(timeoutId);
+
+        // RACE CONDITION SHIELD: If another request started while fetching, discard this result!
+        if (thisSessionId !== currentPlaybackSession) {
+          return false;
+        }
 
         if (res.ok) {
           const data = await res.json();
           if (data && data.audioBase64) {
             const rawBytes = base64ToUint8Array(data.audioBase64);
-            let blob: Blob;
-
-            // Handle PCM vs WAV vs MP3
-            if (data.mimeType && data.mimeType.includes('pcm')) {
-              blob = pcmToWavBlob(rawBytes, 24000);
-            } else if (rawBytes[0] === 0x52 && rawBytes[1] === 0x49 && rawBytes[2] === 0x46 && rawBytes[3] === 0x46) {
-              // Valid RIFF WAV header
-              blob = new Blob([rawBytes.buffer as ArrayBuffer], { type: 'audio/wav' });
-            } else if (data.mimeType && data.mimeType.includes('wav')) {
-              // Might be raw PCM returned with audio/wav mime
-              blob = pcmToWavBlob(rawBytes, 24000);
-            } else {
-              // MP3 or MPEG
-              blob = new Blob([rawBytes.buffer as ArrayBuffer], { type: data.mimeType || 'audio/mpeg' });
-            }
-
+            const mime = data.mimeType || 'audio/mpeg';
+            const blob = new Blob([rawBytes.buffer as ArrayBuffer], { type: mime });
             blobUrl = URL.createObjectURL(blob);
-            audioBlobCache.set(cacheKey, { blobUrl, mimeType: data.mimeType || 'audio/mpeg' });
+            audioBlobCache.set(cacheKey, { blobUrl, mimeType: mime });
           }
         }
       }
 
+      // RACE CONDITION SHIELD: Verify session before creating audio
+      if (thisSessionId !== currentPlaybackSession) {
+        return false;
+      }
+
       if (blobUrl) {
+        // Stop any leftover instance
+        if (currentHtmlAudio) {
+          try {
+            currentHtmlAudio.pause();
+            currentHtmlAudio.currentTime = 0;
+            currentHtmlAudio.src = '';
+          } catch {}
+          currentHtmlAudio = null;
+        }
+
+        const isEs = lang.toLowerCase().startsWith('es');
         const audio = new Audio(blobUrl);
-        audio.playbackRate = Math.max(0.7, Math.min(1.4, effectiveSpeed));
+        // Calibrate Spanish speed for energetic, natural conversational rhythm (avoids dragging)
+        const calibratedSpeed = isEs ? effectiveSpeed * 1.16 : effectiveSpeed;
+        audio.playbackRate = Math.max(0.75, Math.min(1.7, calibratedSpeed));
 
         globalSpeakingState = {
           isSpeaking: true,
+          isLoading: false,
+          isPaused: false,
           speakingId: id,
           speakingText: cleanText,
           lang,
           source: 'neural',
+          currentTime: 0,
+          duration: 0,
+          progress: 0,
         };
         notifyStateChanged();
         if (onStart) onStart();
 
         currentHtmlAudio = audio;
 
-        audio.onended = () => {
-          if (globalSpeakingState.speakingId === id) {
-            globalSpeakingState = {
-              isSpeaking: false,
-              speakingId: null,
-              speakingText: null,
-              lang: null,
-              source: null,
-            };
+        audio.ontimeupdate = () => {
+          if (thisSessionId === currentPlaybackSession && globalSpeakingState.speakingId === id && audio.duration) {
+            const cur = audio.currentTime;
+            const dur = audio.duration;
+            const prog = dur > 0 ? cur / dur : 0;
+            globalSpeakingState.currentTime = cur;
+            globalSpeakingState.duration = dur;
+            globalSpeakingState.progress = prog;
             notifyStateChanged();
+            if (onTimeUpdate) onTimeUpdate(cur, dur, prog);
+          }
+        };
+
+        audio.onended = () => {
+          if (thisSessionId === currentPlaybackSession && globalSpeakingState.speakingId === id) {
+            stopAllSpeech();
             if (onEnd) onEnd();
           }
         };
 
         audio.onerror = (e) => {
-          console.warn('[Speech] Audio element error, falling back to browser synthesis:', e);
-          stopAllSpeech();
-          playBrowserSpeechOptimized(options);
+          if (thisSessionId === currentPlaybackSession) {
+            console.warn('[Speech] Audio element error, falling back to browser synthesis:', e);
+            stopAllSpeech();
+            playBrowserSpeechOptimized({ ...options, sessionId: thisSessionId });
+          }
         };
 
         await audio.play();
         return true;
       }
-    } catch (neuralErr) {
-      console.info('[Speech] Neural TTS fallback to browser engine:', (neuralErr as any)?.message);
+    } catch (neuralErr: any) {
+      if (thisSessionId !== currentPlaybackSession) {
+        return false;
+      }
+      console.info('[Speech] Neural TTS fallback to browser engine:', neuralErr?.message);
     }
   }
 
-  // Tier 2: Enhanced Browser Speech Synthesis Engine with Pro Tonal Calibration
+  // RACE CONDITION SHIELD: Verify session before browser fallback
+  if (thisSessionId !== currentPlaybackSession) {
+    return false;
+  }
+
   return playBrowserSpeechOptimized({
     text: cleanText,
     lang,
@@ -500,7 +619,9 @@ export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Prom
     speed: effectiveSpeed,
     onStart,
     onEnd,
+    onTimeUpdate,
     onError,
+    sessionId: thisSessionId,
   });
 }
 
@@ -513,7 +634,21 @@ function playBrowserSpeechOptimized(options: PlayNaturalSpeechOptions): boolean 
     return false;
   }
 
-  const { text, lang = 'vi-VN', id = `speech-${Date.now()}`, gender = 'female', speed = 0.92, onStart, onEnd, onError } = options;
+  const {
+    text,
+    lang = 'vi-VN',
+    id = `speech-${Date.now()}`,
+    gender = 'female',
+    speed = 0.95,
+    onStart,
+    onEnd,
+    onError,
+    sessionId,
+  } = options;
+
+  if (sessionId && sessionId !== currentPlaybackSession) {
+    return false;
+  }
 
   try {
     window.speechSynthesis.cancel();
@@ -528,10 +663,10 @@ function playBrowserSpeechOptimized(options: PlayNaturalSpeechOptions): boolean 
     utterance.lang = isVi ? 'vi-VN' : isEs ? 'es-ES' : 'en-US';
 
     if (isVi) {
-      utterance.rate = Math.max(0.75, Math.min(1.2, speed * 0.92));
+      utterance.rate = Math.max(0.75, Math.min(1.2, speed * 0.95));
       utterance.pitch = 0.98;
     } else if (isEs) {
-      utterance.rate = Math.max(0.8, Math.min(1.25, speed * 0.96));
+      utterance.rate = Math.max(1.0, Math.min(1.4, speed * 1.16));
       utterance.pitch = 1.0;
     } else {
       utterance.rate = speed;
@@ -545,12 +680,19 @@ function playBrowserSpeechOptimized(options: PlayNaturalSpeechOptions): boolean 
       utterance.voice = bestVoice;
     }
 
+    currentUtterance = utterance;
+
     globalSpeakingState = {
       isSpeaking: true,
+      isLoading: false,
+      isPaused: false,
       speakingId: id,
       speakingText: text,
       lang,
       source: 'browser',
+      currentTime: 0,
+      duration: 0,
+      progress: 0,
     };
     notifyStateChanged();
     if (onStart) onStart();
@@ -559,11 +701,17 @@ function playBrowserSpeechOptimized(options: PlayNaturalSpeechOptions): boolean 
       if (globalSpeakingState.speakingId === id) {
         globalSpeakingState = {
           isSpeaking: false,
+          isLoading: false,
+          isPaused: false,
           speakingId: null,
           speakingText: null,
           lang: null,
           source: null,
+          currentTime: 0,
+          duration: 0,
+          progress: 0,
         };
+        currentUtterance = null;
         notifyStateChanged();
         if (onEnd) onEnd();
       }
@@ -574,11 +722,17 @@ function playBrowserSpeechOptimized(options: PlayNaturalSpeechOptions): boolean 
       if (globalSpeakingState.speakingId === id) {
         globalSpeakingState = {
           isSpeaking: false,
+          isLoading: false,
+          isPaused: false,
           speakingId: null,
           speakingText: null,
           lang: null,
           source: null,
+          currentTime: 0,
+          duration: 0,
+          progress: 0,
         };
+        currentUtterance = null;
         notifyStateChanged();
       }
       if (onError) onError(e);

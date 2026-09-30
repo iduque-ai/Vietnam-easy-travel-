@@ -17,7 +17,9 @@ import {
   Trash2,
   X,
   Sliders,
-  Sparkles
+  Sparkles,
+  MessageCircle,
+  Zap,
 } from 'lucide-react';
 import { PhraseItem, DishItem } from '../types';
 import { TRAVEL_PHRASES } from '../data/phrases';
@@ -26,15 +28,16 @@ import {
   speakVietnamese,
   getDefaultTranslatorSubTab,
   getSavedCustomCards,
+  saveCustomCard,
   deleteSavedCustomCard,
   CustomTranslationCard,
   subscribeSpeechState,
   stopAllSpeech,
   getSavedSpeechSettings,
-  SpeechSettings
+  SpeechSettings,
 } from '../utils/storage';
 import { AllergyCardsSection } from './AllergyCardsSection';
-import { ConversationMode } from './ConversationMode';
+import { ConversationMode, ConversationTargetPhrase } from './ConversationMode';
 import { VoiceSettingsModal } from './VoiceSettingsModal';
 import { AudioWaveIndicator } from './AudioWaveIndicator';
 
@@ -70,6 +73,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
   const [customCards, setCustomCards] = useState<CustomTranslationCard[]>(() => getSavedCustomCards());
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [speechSettings, setSpeechSettings] = useState<SpeechSettings>(() => getSavedSpeechSettings());
+  const [targetConversationPhrase, setTargetConversationPhrase] = useState<ConversationTargetPhrase | null>(null);
   const [speakingState, setSpeakingState] = useState<{
     isSpeaking: boolean;
     speakingId: string | null;
@@ -101,6 +105,57 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
     setCustomCards(updated);
   };
 
+  const handleToggleFavoritePhrase = (phrase: PhraseItem) => {
+    const existing = customCards.find(
+      (c) =>
+        c.vi.trim().toLowerCase() === phrase.vietnamese.trim().toLowerCase() ||
+        c.es.trim().toLowerCase() === phrase.spanish.trim().toLowerCase()
+    );
+
+    if (existing) {
+      const updated = deleteSavedCustomCard(existing.id);
+      setCustomCards(updated);
+    } else {
+      const catMap: Record<string, 'precios' | 'comida' | 'transporte' | 'cortesia' | 'emergencia'> = {
+        compras: 'precios',
+        comida: 'comida',
+        transporte: 'transporte',
+        cortesia: 'cortesia',
+        emergencias: 'emergencia',
+        numeros: 'precios',
+      };
+      const newCard: CustomTranslationCard = {
+        id: `custom-fav-${phrase.id || Date.now()}`,
+        label: phrase.spanish,
+        category: catMap[phrase.category] || 'cortesia',
+        en: phrase.spanish,
+        es: phrase.spanish,
+        vi: phrase.vietnamese,
+        phonetic: phrase.phonetic || '',
+        tip: phrase.toneTip || 'Guardada desde el Diccionario',
+        createdAt: Date.now(),
+      };
+      const updated = saveCustomCard(newCard);
+      setCustomCards(updated);
+    }
+  };
+
+  const handleSendToConversation = (phrase: {
+    spanish: string;
+    vietnamese: string;
+    phonetic?: string;
+    toneTip?: string;
+  }) => {
+    setTargetConversationPhrase({
+      es: phrase.spanish,
+      vi: phrase.vietnamese,
+      phonetic: phrase.phonetic,
+      tip: phrase.toneTip,
+    });
+    setSubTab('conversation');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Filter phrases with custom cards sorted first (searches globally when user types in search bar)
   const filteredPhrases = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -116,7 +171,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
     };
 
     // Custom cards
-    const matchedCustomCards: PhraseItem[] = customCards
+    const matchedCustomCards: (PhraseItem & { isCustom?: boolean })[] = customCards
       .filter((c) => {
         const targetCat = catMap[c.category] || 'cortesia';
         const matchesCat = isSearching || selectedCategory === 'guardadas' || targetCat === selectedCategory;
@@ -134,7 +189,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
         spanish: c.es,
         vietnamese: c.vi,
         phonetic: c.phonetic,
-        toneTip: c.tip || 'Tarjeta personalizada guardada por ti',
+        toneTip: c.tip || 'Tarjeta guardada en tus frases',
         priority: true,
         isCustom: true,
       }));
@@ -188,8 +243,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
 
   return (
     <div className="space-y-6 max-w-4xl w-full mx-auto min-w-0">
-      {/* Sub tabs navigation */}
-      {/* SUB-TABS NAVIGATION & VOICE CONTROLS */}
+      {/* SUB-TABS NAVIGATION */}
       <div className="w-full space-y-2.5">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-stone-200/60 p-1.5 rounded-2xl border border-stone-300/70 shadow-2xs">
           <button
@@ -200,9 +254,10 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                 ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
+            title="Traducción bidireccional y diálogo en vivo"
           >
             <Languages className="w-4 h-4 shrink-0" />
-            <span className="truncate">Conversación</span>
+            <span className="truncate">Diálogo en Vivo</span>
           </button>
 
           <button
@@ -213,9 +268,10 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                 ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
+            title="Frases útiles y pronunciación offline"
           >
             <BookOpen className="w-4 h-4 shrink-0" />
-            <span className="truncate">Frases Clave</span>
+            <span className="truncate">Frases Útiles</span>
           </button>
 
           <button
@@ -226,9 +282,10 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                 ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
+            title="Platos típicos e ingredientes"
           >
             <UtensilsCrossed className="w-4 h-4 shrink-0" />
-            <span className="truncate">Menú & Platos</span>
+            <span className="truncate">Platos & Menú</span>
           </button>
 
           <button
@@ -239,72 +296,78 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                 ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
+            title="Tarjetas médicas y alergias"
           >
             <ShieldAlert className="w-4 h-4 shrink-0" />
-            <span className="truncate">Fichas Dietas</span>
-          </button>
-        </div>
-
-        {/* Voice Natural Tuning Quick Bar */}
-        <div className="bg-gradient-to-r from-stone-900 via-[#181614] to-stone-900 text-stone-200 px-3.5 py-2 rounded-2xl border border-stone-800 flex items-center justify-between gap-2 shadow-2xs">
-          <div className="flex items-center gap-2 text-xs min-w-0">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <span className="text-amber-300 font-semibold text-[11px] sm:text-xs truncate flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Voz Natural Suave</span>
-              <span className="text-stone-400 font-normal hidden sm:inline">
-                · {speechSettings.speedPreset === 'slow' ? '0.8x lenta' : speechSettings.speedPreset === 'fast' ? '1.1x rápida' : '0.92x fluida'} ({speechSettings.gender === 'female' ? 'femenina' : 'masculina'})
-              </span>
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setIsVoiceModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-300 hover:text-amber-200 text-[11px] font-bold transition cursor-pointer border border-stone-700 shrink-0 active:scale-95"
-          >
-            <Sliders className="w-3 h-3 text-amber-400" />
-            <span>Ajustar voz</span>
+            <span className="truncate">Alergias & Dietas</span>
           </button>
         </div>
       </div>
 
-      {/* SEARCH BAR (For phrases & food) */}
-      {(subTab === 'phrases' || subTab === 'food') && (
-        <div className="relative w-full min-w-0">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-          <input
-            type="text"
-            placeholder={
-              subTab === 'phrases'
-                ? 'Buscar frase (ej. cuenta, gracias, cuánto vale)...'
-                : 'Buscar plato típico (ej. Phở, Bánh mì, café)...'
-            }
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-stone-300/80 bg-white text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs transition"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
-              title="Borrar búsqueda"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* 0. CONVERSATION MODE (BIDIRECTIONAL) */}
+      {/* 0. TRADUCTOR EN VIVO (CONVERSATION MODE) */}
       {subTab === 'conversation' && (
-        <ConversationMode isOnline={isOnline} />
+        <ConversationMode
+          isOnline={isOnline}
+          targetPhrase={targetConversationPhrase}
+          onClearTargetPhrase={() => setTargetConversationPhrase(null)}
+        />
       )}
 
-      {/* 1. PHRASES TAB */}
+      {/* 1. GUÍA & DICCIONARIO TAB */}
       {subTab === 'phrases' && (
-        <div className="space-y-3 w-full min-w-0">
+        <div className="space-y-3.5 w-full min-w-0">
+          {/* Header context badge */}
+          <div className="bg-gradient-to-r from-[#181614] via-[#201d19] to-[#181614] text-stone-100 rounded-2xl p-3.5 sm:px-5 sm:py-4 border border-amber-500/20 shadow-[0_4px_20px_rgba(0,0,0,0.25)] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
+                <BookOpen className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-serif font-bold text-sm sm:text-base text-white tracking-tight">Diccionario de Frases</h3>
+                <p className="text-[11px] sm:text-xs text-stone-400 mt-0.5">
+                  Pronunciación fonética y consejos prácticos para viajar por Vietnam
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsVoiceModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+                title="Ajustar velocidad y voz"
+              >
+                <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
+              </button>
+              <span className="bg-stone-900/90 px-2.5 py-1.5 rounded-xl border border-stone-800 font-medium text-xs text-stone-300 font-mono hidden sm:inline-flex items-center shadow-2xs">
+                {filteredPhrases.length} frases
+              </span>
+            </div>
+          </div>
+
+          {/* Search Bar placed directly under dark header */}
+          <div className="relative w-full min-w-0">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+            <input
+              type="text"
+              placeholder="Buscar frase (ej. cuenta, cuánto vale, gracias, baño)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-stone-300/80 bg-white text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs transition"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
+                title="Borrar búsqueda"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
           {/* Categories bar */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs no-scrollbar w-full max-w-full overscroll-x-contain touch-pan-x">
             {[
@@ -350,114 +413,147 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
 
           {/* Phrases list */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0">
-            {filteredPhrases.map((phrase) => (
-              <div
-                key={phrase.id}
-                className={`rounded-3xl p-5 sm:p-6 border transition-all flex flex-col justify-between min-w-0 break-words ${
-                  phrase.isCustom
-                    ? 'bg-amber-50/40 border-amber-300 shadow-sm hover:border-amber-400 hover:shadow-md'
-                    : 'bg-white border-stone-200/90 shadow-[0_2px_16px_rgba(28,25,23,0.03)] hover:border-amber-400/80 hover:shadow-md'
-                }`}
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      {phrase.isCustom ? (
-                        <span className="text-[10px] text-amber-900 font-bold bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                          <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                          <span>Tarjeta personal</span>
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
-                          {phrase.category}
-                        </span>
-                      )}
+            {filteredPhrases.map((phrase) => {
+              const isSaved = customCards.some(
+                (c) =>
+                  c.vi.trim().toLowerCase() === phrase.vietnamese.trim().toLowerCase() ||
+                  c.es.trim().toLowerCase() === phrase.spanish.trim().toLowerCase()
+              );
+
+              return (
+                <div
+                  key={phrase.id}
+                  className={`rounded-3xl p-5 sm:p-6 border transition-all flex flex-col justify-between min-w-0 break-words ${
+                    phrase.isCustom
+                      ? 'bg-amber-50/40 border-amber-300 shadow-sm hover:border-amber-400 hover:shadow-md'
+                      : 'bg-white border-stone-200/90 shadow-[0_2px_16px_rgba(28,25,23,0.03)] hover:border-amber-400/80 hover:shadow-md'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        {phrase.isCustom ? (
+                          <span className="text-[10px] text-amber-900 font-bold bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                            <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                            <span>Tarjeta personal</span>
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                            {phrase.category}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {phrase.priority && !phrase.isCustom && (
+                          <span className="text-[10px] text-amber-800 font-bold bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full shadow-2xs">
+                            ★ Imprescindible
+                          </span>
+                        )}
+
+                        {/* Favorite star toggle button */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFavoritePhrase(phrase)}
+                          className={`p-1.5 rounded-xl transition cursor-pointer ${
+                            isSaved
+                              ? 'bg-amber-100 text-amber-900 font-bold'
+                              : 'text-stone-400 hover:text-amber-600 hover:bg-stone-100'
+                          }`}
+                          title={isSaved ? 'Guardada en tus atajos' : 'Guardar en tus atajos'}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${isSaved ? 'fill-amber-500 text-amber-500' : ''}`} />
+                        </button>
+                      </div>
                     </div>
-                    {phrase.priority && !phrase.isCustom && (
-                      <span className="text-[10px] text-amber-800 font-bold bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full shadow-2xs">
-                        ★ Imprescindible
-                      </span>
+
+                    <h4 className="font-serif font-bold text-base sm:text-lg text-stone-900 leading-snug break-words">
+                      {phrase.spanish}
+                    </h4>
+
+                    <div className="bg-gradient-to-br from-amber-500/[0.08] to-amber-500/[0.02] rounded-2xl p-3.5 border border-amber-200/70 min-w-0 space-y-1.5 shadow-2xs">
+                      <div className="text-xl font-black text-amber-950 font-sans tracking-wide break-words">
+                        {phrase.vietnamese}
+                      </div>
+                      <div className="text-xs text-stone-600 font-mono break-words flex items-center gap-1.5">
+                        <span className="text-stone-400 font-sans">🗣️ Fonética:</span>
+                        <strong className="text-amber-950 font-bold">{phrase.phonetic}</strong>
+                      </div>
+                    </div>
+
+                    {phrase.toneTip && (
+                      <p className="text-[11px] text-stone-500 leading-relaxed bg-stone-50/70 p-2.5 rounded-xl border border-stone-100">
+                        💡 {phrase.toneTip}
+                      </p>
                     )}
                   </div>
 
-                  <h4 className="font-serif font-bold text-base sm:text-lg text-stone-900 leading-snug break-words">
-                    {phrase.spanish}
-                  </h4>
+                  <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-stone-100 flex-wrap">
+                    {/* Bridge action: Send to live conversation */}
+                    <button
+                      type="button"
+                      onClick={() => handleSendToConversation(phrase)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-950 border border-amber-500/30 text-xs font-bold transition cursor-pointer active:scale-95"
+                      title="Cargar en el Diálogo en Vivo para mostrarla en grande o hablarla"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-600" />
+                      <span>Decir ahora</span>
+                    </button>
 
-                  <div className="bg-gradient-to-br from-amber-500/[0.08] to-amber-500/[0.02] rounded-2xl p-3.5 border border-amber-200/70 min-w-0 space-y-1.5 shadow-2xs">
-                    <div className="text-xl font-black text-amber-950 font-sans tracking-wide break-words">
-                      {phrase.vietnamese}
-                    </div>
-                    <div className="text-xs text-stone-600 font-mono break-words flex items-center gap-1.5">
-                      <span className="text-stone-400 font-sans">🗣️ Fonética:</span>
-                      <strong className="text-amber-950 font-bold">{phrase.phonetic}</strong>
-                    </div>
-                  </div>
+                    <div className="flex items-center gap-2 ml-auto">
+                      {phrase.isCustom && (
+                        <button
+                          onClick={() => handleDeleteCustom(phrase.id)}
+                          className="flex items-center gap-1 text-[11px] text-stone-400 hover:text-rose-600 transition cursor-pointer p-1.5 rounded-xl hover:bg-rose-50"
+                          title="Eliminar esta tarjeta personalizada"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
 
-                  {phrase.toneTip && (
-                    <p className="text-[11px] text-stone-500 leading-relaxed bg-stone-50/70 p-2.5 rounded-xl border border-stone-100">
-                      💡 {phrase.toneTip}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-stone-100">
-                  <div>
-                    {phrase.isCustom && (
                       <button
-                        onClick={() => handleDeleteCustom(phrase.id)}
-                        className="flex items-center gap-1 text-[11px] text-stone-400 hover:text-rose-600 transition cursor-pointer p-1.5 rounded-xl hover:bg-rose-50"
-                        title="Eliminar esta tarjeta personalizada"
+                        onClick={() => handleSpeak(phrase.vietnamese, `phrase-${phrase.id}`)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border shadow-2xs ${
+                          speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`
+                            ? 'bg-amber-400 text-stone-950 font-bold border-amber-300 ring-2 ring-amber-400/30'
+                            : 'bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-950 border-amber-200/70'
+                        }`}
+                        title="Reproducir pronunciación en vietnamita (Voz natural suave)"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Eliminar</span>
+                        <AudioWaveIndicator
+                          isPlaying={speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`}
+                          size="sm"
+                          colorClass="text-amber-950"
+                        />
+                        <span>
+                          {speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`
+                            ? 'Reproduciendo...'
+                            : 'Escuchar'}
+                        </span>
                       </button>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleSpeak(phrase.vietnamese, `phrase-${phrase.id}`)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border shadow-2xs ${
-                        speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`
-                          ? 'bg-amber-400 text-stone-950 font-bold border-amber-300 ring-2 ring-amber-400/30'
-                          : 'bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-950 border-amber-200/70'
-                      }`}
-                      title="Reproducir pronunciación en vietnamita (Voz natural suave)"
-                    >
-                      <AudioWaveIndicator
-                        isPlaying={speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`}
-                        size="sm"
-                        colorClass="text-amber-950"
-                      />
-                      <span>
-                        {speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`
-                          ? 'Reproduciendo...'
-                          : 'Escuchar'}
-                      </span>
-                    </button>
-
-                    <button
-                      onClick={() => handleCopy(phrase.vietnamese, phrase.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 active:scale-95 text-stone-700 text-xs font-semibold transition cursor-pointer"
-                      title="Copiar texto en vietnamita"
-                    >
-                      {copiedId === phrase.id ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
-                          <span className="text-emerald-700 font-bold">Copiado</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5 text-stone-500" />
-                          <span>Copiar</span>
-                        </>
-                      )}
-                    </button>
+                      <button
+                        onClick={() => handleCopy(phrase.vietnamese, phrase.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 active:scale-95 text-stone-700 text-xs font-semibold transition cursor-pointer"
+                        title="Copiar texto en vietnamita"
+                      >
+                        {copiedId === phrase.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
+                            <span className="text-emerald-700 font-bold">Copiado</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-stone-500" />
+                            <span>Copiar</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {filteredPhrases.length === 0 && (
@@ -466,7 +562,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                 No se encontraron frases que coincidan con "{searchQuery}".
               </p>
               <p className="text-xs text-stone-500 max-w-md mx-auto">
-                Puedes escribir la frase libremente en el <strong>Traductor Conversación</strong> para traducirla al instante con IA y escuchar la voz nativa.
+                Puedes escribir la frase libremente en el <strong>Traductor en Vivo</strong> para traducirla al instante con IA y escuchar la voz nativa.
               </p>
               <div className="flex items-center justify-center gap-2 pt-1">
                 <button
@@ -481,7 +577,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
                   onClick={() => setSubTab('conversation')}
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 text-xs font-bold transition cursor-pointer shadow-xs"
                 >
-                  Ir al Traductor ➔
+                  Ir al Traductor en Vivo ➔
                 </button>
               </div>
             </div>
@@ -493,29 +589,55 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
       {subTab === 'food' && (
         <div className="space-y-4">
           {/* Top Status Bar: Dark Noir with Gold Trim */}
-          <div className="bg-[#141210] text-stone-100 rounded-2xl p-3 sm:px-5 sm:py-3.5 border border-stone-800 shadow-md flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+          <div className="bg-gradient-to-r from-[#181614] via-[#201d19] to-[#181614] text-stone-100 rounded-2xl p-3.5 sm:px-5 sm:py-4 border border-amber-500/20 shadow-[0_4px_20px_rgba(0,0,0,0.25)] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
                 <UtensilsCrossed className="w-4 h-4" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-serif font-bold text-base text-white">Menú Callejero & Platos Típicos</span>
-                  <span className="text-[11px] text-amber-300 font-bold bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-800/60">
-                    Guía Gastronómica
-                  </span>
-                </div>
-                <p className="text-xs text-stone-400 mt-0.5">
-                  Descifra letreros callejeros, ingredientes, cómo pedir como un local y notas dietéticas
+                <h3 className="font-serif font-bold text-sm sm:text-base text-white tracking-tight">Platos & Comida Callejera</h3>
+                <p className="text-[11px] sm:text-xs text-stone-400 mt-0.5">
+                  Ingredientes, pronunciación y cómo pedir cada plato como un local
                 </p>
               </div>
             </div>
 
-            <div className="text-xs text-stone-300 flex items-center gap-2">
-              <span className="bg-stone-900 px-3 py-1 rounded-xl border border-stone-800 font-medium text-xs text-amber-300 font-mono">
-                {filteredDishes.length} platos catalogados
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsVoiceModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+                title="Ajustar velocidad y voz"
+              >
+                <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
+              </button>
+              <span className="bg-stone-900/90 px-2.5 py-1.5 rounded-xl border border-stone-800 font-medium text-xs text-stone-300 font-mono hidden sm:inline-flex items-center shadow-2xs">
+                {filteredDishes.length} platos
               </span>
             </div>
+          </div>
+
+          {/* Search Bar placed directly under dark header */}
+          <div className="relative w-full min-w-0">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+            <input
+              type="text"
+              placeholder="Buscar plato o ingrediente (ej. Phở, Bánh mì, café, ternera)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-stone-300/80 bg-white text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs transition"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
+                title="Borrar búsqueda"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0">

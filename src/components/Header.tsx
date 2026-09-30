@@ -63,9 +63,9 @@ const NAV_ITEMS: {
   },
   {
     id: 'translator',
-    label: 'Traductor & Conversación',
+    label: 'Diálogo en Vivo',
     shortLabel: 'Traductor',
-    description: 'Conversación directa inglés-vietnamita, frases clave y platos',
+    description: 'Traducción bidireccional en tiempo real con voz y respuestas rápidas',
     icon: Languages,
   },
   {
