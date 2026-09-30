@@ -104,7 +104,7 @@ const QUICK_PHRASES: QuickPhrase[] = [
     tip: 'Cajeros de TPBank, VPBank o BIDV suelen admitir tarjetas extranjeras.',
   },
   {
-    label: '20.000 ₫ (~0,75 €)',
+    label: '20.000 ₫ (0,75 €)',
     category: 'precios',
     en: 'Twenty thousand VND',
     es: 'Veinte mil dongs',
@@ -113,7 +113,7 @@ const QUICK_PHRASES: QuickPhrase[] = [
     tip: '20k VND. Billete azul de papel/polímero. Típico de un té helado (trà đá).',
   },
   {
-    label: '50.000 ₫ (~1,90 €)',
+    label: '50.000 ₫ (1,90 €)',
     category: 'precios',
     en: 'Fifty thousand VND',
     es: 'Cincuenta mil dongs',
@@ -122,7 +122,7 @@ const QUICK_PHRASES: QuickPhrase[] = [
     tip: '50k VND. Billete rosa rojizo. Precio habitual de un plato de phở o bún chả.',
   },
   {
-    label: '100.000 ₫ (~3,80 €)',
+    label: '100.000 ₫ (3,80 €)',
     category: 'precios',
     en: 'One hundred thousand VND',
     es: 'Cien mil dongs',
@@ -131,7 +131,7 @@ const QUICK_PHRASES: QuickPhrase[] = [
     tip: '100k VND. Billete verde de polímero. Muy común para compras medias.',
   },
   {
-    label: '200.000 ₫ (~7,60 €)',
+    label: '200.000 ₫ (7,60 €)',
     category: 'precios',
     en: 'Two hundred thousand VND',
     es: 'Doscientos mil dongs',
@@ -140,7 +140,7 @@ const QUICK_PHRASES: QuickPhrase[] = [
     tip: '200k VND. Billete granate rojizo. Frecuente en transportes y souvenirs.',
   },
   {
-    label: '500.000 ₫ (~19,00 €)',
+    label: '500.000 ₫ (19,00 €)',
     category: 'precios',
     en: 'Five hundred thousand VND',
     es: 'Quinientos mil dongs',
@@ -639,7 +639,7 @@ export const ConversationMode: React.FC<ConversationModeProps> = ({ isOnline }) 
     if (direction === 'traveler-to-vi') {
       setDirection('vi-to-traveler');
       setInputText(translatedText || 'Năm mươi nghìn');
-      setTranslatedText(travelerLang === 'es' ? 'Cincuenta mil dongs (~1,90 €)' : 'Fifty thousand VND (~1.90 €)');
+      setTranslatedText(travelerLang === 'es' ? 'Cincuenta mil dongs (1,90 €)' : 'Fifty thousand VND (1.90 €)');
       setPhoneticText('Nam muoi nghin');
       setTipText('50.000 dongs vietnamitas');
     } else {

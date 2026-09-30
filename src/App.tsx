@@ -351,6 +351,7 @@ export default function App() {
             itineraryState={itineraryState}
             onNavigateToItinerary={() => setActiveTab('itinerary')}
             onToggleOnlineMode={handleToggleOnlineMode}
+            onOpenPermissionsModal={() => setIsPermissionsModalOpen(true)}
             onNavigateToAllergies={() => {
               setTranslatorSubTab('allergy');
               setActiveTab('translator');

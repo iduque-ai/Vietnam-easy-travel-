@@ -4,6 +4,15 @@ export type CurrencyCode = 'EUR' | 'USD' | 'GBP' | 'AUD' | 'CAD' | 'JPY' | 'CHF'
 
 export type BudgetPreference = 'all' | 'budget' | 'moderate' | 'fine';
 
+export type CuisineFilterType =
+  | 'all'
+  | 'local'
+  | 'street_food'
+  | 'vegetarian'
+  | 'western'
+  | 'seafood'
+  | 'cafe';
+
 export type RestaurantSortOption =
   | 'algorithm' // Algoritmo inteligente (puntuación + volumen + presupuesto)
   | 'rating' // Mayor puntuación bayesiana
@@ -32,6 +41,7 @@ export interface RestaurantItem {
     | 'Café de Especialidad'
     | 'Bistró / Fusión'
     | 'Alta Cocina / Michelin';
+  cuisineTypes?: CuisineFilterType[];
   specialties: string[];
   mustOrderDish: string;
   description: string;
@@ -99,9 +109,11 @@ export interface RestaurantMenuData {
   items: RestaurantMenuItem[];
   photos: RestaurantReviewPhoto[];
   recentReviews?: RestaurantReviewItem[];
+  googleRating?: number;
+  googleReviewsCount?: number;
   tipsForOrdering?: string[];
   lastUpdated?: string;
-  source: 'google_places_live' | 'curated_database' | 'ai_extracted';
+  source: 'google_places_live' | 'curated_database' | 'ai_extracted' | 'google_grounding_live';
 }
 
 export interface RestaurantScoreBreakdown {

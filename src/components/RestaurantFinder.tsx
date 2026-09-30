@@ -20,10 +20,12 @@ import {
   BookOpen,
   ExternalLink,
   ShieldAlert,
+  Clock,
 } from 'lucide-react';
 import {
   RestaurantItem,
   BudgetPreference,
+  CuisineFilterType,
   RestaurantSortOption,
   ExchangeRatesData,
 } from '../types';
@@ -31,8 +33,11 @@ import { RAW_RESTAURANTS_DATA } from '../data/restaurants';
 import {
   filterStrictRestaurants,
   sortRestaurants,
+  matchesCuisineFilter,
+  CUISINE_OPTIONS_CONFIG,
   BUDGET_TIER_CONFIG,
 } from '../utils/restaurantAlgorithm';
+import { checkRestaurantOpenStatus, formatFullOpeningHours } from '../utils/openingHours';
 import { RestaurantMap, getRestaurantTheme } from './RestaurantMap';
 import { RestaurantMenuModal } from './RestaurantMenuModal';
 import { CitySelectionModal } from './CitySelectionModal';
@@ -52,6 +57,7 @@ interface RestaurantFinderProps {
   onNavigateToItinerary?: () => void;
   onToggleOnlineMode?: () => void;
   onNavigateToAllergies?: () => void;
+  onOpenPermissionsModal?: () => void;
 }
 
 const CITY_COORDINATES = CITY_COORDINATES_MAP;
@@ -63,9 +69,12 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
   onNavigateToItinerary,
   onToggleOnlineMode,
   onNavigateToAllergies,
+  onOpenPermissionsModal,
 }) => {
   // Budget & Filter State
   const [budgetPref, setBudgetPref] = useState<BudgetPreference>('all');
+  const [cuisineFilter, setCuisineFilter] = useState<CuisineFilterType>('all');
+  const [onlyOpenNow, setOnlyOpenNow] = useState<boolean>(false);
   const [selectedCity, setSelectedCity] = useState<string>(() => {
     try {
       return localStorage.getItem('vietnam_travel_selected_city') || 'Sa Pa';
@@ -86,6 +95,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
 
   const [selectedRestaurant, setSelectedRestaurant] = useState<RestaurantItem | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
 
   // Modal states
   const [showAddToItineraryModal, setShowAddToItineraryModal] = useState<RestaurantItem | null>(null);
@@ -441,10 +451,20 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
     minReviewsThreshold,
   ]);
 
-  // Algorithmic sorting with budget affinity
+  // Algorithmic sorting with budget affinity, cuisine filter and open now filter
   const sortedScoredEntries = useMemo(() => {
-    return sortRestaurants(displayPool, sortOption, budgetPref, userCoords);
-  }, [displayPool, sortOption, budgetPref, userCoords]);
+    let list = displayPool.filter((r) => matchesCuisineFilter(r, cuisineFilter));
+    if (onlyOpenNow) {
+      list = list.filter((r) => checkRestaurantOpenStatus(r.openingHours).isOpen);
+    }
+    return sortRestaurants(list, sortOption, budgetPref, userCoords);
+  }, [displayPool, cuisineFilter, onlyOpenNow, sortOption, budgetPref, userCoords]);
+
+  // Total count of currently open restaurants in current view pool
+  const openCount = useMemo(() => {
+    const cuisineFiltered = displayPool.filter((r) => matchesCuisineFilter(r, cuisineFilter));
+    return cuisineFiltered.filter((r) => checkRestaurantOpenStatus(r.openingHours).isOpen).length;
+  }, [displayPool, cuisineFilter]);
 
   // Base map center for current city/area
   const currentMapCenter = useMemo(() => {
@@ -585,41 +605,41 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
       )}
 
       {/* Clean Streamlined Filter Bar */}
-      <div className="bg-white rounded-3xl p-5 sm:p-7 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-4">
-        {/* Row 1: Header Title & City Selector */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-100">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-3.5">
+        {/* Row 1: Header Title & City / Location Selector */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700 shrink-0">
               <UtensilsCrossed className="w-5 h-5" />
             </div>
             <div>
               <h2 className="font-serif font-bold text-xl sm:text-2xl text-stone-900 leading-tight">
-                Dónde Comer en Vietnam
+                Dónde Comer
               </h2>
               <p className="text-xs text-stone-500 mt-0.5">
-                Selección gastronómica verificada con más de 4.5★ y platos emblemáticos
+                Selección verificada con más de 4.5★
               </p>
             </div>
           </div>
 
-          {/* Action buttons: GPS + City Selector (opens modal) */}
+          {/* Action buttons: Location / Cerca de mí + City Selector */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Real-time Continuous Live GPS Toggle Button */}
+            {/* Real-time Continuous Live Location Toggle Button */}
             <button
               type="button"
               onClick={toggleLiveTracking}
               disabled={isLocating}
               title={
                 isLiveTracking
-                  ? 'Rastreo en tiempo real activo. Haz clic para pausar.'
-                  : 'Activar sensor GPS en tiempo real para seguir mi posición mientras camino o me muevo'
+                  ? 'Ubicación en tiempo real activa. Haz clic para pausar.'
+                  : 'Buscar restaurantes cercanos a mi ubicación actual'
               }
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95 shadow-2xs ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95 shadow-2xs ${
                 isLiveTracking
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-4 ring-emerald-100'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-200'
                   : userCoords && selectedCity === 'Cerca de mí'
                   ? 'bg-sky-600 hover:bg-sky-700 text-white'
-                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200'
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/80'
               }`}
             >
               {isLiveTracking ? (
@@ -628,17 +648,17 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                   </span>
-                  <span>🔴 GPS En Vivo</span>
+                  <span>Cerca de mí</span>
                 </>
               ) : (
                 <>
-                  <Crosshair className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin text-sky-500' : ''}`} />
-                  <span>{isLocating ? 'GPS...' : userCoords ? 'GPS Activo' : 'GPS'}</span>
+                  <Crosshair className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin text-sky-500' : 'text-stone-500'}`} />
+                  <span>{isLocating ? 'Buscando...' : 'Cerca de mí'}</span>
                 </>
               )}
             </button>
 
-            {/* City Selector Button (Opens the city modal) */}
+            {/* City Selector Button */}
             <button
               type="button"
               onClick={() => {
@@ -646,61 +666,70 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                 setIsCityModalOpen(true);
               }}
               title="Cambiar ciudad actual en Vietnam"
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 transition cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0 active:scale-95"
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-stone-950 transition cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0 active:scale-95"
             >
               <MapPin className="w-3.5 h-3.5 stroke-[2.2]" />
-              <span className="font-bold">{selectedCity}</span>
+              <span>{selectedCity}</span>
               <span className="text-[10px] opacity-70">▼</span>
             </button>
           </div>
         </div>
 
-        {/* Row 2: Search Input & Budget Pills (Combined view always, strict filter always active) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Search Bar: short, clean placeholder that is 100% visible on mobile */}
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar plato o restaurante..."
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              className="w-full pl-9 pr-8 py-2 bg-stone-50 border border-stone-200 rounded-xl text-base sm:text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition font-medium"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-0.5 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+        {/* Row 2: Unified Filter Bar (Tipo de cocina + Filtros rápidos) */}
+        <div className="space-y-2">
+          {/* Cuisines Filter Chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+            {CUISINE_OPTIONS_CONFIG.map((opt) => {
+              const isSelected = cuisineFilter === opt.id;
+              const shortLabels: Record<string, string> = {
+                all: 'Todas',
+                local: 'Local',
+                street_food: 'Street Food',
+                vegetarian: 'Vegetariana',
+                western: 'Occidental',
+                seafood: 'Marisco',
+                cafe: 'Café',
+              };
+              const displayLabel = shortLabels[opt.id] || opt.label;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setCuisineFilter(opt.id)}
+                  title={opt.shortDescription}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95 ${
+                    isSelected
+                      ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                      : 'bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200/50'
+                  }`}
+                >
+                  <span>{opt.icon}</span>
+                  <span>{displayLabel}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Budget Selector Pills & Allergy Trigger */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 shrink-0">
-            <span className="text-xs font-semibold text-stone-400 mr-1 shrink-0">Precio:</span>
+          {/* Price & Open Status in a single compact row */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1 border-t border-stone-100">
+            {/* Price Filter Chips */}
             {(['all', 'budget', 'moderate', 'fine'] as BudgetPreference[]).map((tierKey) => {
               const isSelected = budgetPref === tierKey;
               const labels: Record<BudgetPreference, string> = {
                 all: 'Todos',
-                budget: '🍜 Callejero (<2,5€)',
-                moderate: '🥢 Medio (2,5-7€)',
-                fine: '⭐ Gourmet (>7€)',
+                budget: '<3€',
+                moderate: '3–7€',
+                fine: '>7€',
               };
               return (
                 <button
                   key={tierKey}
                   type="button"
                   onClick={() => setBudgetPref(tierKey)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer shrink-0 active:scale-95 ${
                     isSelected
                       ? 'bg-stone-900 text-white font-bold shadow-xs'
-                      : 'bg-stone-100 hover:bg-stone-200 text-stone-600'
+                      : 'bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200/50'
                   }`}
                 >
                   {labels[tierKey]}
@@ -708,17 +737,33 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
               );
             })}
 
-            {onNavigateToAllergies && (
-              <button
-                type="button"
-                onClick={onNavigateToAllergies}
-                title="Abrir tarjetas de alergias alimentarias en vietnamita para mostrar al camarero"
-                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1.5 transition cursor-pointer shrink-0 active:scale-95 shadow-2xs ml-1"
+            <span className="text-stone-300 select-none">|</span>
+
+            {/* Open Now Toggle Chip */}
+            <button
+              type="button"
+              onClick={() => setOnlyOpenNow(!onlyOpenNow)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95 ${
+                onlyOpenNow
+                  ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200/50'
+              }`}
+              title="Mostrar únicamente locales abiertos ahora"
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  onlyOpenNow ? 'bg-white' : 'bg-emerald-500'
+                }`}
+              />
+              <span>Abierto ahora</span>
+              <span
+                className={`text-[10px] px-1 rounded-sm font-bold ${
+                  onlyOpenNow ? 'bg-emerald-800 text-emerald-100' : 'bg-stone-200 text-stone-600'
+                }`}
               >
-                <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-                <span>Alergias Camarero</span>
-              </button>
-            )}
+                {openCount}
+              </span>
+            </button>
           </div>
         </div>
       </div>
@@ -733,10 +778,10 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
             <div className="text-stone-300 text-[11px] truncate">
               {isSearchingOnline ? (
                 <span className="text-amber-300 flex items-center gap-1">
-                  <RefreshCw className="w-3 h-3 animate-spin" /> Buscando en Google Maps...
+                  <RefreshCw className="w-3 h-3 animate-spin" /> Buscando restaurantes cercanos...
                 </span>
               ) : (
-                <span>📍 GPS en vivo activo {userCoords ? `(${userCoords.lat.toFixed(3)}°, ${userCoords.lng.toFixed(3)}°)` : ''}</span>
+                <span>📍 Mostrando restaurantes cerca de ti</span>
               )}
             </div>
           </div>
@@ -748,403 +793,681 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                 onClick={toggleLiveTracking}
                 className="px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold cursor-pointer transition"
               >
-                Pausar GPS
+                Pausar ubicación
               </button>
             )}
           </div>
         </div>
       )}
 
-      {/* Main Content: Map & Cards in Unified Combined View */}
-      <div className="space-y-4">
-        {/* Interactive Map */}
-        <div id="restaurant-map-section" className="bg-white rounded-2xl p-2 sm:p-3 border border-stone-200/90 shadow-xs space-y-2">
-          <div className="flex items-center justify-between px-2 pt-1 pb-0.5 text-xs">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-              <span className="text-stone-700 font-semibold truncate">
-                {selectedCity === 'Cerca de mí' ? 'Cerca de tu ubicación GPS' : selectedCity} · {sortedScoredEntries.length} locales seleccionados (≥ 4.5★)
-              </span>
-            </div>
+      {/* View Mode Switcher Toolbar (Mapa vs Lista) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-stone-200 shadow-2xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center p-1 bg-stone-100 rounded-xl border border-stone-200/80">
+            <button
+              type="button"
+              onClick={() => setViewMode('map')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'map'
+                  ? 'bg-stone-900 text-white shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              <MapIcon className="w-3.5 h-3.5 text-amber-400" />
+              <span>Mapa</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'list'
+                  ? 'bg-stone-900 text-white shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              <List className="w-3.5 h-3.5 text-amber-400" />
+              <span>Lista ({sortedScoredEntries.length})</span>
+            </button>
           </div>
 
-          <RestaurantMap
-            center={currentMapCenter}
-            zoom={selectedCity === 'Cerca de mí' ? 15 : (CITY_COORDINATES[selectedCity]?.zoom || 14)}
-            items={sortedScoredEntries}
-            selectedRestaurantId={selectedRestaurant?.id}
-            onSelectRestaurant={(restaurant) => {
-              setSelectedRestaurant(restaurant);
-              const cardEl = document.getElementById(`restaurant-card-${restaurant.id}`);
-              if (cardEl) {
-                cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              }
-            }}
-            onDeselectRestaurant={() => {
-              setSelectedRestaurant(null);
-            }}
-            onViewMenu={(r) => {
-              setViewingMenuRestaurant(r);
-            }}
-            userLocation={userCoords}
-            userLocationLabel={isLiveTracking ? 'Tu posición en tiempo real' : 'Tu ubicación'}
-            isLiveTracking={isLiveTracking}
-            onToggleLiveTracking={toggleLiveTracking}
-            className="h-[320px] sm:h-[380px]"
-          />
-
-          {/* Selected Restaurant Quick Action Pill directly under the map */}
-          {selectedRestaurant && (
-            <div className="mt-2.5 p-3 sm:p-3.5 bg-stone-900 text-white rounded-xl shadow-lg border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
-              <div className="flex items-start gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-amber-500 text-stone-950 font-bold text-xs flex items-center justify-center shrink-0 shadow-md">
-                  {Math.max(1, sortedScoredEntries.findIndex((e) => e.restaurant.id === selectedRestaurant.id) + 1)}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="font-bold text-sm text-stone-100 truncate">{selectedRestaurant.name}</h4>
-                    <span className="text-[11px] text-stone-400 italic shrink-0">({selectedRestaurant.nameVi})</span>
-                    <span className="inline-flex items-center text-amber-400 font-bold text-xs shrink-0">
-                      ★ {selectedRestaurant.rating.toFixed(1)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-300 font-medium truncate mt-0.5">
-                    🍲 {selectedRestaurant.mustOrderDish} • <span className="text-stone-300 font-mono">{(selectedRestaurant.avgPriceVnd / 1000).toLocaleString('es-ES')}k ₫</span> ({formatVndToEur(selectedRestaurant.avgPriceVnd)})
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => setViewingMenuRestaurant(selectedRestaurant)}
-                  className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1 border border-amber-500/40 transition cursor-pointer shadow-xs"
-                  title="Ver carta de platos, precios y fotos de reviews"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Ver Carta</span>
-                </button>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedRestaurant.name} ${selectedRestaurant.address || selectedRestaurant.city || 'Vietnam'}`.trim())}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1 border border-stone-700 transition"
-                  title={`Ver ${selectedRestaurant.name} en Google Maps`}
-                >
-                  <MapPin className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Ver en Maps</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setShowAddToItineraryModal(selectedRestaurant)}
-                  className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Añadir</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedRestaurant(null)}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-white hover:bg-stone-800 transition cursor-pointer flex items-center gap-1 text-xs"
-                  title="Cerrar y mantener zoom"
-                  aria-label="Cerrar restaurante seleccionado"
-                >
-                  <X className="w-4 h-4" />
-                  <span className="hidden sm:inline text-[11px]">Cerrar</span>
-                </button>
-              </div>
-            </div>
-          )}
+          <span className="text-xs text-stone-500 font-medium">
+            {selectedCity === 'Cerca de mí' ? 'Cerca de ti' : selectedCity} • {sortedScoredEntries.length} locales
+          </span>
         </div>
 
-        {/* Clean Restaurant Cards List (Always visible in combined view) */}
+        {viewMode === 'map' && (
+          <div className="text-xs text-stone-500 truncate hidden sm:block">
+            Toca cualquier número en el mapa para ver sus detalles en la parte inferior
+          </div>
+        )}
+      </div>
+
+      {/* Main Content Area */}
+      {viewMode === 'map' ? (
+        /* MAP VIEW: Only shows map and the selected restaurant card at the bottom */
         <div className="space-y-3">
-            {/* Active search query feedback banner */}
-            {searchQuery.trim() && (
-              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-stone-800 animate-fade-in">
-                <div className="flex items-center gap-2">
-                  <span className="p-1.5 rounded-xl bg-amber-500 text-stone-950 font-bold shrink-0">
-                    <Search className="w-3.5 h-3.5" />
-                  </span>
-                  <div>
-                    <span>
-                      Resultados para <strong>"{searchQuery}"</strong> ({sortedScoredEntries.length} {sortedScoredEntries.length === 1 ? 'opción encontrada' : 'opciones encontradas'}). Búsqueda directa sin restricciones de ciudad.
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="px-2.5 py-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-lg text-xs font-semibold cursor-pointer transition self-start sm:self-auto shrink-0 shadow-2xs"
-                >
-                  Limpiar búsqueda
-                </button>
-              </div>
-            )}
+          <div id="restaurant-map-section" className="bg-white rounded-3xl p-3 sm:p-4 border border-stone-200 shadow-xs space-y-3">
+            <RestaurantMap
+              center={currentMapCenter}
+              zoom={selectedCity === 'Cerca de mí' ? 15 : (CITY_COORDINATES[selectedCity]?.zoom || 14)}
+              items={sortedScoredEntries}
+              selectedRestaurantId={selectedRestaurant?.id || (sortedScoredEntries.length > 0 ? sortedScoredEntries[0].restaurant.id : null)}
+              onSelectRestaurant={(restaurant) => {
+                setSelectedRestaurant(restaurant);
+              }}
+              onDeselectRestaurant={() => {
+                // Keep selected to maintain the bottom bar
+              }}
+              onViewMenu={(r) => {
+                setViewingMenuRestaurant(r);
+              }}
+              userLocation={userCoords}
+              userLocationLabel={isLiveTracking ? 'Tu posición en tiempo real' : 'Tu ubicación'}
+              isLiveTracking={isLiveTracking}
+              onToggleLiveTracking={toggleLiveTracking}
+              className="h-[420px] sm:h-[480px]"
+            />
 
-            {sortedScoredEntries.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-stone-300 space-y-3">
-                <UtensilsCrossed className="w-8 h-8 text-stone-300 mx-auto" />
-                <h4 className="font-bold text-stone-800 text-sm">No hay restaurantes con los filtros actuales</h4>
-                <p className="text-xs text-stone-500 max-w-md mx-auto leading-relaxed">
-                  Prueba a limpiar la búsqueda o selecciona "Todos" en la categoría de precio.
-                </p>
-                <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setBudgetPref('all');
-                    }}
-                    className="px-3.5 py-1.5 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-xs"
-                  >
-                    Restablecer búsqueda y precio
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {sortedScoredEntries.map((entry, index) => {
-                  const { restaurant, breakdown } = entry;
-                  const isTop1 = index === 0;
-                  const number = index + 1;
-                  const isExpanded = expandedCardId === restaurant.id;
-                  const isSelected = selectedRestaurant?.id === restaurant.id;
-                  const eurPrice = formatVndToEur(restaurant.avgPriceVnd);
-                  const theme = getRestaurantTheme(index, restaurant.priceTier);
+            {/* Selected Restaurant Card: Docked at the bottom of the map view */}
+            {(() => {
+              const activeRestaurant = selectedRestaurant || (sortedScoredEntries.length > 0 ? sortedScoredEntries[0].restaurant : null);
+              if (!activeRestaurant) return null;
 
-                  return (
+              const activeRankIndex = sortedScoredEntries.findIndex((e) => e.restaurant.id === activeRestaurant.id);
+              const rankNumber = activeRankIndex >= 0 ? activeRankIndex + 1 : 1;
+              const isTop1 = activeRankIndex === 0;
+              const theme = getRestaurantTheme(activeRankIndex >= 0 ? activeRankIndex : 0, activeRestaurant.priceTier);
+              const eurPrice = formatVndToEur(activeRestaurant.avgPriceVnd);
+              const isExpanded = expandedCardId === activeRestaurant.id;
+
+              return (
+                <div className="p-4 bg-stone-900 text-white rounded-2xl shadow-xl border border-stone-800 space-y-3 animate-fade-in">
+                  {/* Row 1: Rank Badge + Name + Speaker Button (Vertically centered) */}
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <div
-                      key={restaurant.id}
-                      id={`restaurant-card-${restaurant.id}`}
-                      onClick={() => handleSelectRestaurant(restaurant, false)}
-                      className={`bg-white rounded-3xl p-5 border transition-all duration-200 flex flex-col justify-between cursor-pointer ${
-                        isSelected
-                          ? 'border-amber-500 ring-4 ring-amber-400/20 bg-amber-50/[0.15] shadow-lg'
-                          : isTop1
-                          ? 'border-amber-400/90 shadow-md hover:border-amber-500'
-                          : 'border-stone-200/90 hover:border-amber-300 hover:shadow-md shadow-[0_2px_16px_rgba(28,25,23,0.03)]'
-                      }`}
+                      className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-xs shrink-0 shadow-xs ${theme.bg} ${theme.border} ${theme.text}`}
+                      title={`Restaurante #${rankNumber}`}
                     >
-                      <div>
-                        {/* Top Line: Number Badge, Name, Vietnamese Audio, Rating & Price */}
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                            {/* Matching Circular Number Badge identical to Map Pin */}
-                            <div
-                              className={`w-9 h-9 rounded-full border-2 flex items-center justify-center font-bold text-xs shrink-0 shadow-xs transition-all ${
-                                isSelected
-                                  ? 'bg-amber-500 border-white text-stone-950 ring-2 ring-amber-400 shadow-md scale-105'
-                                  : `${theme.bg} ${theme.border} ${theme.text}`
-                              }`}
-                              title={`Restaurante #${number} en el mapa`}
-                            >
-                              <span>{isTop1 ? '👑 1' : number}</span>
-                            </div>
+                      <span>{isTop1 ? '👑 1' : rankNumber}</span>
+                    </div>
 
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {isTop1 && (
-                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-stone-950 shadow-2xs">
-                                    Recomendado #1
-                                  </span>
-                                )}
-                                {restaurant.michelinGuide && (
-                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 shadow-2xs">
-                                    Michelin {restaurant.michelinGuide}
-                                  </span>
-                                )}
-                                {restaurant.badgeLabel &&
-                                  restaurant.source !== 'google_live' &&
-                                  !restaurant.badgeLabel.toLowerCase().includes('google') && (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                                      {restaurant.badgeLabel}
-                                    </span>
-                                  )}
-                                {isSelected && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
-                                    En el mapa
-                                  </span>
-                                )}
-                                {restaurant.city !== selectedCity && selectedCity !== 'Todo Vietnam' && selectedCity !== 'Cerca de mí' && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-100 text-sky-800 border border-sky-200">
-                                    📍 En {restaurant.city}
-                                  </span>
-                                )}
-                                {restaurant.hasAirConditioning && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-800 border border-sky-200" title="Local climatizado con aire acondicionado">
-                                    ❄️ A/C
-                                  </span>
-                                )}
-                              </div>
+                    <div className="min-w-0 flex-1 flex flex-col justify-center">
+                      <h4 className="font-bold text-base sm:text-lg text-white leading-tight">
+                        {activeRestaurant.name}
+                      </h4>
+                      {activeRestaurant.nameVi && activeRestaurant.nameVi !== activeRestaurant.name && (
+                        <p className="text-xs text-stone-400 italic truncate mt-0.5" title={activeRestaurant.nameVi}>
+                          {activeRestaurant.nameVi}
+                        </p>
+                      )}
+                    </div>
 
-                              <h3 className="font-serif font-bold text-base sm:text-lg text-stone-900 leading-snug mt-1">
-                                {restaurant.name}
-                              </h3>
+                    <div className="shrink-0 flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => speakVietnamese(activeRestaurant.nameVi)}
+                        className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-400 hover:text-amber-300 border border-stone-700/60 transition cursor-pointer flex items-center justify-center shadow-xs"
+                        title={`Escuchar pronunciación: ${activeRestaurant.nameVi}`}
+                      >
+                        <Volume2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
 
-                              <div className="flex items-center gap-1.5 text-xs text-stone-600 mt-0.5">
-                                <span>{restaurant.nameVi}</span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    speakVietnamese(restaurant.nameVi);
-                                  }}
-                                  className="p-0.5 rounded text-amber-700 hover:text-amber-800 transition cursor-pointer"
-                                  title="Escuchar pronunciación"
-                                >
-                                  <Volume2 className="w-3.5 h-3.5" />
-                                </button>
-                                <span className="text-stone-300">•</span>
-                                <span className="text-[11px] text-stone-400">{restaurant.district}</span>
-                              </div>
-                            </div>
-                          </div>
+                  {/* Rating, Reviews & Price Line (VND + EUR + Live Status + Service Icons) */}
+                  <div className="flex items-center gap-2 flex-wrap text-xs text-stone-300 pt-0.5">
+                    <span className="text-amber-400 font-bold flex items-center gap-0.5">
+                      ★ {activeRestaurant.rating.toFixed(1)}
+                    </span>
+                    <span className="text-stone-400 text-xs">
+                      ({activeRestaurant.reviewsCount.toLocaleString('es-ES')} reseñas)
+                    </span>
+                    <span className="text-stone-600">•</span>
+                    <span className="text-emerald-400 font-mono font-bold text-xs sm:text-sm">
+                      {(activeRestaurant.avgPriceVnd / 1000).toLocaleString('es-ES')}k ₫
+                    </span>
+                    <span className="text-stone-300 text-xs font-semibold bg-stone-800 px-2 py-0.5 rounded-md border border-stone-700/60">
+                      {eurPrice}
+                    </span>
+                    {(() => {
+                      const status = checkRestaurantOpenStatus(activeRestaurant.openingHours);
+                      return (
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-semibold flex items-center gap-1 ${
+                            status.isOpen
+                              ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-800/70'
+                              : 'bg-stone-800 text-stone-400 border border-stone-700/60'
+                          }`}
+                          title={status.statusText}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              status.isOpen ? 'bg-emerald-400' : 'bg-rose-400'
+                            }`}
+                          />
+                          <span>{status.isOpen ? 'Abierto' : 'Cerrado'}</span>
+                        </span>
+                      );
+                    })()}
 
-                          {/* Price & Rating Box */}
-                          <div className="text-right shrink-0">
-                            <div className="flex items-center justify-end gap-1 font-bold text-amber-900 text-xs">
-                              <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0" />
-                              <span>{restaurant.rating.toFixed(1)}</span>
-                              <span className="text-stone-400 font-normal text-[11px]">
-                                ({restaurant.reviewsCount.toLocaleString()})
-                              </span>
-                            </div>
-                            <div className="font-mono font-bold text-stone-900 text-xs mt-0.5">
-                              {(restaurant.avgPriceVnd / 1000).toLocaleString('es-ES')}k ₫
-                              <span className="text-emerald-700 text-[11px] font-semibold ml-1">
-                                (~{eurPrice})
-                              </span>
-                            </div>
+                    {/* Service Badges directly next to Open / Closed status */}
+                    <div className="flex items-center gap-1">
+                      {activeRestaurant.hasAirConditioning && (
+                        <span
+                          className="px-1.5 py-0.5 rounded-md bg-sky-950/90 text-sky-300 border border-sky-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                          title="❄️ Aire Acondicionado disponible"
+                        >
+                          ❄️
+                        </span>
+                      )}
+                      {activeRestaurant.isCashOnly ? (
+                        <span
+                          className="px-1.5 py-0.5 rounded-md bg-amber-950/90 text-amber-300 border border-amber-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                          title="💵 Solo pago en efectivo (VND)"
+                        >
+                          💵
+                        </span>
+                      ) : (
+                        <span
+                          className="px-1.5 py-0.5 rounded-md bg-stone-800/90 text-stone-300 border border-stone-700/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                          title="💳 Acepta pago con tarjeta"
+                        >
+                          💳
+                        </span>
+                      )}
+                      {activeRestaurant.grabFoodDelivery && (
+                        <span
+                          className="px-1.5 py-0.5 rounded-md bg-emerald-950/90 text-emerald-300 border border-emerald-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                          title="🛵 Servicio a domicilio GrabFood disponible"
+                        >
+                          🛵
+                        </span>
+                      )}
+                      {activeRestaurant.michelinGuide && (
+                        <span
+                          className="px-1.5 py-0.5 rounded-md bg-rose-950/90 text-rose-300 border border-rose-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                          title={`⭐ Guía Michelin (${activeRestaurant.michelinGuide})`}
+                        >
+                          ⭐
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Row 2: Action Buttons */}
+                  <div className="flex items-center gap-2 pt-1 border-t border-stone-800/80 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setViewingMenuRestaurant(activeRestaurant)}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
+                      title="Ver carta de platos, precios y fotos"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>Carta</span>
+                    </button>
+
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${activeRestaurant.name} ${activeRestaurant.address || activeRestaurant.city || 'Vietnam'}`.trim())}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-rose-300 border border-stone-700 font-medium text-xs flex items-center gap-1.5 transition"
+                      title="Abrir en Google Maps"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      <span>Google Maps</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddToItineraryModal(activeRestaurant);
+                        const activePlan = itineraryState.activePlan;
+                        if (activePlan && activePlan.days.length > 0) {
+                          setSelectedDayIdForAdd(activePlan.days[0].id);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
+                      title="Añadir a un día del itinerario"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Itinerario</span>
+                    </button>
+                  </div>
+
+                  {/* Row 3: Recommended Dish Highlight Box (Plato Imprescindible) */}
+                  <div className="p-3 rounded-xl bg-stone-950/80 border border-amber-500/30 text-xs sm:text-sm text-amber-200 leading-relaxed flex items-start gap-2.5 shadow-inner">
+                    <span className="text-base shrink-0 select-none">🍲</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-amber-400 font-bold mr-1.5">Plato estrella:</span>
+                      <span className="font-medium text-amber-100">{activeRestaurant.mustOrderDish}</span>
+                    </div>
+                  </div>
+
+                  {/* Row 4: Desplegable Más info (Debajo del plato estrella) */}
+                  <div className="flex items-center justify-end -mt-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpandCard(activeRestaurant.id)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-400 hover:text-stone-200 hover:bg-stone-800/80 flex items-center gap-1 cursor-pointer transition"
+                    >
+                      <span>{isExpanded ? 'Menos info' : 'Más info'}</span>
+                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5 text-stone-400" />}
+                    </button>
+                  </div>
+
+                  {/* Row 5: Expandable Details */}
+                  {isExpanded && (
+                    <div className="pt-2.5 border-t border-stone-800 text-xs text-stone-300 space-y-2.5 animate-fade-in">
+                      {activeRestaurant.description &&
+                        !activeRestaurant.description.includes('tiempo real en Google Maps') &&
+                        !activeRestaurant.description.includes('reseñas verificadas') && (
+                          <p className="leading-relaxed text-stone-300/90 bg-stone-950/60 p-2.5 rounded-xl border border-stone-800/80">
+                            {activeRestaurant.description}
+                          </p>
+                        )}
+
+                      {/* Horario */}
+                      {activeRestaurant.openingHours && (
+                        <div className="p-2.5 rounded-xl bg-stone-950/80 border border-stone-800/80 flex items-start gap-2 text-xs text-stone-300">
+                          <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <span className="font-semibold text-stone-200 mr-1.5">Horario:</span>
+                            <span className="text-amber-200/95 font-medium">
+                              {formatFullOpeningHours(activeRestaurant.openingHours)}
+                            </span>
                           </div>
                         </div>
+                      )}
 
-                        {/* Dish Highlight: What to order */}
-                        <div className="mt-2.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200/80 text-xs flex items-center gap-2">
-                          <span className="font-bold text-amber-950 shrink-0">🍲 Pedir:</span>
-                          <span className="text-amber-900 font-medium truncate">
-                            {restaurant.mustOrderDish}
-                          </span>
+                      {/* Servicios del local (directo y conciso) */}
+                      <div className="p-2.5 rounded-xl bg-stone-950/80 border border-stone-800/80 text-xs text-stone-300 space-y-2">
+                        <span className="font-semibold text-stone-200 block">Servicios del local:</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {activeRestaurant.hasAirConditioning && (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/80 border border-sky-800/60 text-sky-200 font-medium text-xs">
+                              <span>❄️</span>
+                              <span>Aire acondicionado</span>
+                            </span>
+                          )}
+                          {activeRestaurant.isCashOnly ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/80 border border-amber-800/60 text-amber-200 font-medium text-xs">
+                              <span>💵</span>
+                              <span>Solo efectivo</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-800/90 border border-stone-700/60 text-stone-200 font-medium text-xs">
+                              <span>💳</span>
+                              <span>Pago con tarjeta</span>
+                            </span>
+                          )}
+                          {activeRestaurant.grabFoodDelivery && (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-800/60 text-emerald-200 font-medium text-xs">
+                              <span>🛵</span>
+                              <span>GrabFood</span>
+                            </span>
+                          )}
+                          {activeRestaurant.michelinGuide && (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-950/80 border border-rose-800/60 text-rose-200 font-medium text-xs">
+                              <span>⭐</span>
+                              <span>Guía Michelin ({activeRestaurant.michelinGuide})</span>
+                            </span>
+                          )}
                         </div>
+                      </div>
 
-                        {/* Expandable Extra Details (Accordion to avoid cognitive overload) */}
-                        {isExpanded && (
-                          <div className="mt-3 pt-3 border-t border-stone-100 text-xs text-stone-600 space-y-2 animate-fade-in">
-                            {restaurant.description &&
-                              !restaurant.description.includes('tiempo real en Google Maps') &&
-                              !restaurant.description.includes('reseñas verificadas') && (
-                                <p className="leading-relaxed">{restaurant.description}</p>
-                              )}
-                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500">
-                              <span className="px-2 py-0.5 rounded-md bg-stone-100">
-                                ⏰ {restaurant.openingHours}
-                              </span>
-                              {restaurant.hasAirConditioning && (
-                                <span className="px-2 py-0.5 rounded-md bg-sky-50 text-sky-700">
-                                  ❄️ Aire Acondicionado
-                                </span>
-                              )}
-                              {restaurant.isCashOnly && (
-                                <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800">
-                                  💵 Solo efectivo
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-stone-400 flex items-start gap-1">
-                              <MapPin className="w-3 h-3 text-stone-400 shrink-0 mt-0.5" />
-                              <span>{restaurant.address}</span>
+                      {activeRestaurant.travelerTips &&
+                        !activeRestaurant.travelerTips.toLowerCase().includes('abierto ahora') &&
+                        !activeRestaurant.travelerTips.toLowerCase().includes('comprobar horario') && (
+                          <div className="p-2.5 rounded-xl bg-amber-950/20 border border-amber-900/30 text-xs text-amber-200/90 flex items-start gap-2">
+                            <span className="text-amber-400 shrink-0 select-none text-sm">💡</span>
+                            <div className="flex-1 min-w-0 leading-relaxed">
+                              <span className="font-bold text-amber-300 mr-1.5">Consejo:</span>
+                              <span>{activeRestaurant.travelerTips}</span>
                             </div>
                           </div>
                         )}
+
+                      {activeRestaurant.address && (
+                        <div className="text-xs text-stone-400 flex items-start gap-1.5 pt-0.5">
+                          <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                          <span className="leading-snug">{activeRestaurant.address}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      ) : (
+        /* LIST VIEW: Full List of Restaurant Cards matching the sleek Map Card design */
+        <div className="space-y-3">
+          {sortedScoredEntries.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-stone-300 space-y-3">
+              <UtensilsCrossed className="w-8 h-8 text-stone-300 mx-auto" />
+              <h4 className="font-bold text-stone-800 text-sm">No hay restaurantes con los filtros actuales</h4>
+              <p className="text-xs text-stone-500 max-w-md mx-auto leading-relaxed">
+                Prueba a seleccionar "Todos" en el precio o "Todas" en el tipo de comida.
+              </p>
+              <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBudgetPref('all');
+                    setCuisineFilter('all');
+                    setOnlyOpenNow(false);
+                  }}
+                  className="px-3.5 py-1.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
+                >
+                  Restablecer todos los filtros
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {sortedScoredEntries.map((entry, index) => {
+                const { restaurant } = entry;
+                const isTop1 = index === 0;
+                const number = index + 1;
+                const isExpanded = expandedCardId === restaurant.id;
+                const isSelected = selectedRestaurant?.id === restaurant.id;
+                const eurPrice = formatVndToEur(restaurant.avgPriceVnd);
+                const theme = getRestaurantTheme(index, restaurant.priceTier);
+
+                return (
+                  <div
+                    key={restaurant.id}
+                    id={`restaurant-card-${restaurant.id}`}
+                    className={`p-4 bg-stone-900 text-white rounded-2xl shadow-xl border transition-all duration-200 space-y-3 ${
+                      isSelected
+                        ? 'border-amber-500 ring-2 ring-amber-400/40 bg-stone-900'
+                        : isTop1
+                        ? 'border-amber-500/80'
+                        : 'border-stone-800 hover:border-stone-700'
+                    }`}
+                  >
+                    {/* Row 1: Rank Badge + Name + Speaker Button (Vertically centered) */}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-xs shrink-0 shadow-xs ${theme.bg} ${theme.border} ${theme.text}`}
+                        title={`Restaurante #${number}`}
+                      >
+                        <span>{isTop1 ? '👑 1' : number}</span>
                       </div>
 
-                      {/* Action Buttons: Clean & Direct */}
-                      <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1 flex flex-col justify-center">
+                        <h4 className="font-bold text-base sm:text-lg text-white leading-tight">
+                          {restaurant.name}
+                        </h4>
+                        {restaurant.nameVi && restaurant.nameVi !== restaurant.name && (
+                          <p className="text-xs text-stone-400 italic truncate mt-0.5" title={restaurant.nameVi}>
+                            {restaurant.nameVi}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="shrink-0 flex items-center justify-center">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            toggleExpandCard(restaurant.id);
+                            speakVietnamese(restaurant.nameVi);
                           }}
-                          className="text-[11px] font-semibold text-stone-500 hover:text-stone-800 flex items-center gap-0.5 cursor-pointer py-1"
+                          className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-400 hover:text-amber-300 border border-stone-700/60 transition cursor-pointer flex items-center justify-center shadow-xs"
+                          title={`Escuchar pronunciación: ${restaurant.nameVi}`}
                         >
-                          <span>{isExpanded ? 'Menos info' : 'Más detalles'}</span>
-                          {isExpanded ? (
-                            <ChevronUp className="w-3 h-3" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3" />
-                          )}
+                          <Volume2 className="w-4 h-4" />
                         </button>
-
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Ver Carta & Fotos button */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setViewingMenuRestaurant(restaurant);
-                            }}
-                            className="px-2.5 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs transition flex items-center gap-1 cursor-pointer border border-amber-300/80 shadow-xs"
-                            title="Ver carta de platos, precios en VND/EUR y fotos de reviews"
-                          >
-                            <BookOpen className="w-3.5 h-3.5 text-amber-700" />
-                            <span>Ver Carta</span>
-                          </button>
-
-                          {/* Quick button to locate on map */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectRestaurant(restaurant, true);
-                            }}
-                            className={`px-2.5 py-1.5 rounded-xl font-semibold text-xs transition flex items-center gap-1 cursor-pointer ${
-                              isSelected
-                                ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
-                                : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80'
-                            }`}
-                            title={`Ubicar #${number} en el mapa interactivo`}
-                          >
-                            <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                            <span>{isSelected ? `Pin #${number}` : `Ubicar #${number}`}</span>
-                          </button>
-
-                          <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${restaurant.name} ${restaurant.address || restaurant.city || 'Vietnam'}`.trim())}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="px-2.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs transition flex items-center gap-1 cursor-pointer"
-                            title="Ver restaurante en Google Maps"
-                          >
-                            <MapPin className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Maps</span>
-                          </a>
-
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowAddToItineraryModal(restaurant);
-                              const activePlan = itineraryState.activePlan;
-                              if (activePlan && activePlan.days.length > 0) {
-                                setSelectedDayIdForAdd(activePlan.days[0].id);
-                              }
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs transition cursor-pointer flex items-center gap-1 shadow-xs"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>+ Itinerario</span>
-                          </button>
-                        </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-      </div>
+
+                    {/* Rating, Reviews count & Price & Status & Service Icons */}
+                    <div className="flex items-center gap-2 flex-wrap text-xs text-stone-300 pt-0.5">
+                      <span className="text-amber-400 font-bold flex items-center gap-0.5">
+                        ★ {restaurant.rating.toFixed(1)}
+                      </span>
+                      <span className="text-stone-400 text-xs">
+                        ({restaurant.reviewsCount.toLocaleString('es-ES')} reseñas)
+                      </span>
+                      <span className="text-stone-600">•</span>
+                      <span className="text-emerald-400 font-mono font-bold text-xs sm:text-sm">
+                        {(restaurant.avgPriceVnd / 1000).toLocaleString('es-ES')}k ₫
+                      </span>
+                      <span className="text-stone-300 text-xs font-semibold bg-stone-800 px-2 py-0.5 rounded-md border border-stone-700/60">
+                        {eurPrice}
+                      </span>
+                      {(() => {
+                        const status = checkRestaurantOpenStatus(restaurant.openingHours);
+                        return (
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-semibold flex items-center gap-1 ${
+                              status.isOpen
+                                ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-800/70'
+                                : 'bg-stone-800 text-stone-400 border border-stone-700/60'
+                            }`}
+                            title={status.statusText}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                status.isOpen ? 'bg-emerald-400' : 'bg-rose-400'
+                              }`}
+                            />
+                            <span>{status.isOpen ? 'Abierto' : 'Cerrado'}</span>
+                          </span>
+                        );
+                      })()}
+
+                      {/* Service Badges directly next to Open / Closed status */}
+                      <div className="flex items-center gap-1">
+                        {restaurant.hasAirConditioning && (
+                          <span
+                            className="px-1.5 py-0.5 rounded-md bg-sky-950/90 text-sky-300 border border-sky-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                            title="❄️ Aire Acondicionado disponible"
+                          >
+                            ❄️
+                          </span>
+                        )}
+                        {restaurant.isCashOnly ? (
+                          <span
+                            className="px-1.5 py-0.5 rounded-md bg-amber-950/90 text-amber-300 border border-amber-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                            title="💵 Solo pago en efectivo (VND)"
+                          >
+                            💵
+                          </span>
+                        ) : (
+                          <span
+                            className="px-1.5 py-0.5 rounded-md bg-stone-800/90 text-stone-300 border border-stone-700/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                            title="💳 Acepta pago con tarjeta"
+                          >
+                            💳
+                          </span>
+                        )}
+                        {restaurant.grabFoodDelivery && (
+                          <span
+                            className="px-1.5 py-0.5 rounded-md bg-emerald-950/90 text-emerald-300 border border-emerald-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                            title="🛵 Servicio a domicilio GrabFood disponible"
+                          >
+                            🛵
+                          </span>
+                        )}
+                        {restaurant.michelinGuide && (
+                          <span
+                            className="px-1.5 py-0.5 rounded-md bg-rose-950/90 text-rose-300 border border-rose-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                            title={`⭐ Guía Michelin (${restaurant.michelinGuide})`}
+                          >
+                            ⭐
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Row 2: Action Buttons & Expand Toggle */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-stone-800/80 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Ver en Mapa button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedRestaurant(restaurant);
+                            setViewMode('map');
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition"
+                          title="Ver este restaurante en el mapa"
+                        >
+                          <MapIcon className="w-3.5 h-3.5" />
+                          <span>Ver en Mapa</span>
+                        </button>
+
+                        {/* Ver Carta button */}
+                        <button
+                          type="button"
+                          onClick={() => setViewingMenuRestaurant(restaurant)}
+                          className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
+                          title="Ver carta de platos, precios y fotos"
+                        >
+                          <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Carta</span>
+                        </button>
+
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${restaurant.name} ${restaurant.address || restaurant.city || 'Vietnam'}`.trim())}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-rose-300 border border-stone-700 font-medium text-xs flex items-center gap-1.5 transition"
+                          title="Abrir en Google Maps"
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                          <span>Google Maps</span>
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAddToItineraryModal(restaurant);
+                            const activePlan = itineraryState.activePlan;
+                            if (activePlan && activePlan.days.length > 0) {
+                              setSelectedDayIdForAdd(activePlan.days[0].id);
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
+                          title="Añadir a un día del itinerario"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Itinerario</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Row 3: Recommended Dish Highlight Box (Plato Imprescindible) */}
+                    <div className="p-3 rounded-xl bg-stone-950/80 border border-amber-500/30 text-xs sm:text-sm text-amber-200 leading-relaxed flex items-start gap-2.5 shadow-inner">
+                      <span className="text-base shrink-0 select-none">🍲</span>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-amber-400 font-bold mr-1.5">Plato estrella:</span>
+                        <span className="font-medium text-amber-100">{restaurant.mustOrderDish}</span>
+                      </div>
+                    </div>
+
+                    {/* Row 4: Desplegable Más info (Debajo del plato estrella) */}
+                    <div className="flex items-center justify-end -mt-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleExpandCard(restaurant.id)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-400 hover:text-stone-200 hover:bg-stone-800/80 flex items-center gap-1 cursor-pointer transition"
+                      >
+                        <span>{isExpanded ? 'Menos info' : 'Más info'}</span>
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5 text-stone-400" />}
+                      </button>
+                    </div>
+
+                    {/* Row 5: Expandable Details */}
+                    {isExpanded && (
+                      <div className="pt-2.5 border-t border-stone-800 text-xs text-stone-300 space-y-2.5 animate-fade-in">
+                        {restaurant.description &&
+                          !restaurant.description.includes('tiempo real en Google Maps') &&
+                          !restaurant.description.includes('reseñas verificadas') && (
+                            <p className="leading-relaxed text-stone-300/90 bg-stone-950/60 p-2.5 rounded-xl border border-stone-800/80">
+                              {restaurant.description}
+                            </p>
+                          )}
+
+                        {/* Horario */}
+                        {restaurant.openingHours && (
+                          <div className="p-2.5 rounded-xl bg-stone-950/80 border border-stone-800/80 flex items-start gap-2 text-xs text-stone-300">
+                            <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold text-stone-200 mr-1.5">Horario:</span>
+                              <span className="text-amber-200/95 font-medium">
+                                {formatFullOpeningHours(restaurant.openingHours)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Servicios del local (directo y conciso) */}
+                        <div className="p-2.5 rounded-xl bg-stone-950/80 border border-stone-800/80 text-xs text-stone-300 space-y-2">
+                          <span className="font-semibold text-stone-200 block">Servicios del local:</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {restaurant.hasAirConditioning && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/80 border border-sky-800/60 text-sky-200 font-medium text-xs">
+                                <span>❄️</span>
+                                <span>Aire acondicionado</span>
+                              </span>
+                            )}
+                            {restaurant.isCashOnly ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/80 border border-amber-800/60 text-amber-200 font-medium text-xs">
+                                <span>💵</span>
+                                <span>Solo efectivo</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-800/90 border border-stone-700/60 text-stone-200 font-medium text-xs">
+                                <span>💳</span>
+                                <span>Pago con tarjeta</span>
+                              </span>
+                            )}
+                            {restaurant.grabFoodDelivery && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-800/60 text-emerald-200 font-medium text-xs">
+                                <span>🛵</span>
+                                <span>GrabFood</span>
+                              </span>
+                            )}
+                            {restaurant.michelinGuide && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-950/80 border border-rose-800/60 text-rose-200 font-medium text-xs">
+                                <span>⭐</span>
+                                <span>Guía Michelin ({restaurant.michelinGuide})</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {restaurant.travelerTips &&
+                          !restaurant.travelerTips.toLowerCase().includes('abierto ahora') &&
+                          !restaurant.travelerTips.toLowerCase().includes('comprobar horario') && (
+                            <div className="p-2.5 rounded-xl bg-amber-950/20 border border-amber-900/30 text-xs text-amber-200/90 flex items-start gap-2">
+                              <span className="text-amber-400 shrink-0 select-none text-sm">💡</span>
+                              <div className="flex-1 min-w-0 leading-relaxed">
+                                <span className="font-bold text-amber-300 mr-1.5">Consejo:</span>
+                                <span>{restaurant.travelerTips}</span>
+                              </div>
+                            </div>
+                          )}
+
+                        {restaurant.address && (
+                          <div className="text-xs text-stone-400 flex items-start gap-1.5 pt-0.5">
+                            <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                            <span className="leading-snug">{restaurant.address}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add Restaurant to Itinerary Modal */}
       {showAddToItineraryModal && (
@@ -1260,6 +1583,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
         reasonMessage={cityModalReason}
         onRetryGps={handleRequestLocation}
         isLocatingGps={isLocating}
+        onOpenPermissionsModal={onOpenPermissionsModal}
       />
     </div>
   );

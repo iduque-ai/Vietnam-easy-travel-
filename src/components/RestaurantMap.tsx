@@ -479,87 +479,40 @@ const MapLibreRestaurantMap: React.FC<RestaurantMapProps> = ({
       const theme = getRestaurantTheme(index, restaurant.priceTier);
 
       const el = document.createElement('div');
-      el.className = `cursor-pointer transition-all duration-200 flex flex-col items-center select-none ${
-        isSelected ? 'scale-125 z-50' : 'hover:scale-115'
-      }`;
+      el.className = 'cursor-pointer transition-all duration-150 flex flex-col items-center select-none';
 
       el.innerHTML = `
-        <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-xs shadow-md transition-all ${
-          isSelected
-            ? 'bg-amber-500 border-white text-stone-950 ring-4 ring-amber-400 shadow-xl scale-110'
-            : `${theme.bg} ${theme.border} ${theme.text}`
-        }">
-          <span>${isTop1 ? '👑 1' : number}</span>
+        <div class="relative flex flex-col items-center">
+          ${
+            isSelected
+              ? '<div class="absolute -inset-1 bg-amber-400/60 rounded-full animate-pulse pointer-events-none"></div>'
+              : ''
+          }
+          <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-xs shadow-md transition-all relative z-10 ${
+            isSelected
+              ? 'bg-amber-500 border-white text-stone-950 ring-2 ring-amber-400 font-black shadow-lg'
+              : `${theme.bg} ${theme.border} ${theme.text}`
+          }">
+            <span>${isTop1 ? '👑 1' : number}</span>
+          </div>
+          <div class="w-2 h-2 rotate-45 -mt-1 shadow-xs relative z-10 ${
+            isSelected ? 'bg-amber-500' : theme.bg
+          }"></div>
         </div>
-        <div class="w-2 h-2 rotate-45 -mt-1 shadow-xs ${
-          isSelected ? 'bg-amber-500' : theme.bg
-        }"></div>
       `;
 
       el.addEventListener('click', () => {
         onSelectRestaurant(restaurant);
-        map.easeTo({ center: [restaurant.lng, restaurant.lat], zoom: 16, duration: 800 });
-
-        // Scroll the list card into view smoothly
-        const cardEl = document.getElementById(`restaurant-card-${restaurant.id}`);
-        if (cardEl) {
-          cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      });
-
-      const popup = new MapLibrePopup({
-        offset: 20,
-        closeButton: true,
-        className: 'custom-maplibre-tooltip',
-      }).setHTML(`
-        <div style="font-family: inherit; padding: 4px; color: #1c1917; min-width: 180px;">
-          <div style="font-weight: 800; font-size: 13px; color: #1c1917;">
-            #${number} ${restaurant.name}
-          </div>
-          <div style="font-size: 11px; color: #b45309; font-weight: 700; margin-top: 1px;">
-            ★ ${restaurant.rating.toFixed(1)} (${restaurant.reviewsCount.toLocaleString()} opiniones)
-          </div>
-          <div style="font-size: 11px; color: #047857; margin-top: 3px; font-weight: 600;">
-            🍲 ${restaurant.mustOrderDish}
-          </div>
-          <div style="font-size: 10px; color: #78716c; margin-top: 2px;">
-            ${(restaurant.avgPriceVnd / 1000).toLocaleString('es-ES')}k ₫ • ${restaurant.district}
-          </div>
-          <button id="maplibre-menu-btn-${restaurant.id}" style="margin-top: 8px; width: 100%; background: #f59e0b; color: #0c0a09; border: none; border-radius: 8px; padding: 6px 8px; font-weight: 800; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
-            📖 Ver Carta & Fotos
-          </button>
-        </div>
-      `);
-
-      // Wire popup open to attach event handler to the Ver Carta button
-      popup.on('open', () => {
-        const btn = document.getElementById(`maplibre-menu-btn-${restaurant.id}`);
-        if (btn) {
-          btn.onclick = (e) => {
-            e.stopPropagation();
-            onViewMenu?.(restaurant);
-          };
-        }
+        map.easeTo({ center: [restaurant.lng, restaurant.lat], zoom: 16, duration: 600 });
       });
 
       const marker = new MapLibreMarker({ element: el, anchor: 'bottom' })
         .setLngLat([restaurant.lng, restaurant.lat])
-        .setPopup(popup)
         .addTo(map);
-
-      // Listen for popup close to gracefully deselect without changing zoom
-      popup.on('close', () => {
-        onDeselectRestaurant?.();
-      });
-
-      // Open popup automatically if selected
-      if (isSelected) {
-        popup.addTo(map);
-      }
 
       markersRef.current.push(marker);
     });
-  }, [items, selectedRestaurantId, onSelectRestaurant, onDeselectRestaurant, onViewMenu]);
+  }, [items, selectedRestaurantId, onSelectRestaurant]);
 
   // Render User Location
   useEffect(() => {
@@ -809,30 +762,24 @@ export const RestaurantMap: React.FC<RestaurantMapProps> = (props) => {
                 title={`#${number} ${restaurant.name} (${restaurant.nameVi}) - ★${restaurant.rating.toFixed(1)}`}
                 zIndex={isSelected ? 100 : isTop1 ? 50 : 20 + (items.length - index)}
                 onClick={() => {
-                  setActiveInfoWindowItem(restaurant);
                   onSelectRestaurant(restaurant);
-                  const cardEl = document.getElementById(`restaurant-card-${restaurant.id}`);
-                  if (cardEl) {
-                    cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                  }
                 }}
               >
-                <div
-                  className={`relative flex flex-col items-center cursor-pointer transition-all duration-200 select-none ${
-                    isSelected ? 'scale-125 z-50' : 'hover:scale-115'
-                  }`}
-                >
+                <div className="relative flex flex-col items-center cursor-pointer select-none">
+                  {isSelected && (
+                    <div className="absolute -inset-1 bg-amber-400/60 rounded-full animate-pulse pointer-events-none" />
+                  )}
                   <div
-                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-xs shadow-md transition-all ${
+                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-xs shadow-md transition-all relative z-10 ${
                       isSelected
-                        ? 'bg-amber-500 border-white text-stone-950 ring-4 ring-amber-400 shadow-xl scale-110'
+                        ? 'bg-amber-500 border-white text-stone-950 ring-2 ring-amber-400 font-black shadow-lg'
                         : `${theme.bg} ${theme.border} ${theme.text}`
                     }`}
                   >
                     <span>{isTop1 ? '👑 1' : number}</span>
                   </div>
                   <div
-                    className={`w-2 h-2 rotate-45 -mt-1 shadow-xs ${
+                    className={`w-2 h-2 rotate-45 -mt-1 shadow-xs relative z-10 ${
                       isSelected ? 'bg-amber-500' : theme.bg
                     }`}
                   />
@@ -840,78 +787,6 @@ export const RestaurantMap: React.FC<RestaurantMapProps> = (props) => {
               </AdvancedMarker>
             );
           })}
-
-          {/* Active InfoWindow */}
-          {activeInfoWindowItem && (
-            <InfoWindow
-              position={{
-                lat: activeInfoWindowItem.lat,
-                lng: activeInfoWindowItem.lng,
-              }}
-              onCloseClick={() => {
-                setActiveInfoWindowItem(null);
-                onDeselectRestaurant?.();
-              }}
-              headerContent={
-                <div className="flex items-center gap-1.5 font-bold text-xs text-stone-900 pr-2">
-                  <UtensilsCrossed className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span className="truncate max-w-[180px]">{activeInfoWindowItem.name}</span>
-                </div>
-              }
-            >
-              <div className="p-1 space-y-2 text-xs max-w-[240px]">
-                <div className="flex items-center justify-between gap-1 text-[11px] text-stone-600">
-                  <div className="flex items-center gap-1">
-                    <span className="italic">{activeInfoWindowItem.nameVi}</span>
-                    <button
-                      type="button"
-                      onClick={() => speakVietnamese(activeInfoWindowItem.nameVi)}
-                      className="text-amber-600 hover:text-amber-800 p-0.5 cursor-pointer"
-                      title="Pronunciación"
-                    >
-                      <Volume2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-0.5 font-bold text-amber-700">
-                    <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                    <span>{activeInfoWindowItem.rating.toFixed(1)}</span>
-                  </div>
-                </div>
-
-                <div className="p-1.5 rounded-lg bg-amber-50 text-[11px] text-amber-900 font-medium">
-                  <strong>🍲 Pedir:</strong> {activeInfoWindowItem.mustOrderDish}
-                </div>
-
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-mono font-bold text-stone-800">
-                    {(activeInfoWindowItem.avgPriceVnd / 1000).toLocaleString('es-ES')}k ₫
-                  </span>
-                  <span className="text-stone-400">{activeInfoWindowItem.district}</span>
-                </div>
-
-                <div className="pt-1 border-t border-stone-100 flex items-center justify-between gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onViewMenu?.(activeInfoWindowItem)}
-                    className="flex-1 py-1.5 px-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-[11px] flex items-center justify-center gap-1 transition cursor-pointer shadow-xs"
-                  >
-                    <BookOpen className="w-3 h-3" />
-                    <span>Ver Carta</span>
-                  </button>
-                  <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${activeInfoWindowItem.name} ${activeInfoWindowItem.address || activeInfoWindowItem.city || 'Vietnam'}`.trim())}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="py-1.5 px-2.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white font-semibold text-[11px] flex items-center justify-center gap-1 transition"
-                    title={`Ver ${activeInfoWindowItem.name} en Google Maps`}
-                  >
-                    <MapPin className="w-3 h-3 text-rose-400" />
-                    <span>Maps</span>
-                  </a>
-                </div>
-              </div>
-            </InfoWindow>
-          )}
 
           {/* User GPS Location Marker */}
           {userLocation && (

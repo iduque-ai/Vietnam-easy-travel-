@@ -757,7 +757,7 @@ export const TRAVEL_PHRASES: PhraseItem[] = [
     spanish: '10.000₫ (Diez mil dongs)',
     vietnamese: 'Mười nghìn (mười ngàn)',
     phonetic: 'Muoi ngin (Norte) / Muoi ngan (Sur)',
-    toneTip: 'Billete marrón/amarillo pequeño (~0,38 €). Equivalente a un té helado.',
+    toneTip: 'Billete marrón/amarillo pequeño (0,38 €). Equivalente a un té helado.',
   },
   {
     id: 'p-num-4',
@@ -765,7 +765,7 @@ export const TRAVEL_PHRASES: PhraseItem[] = [
     spanish: '20.000₫ (Veinte mil dongs)',
     vietnamese: 'Hai mươi nghìn (hai mươi ngàn)',
     phonetic: 'Hai muoi ngin / Hai muoi ngan',
-    toneTip: 'Billete azul de plástico polímero (~0,75 €). Precio típico de un Bánh mì sencillo.',
+    toneTip: 'Billete azul de plástico polímero (0,75 €). Precio típico de un Bánh mì sencillo.',
   },
   {
     id: 'p-num-5',
@@ -773,7 +773,7 @@ export const TRAVEL_PHRASES: PhraseItem[] = [
     spanish: '50.000₫ (Cincuenta mil dongs)',
     vietnamese: 'Năm mươi nghìn (năm chục)',
     phonetic: 'Num muoi ngin (Num chuc)',
-    toneTip: 'Billete rosa (~1,90 €). Precio estándar de un buen tazón de Phở o bún chả.',
+    toneTip: 'Billete rosa (1,90 €). Precio estándar de un buen tazón de Phở o bún chả.',
     priority: true,
   },
   {
@@ -782,7 +782,7 @@ export const TRAVEL_PHRASES: PhraseItem[] = [
     spanish: '100.000₫ (Cien mil dongs)',
     vietnamese: 'Một trăm nghìn',
     phonetic: 'Mot tram ngin',
-    toneTip: 'Billete verde oliva (~3,80 €). Frecuente en compras y carreras medias de Grab.',
+    toneTip: 'Billete verde oliva (3,80 €). Frecuente en compras y carreras medias de Grab.',
     priority: true,
   },
   {
@@ -791,7 +791,7 @@ export const TRAVEL_PHRASES: PhraseItem[] = [
     spanish: '200.000₫ (Doscientos mil dongs)',
     vietnamese: 'Hai trăm nghìn',
     phonetic: 'Hai tram ngin',
-    toneTip: 'Billete anaranjado/rojizo (~7,60 €). ¡Ojo: no confundir con el de 10.000₫ de color similar!',
+    toneTip: 'Billete anaranjado/rojizo (7,60 €). ¡Ojo: no confundir con el de 10.000₫ de color similar!',
   },
   {
     id: 'p-num-8',
@@ -799,7 +799,7 @@ export const TRAVEL_PHRASES: PhraseItem[] = [
     spanish: '500.000₫ (Quinientos mil dongs - Máxima denominación)',
     vietnamese: 'Năm trăm nghìn',
     phonetic: 'Num tram ngin',
-    toneTip: 'Billete azul cian (~19 €). El más alto de Vietnam; procura cambiarlo en supermercados.',
+    toneTip: 'Billete azul cian (19 €). El más alto de Vietnam; procura cambiarlo en supermercados.',
     priority: true,
   },
   {
@@ -808,7 +808,7 @@ export const TRAVEL_PHRASES: PhraseItem[] = [
     spanish: '1.000.000₫ (Un millón de dongs)',
     vietnamese: 'Một triệu',
     phonetic: 'Mot triew',
-    toneTip: 'Dos billetes de 500k (~38 €). Típico de excursiones, billetes de tren o noches de hotel.',
+    toneTip: 'Dos billetes de 500k (38 €). Típico de excursiones, billetes de tren o noches de hotel.',
   },
   {
     id: 'p-num-10',

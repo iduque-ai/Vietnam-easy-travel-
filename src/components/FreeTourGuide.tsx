@@ -37,6 +37,11 @@ import { FreeTourData, FreeTourStop, PointOfInterest, TourChatMessage } from '..
 import { POINTS_OF_INTEREST } from '../data/pois';
 import { CURATED_CLIENT_TOURS, findClientCuratedTour } from '../data/curatedTours';
 import {
+  VibeType,
+  VIBE_CONFIGS,
+  adaptTourForVibe,
+} from '../utils/tourVibeAdapter';
+import {
   getSavedFreeTours,
   saveFreeTour,
   deleteSavedFreeTour,
@@ -63,40 +68,7 @@ interface FreeTourGuideProps {
   isOnline: boolean;
 }
 
-type VibeType = 'curiosidades' | 'historia' | 'express' | 'fotografia' | 'gastronomia';
-
-const VIBE_OPTIONS: { id: VibeType; label: string; icon: string; desc: string }[] = [
-  {
-    id: 'curiosidades',
-    label: 'Mitos & Curiosidades',
-    icon: '🔮',
-    desc: 'Secretos locales, supersticiones y leyendas poco conocidas',
-  },
-  {
-    id: 'historia',
-    label: 'Historia & Dinastías',
-    icon: '📜',
-    desc: 'Reyes, guerras de resistencia y arquitectura tradicional',
-  },
-  {
-    id: 'express',
-    label: 'Tour Exprés (15m)',
-    icon: '⚡',
-    desc: 'Lo absolutamente imprescindible si tienes poco tiempo',
-  },
-  {
-    id: 'fotografia',
-    label: 'Enfoque Fotográfico',
-    icon: '📸',
-    desc: 'Ángulos secretos, juego de luces y cómo evitar aglomeraciones',
-  },
-  {
-    id: 'gastronomia',
-    label: 'Cultura & Vida Local',
-    icon: '🍜',
-    desc: 'Vida en la calle, aromas, té y mercados de los alrededores',
-  },
-];
+const VIBE_OPTIONS = Object.values(VIBE_CONFIGS);
 
 const POPULAR_CITIES = [
   {
@@ -156,8 +128,8 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
   onClearInitialPoi,
   isOnline,
 }) => {
-  // Input state
-  const [placeQuery, setPlaceQuery] = useState<string>(initialPoi?.nameEs || 'Templo de la Literatura');
+  // Input state (starts in blank by default)
+  const [placeQuery, setPlaceQuery] = useState<string>(initialPoi?.nameEs || '');
   const [selectedCity, setSelectedCity] = useState<string>(initialPoi?.city || 'Hà Nội');
   const [selectedVibe, setSelectedVibe] = useState<VibeType>('curiosidades');
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
@@ -170,7 +142,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
   const [activeTour, setActiveTour] = useState<FreeTourData | null>(() => {
     if (initialPoi) {
       const match = findClientCuratedTour(initialPoi.nameEs, initialPoi.city);
-      if (match) return match;
+      if (match) return adaptTourForVibe(match, 'curiosidades');
     }
     return null;
   });
@@ -204,12 +176,33 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
   ]);
   const [chatInput, setChatInput] = useState<string>('');
   const [isSendingChat, setIsSendingChat] = useState<boolean>(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   }, []);
+
+  // Handle switching tour vibe with instant active tour adaptation
+  const handleSelectVibe = useCallback(
+    (newVibe: VibeType) => {
+      setSelectedVibe(newVibe);
+      if (activeTour) {
+        stopAllSpeech();
+        setIsPlayingAudio(false);
+        setIsPausedAudio(false);
+        setSpeakingTextTitle('');
+        setCurrentSentenceIndex(-1);
+
+        const baseMatch = findClientCuratedTour(activeTour.placeName, activeTour.cityName);
+        const adapted = adaptTourForVibe(baseMatch || activeTour, newVibe);
+        setActiveTour(adapted);
+        setActiveStopIndex(0);
+        showToast(`Enfoque ${VIBE_CONFIGS[newVibe].icon} ${VIBE_CONFIGS[newVibe].label} aplicado`);
+      }
+    },
+    [activeTour, showToast]
+  );
 
   // Active audio guide session tracker
   const activeSessionIdRef = useRef<number>(0);
@@ -382,6 +375,14 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
         return;
       }
 
+      // Fast check for test words or gibberish
+      const INVALID_TEST_WORDS = ['test', 'prueba', 'asdf', '123', 'xxx', 'foo', 'bar', 'temp', 'hola', 'abc', 'qwerty', 'testing', 'monumento', 'nada', 'none'];
+      if (targetPlace.length < 3 || INVALID_TEST_WORDS.includes(targetPlace.toLowerCase())) {
+        setTourError(`No se encontró «${targetPlace}» como monumento o templo en Vietnam. Elige una de las sugerencias o escribe un lugar auténtico.`);
+        setIsLoadingTour(false);
+        return;
+      }
+
       stopAudio();
       setIsLoadingTour(true);
       setTourError(null);
@@ -389,7 +390,8 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
       // 1. Instant check against curated tours for immediate 0-latency experience
       const curatedMatch = findClientCuratedTour(targetPlace, targetCity);
       if (curatedMatch) {
-        setActiveTour(curatedMatch);
+        const adapted = adaptTourForVibe(curatedMatch, selectedVibe);
+        setActiveTour(adapted);
         setActiveStopIndex(0);
         setPlaceQuery(curatedMatch.placeName);
         setSelectedCity(curatedMatch.cityName);
@@ -397,7 +399,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
           {
             id: `welcome-${Date.now()}`,
             role: 'assistant',
-            text: `¡Xin chào! Soy Nguyễn, tu guía local aquí en ${curatedMatch.placeName}. Tienes la audioguía completa y detallada lista. ¡Pregúntame cualquier cosa que veas a tu alrededor!`,
+            text: `¡Xin chào! Soy Nguyễn, tu guía local aquí en ${curatedMatch.placeName}. Tienes la audioguía con enfoque "${VIBE_CONFIGS[selectedVibe].label}" lista. ¡Pregúntame cualquier cosa que veas a tu alrededor!`,
             timestamp: Date.now(),
           },
         ]);
@@ -425,43 +427,53 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
 
           clearTimeout(timeoutId);
 
-          if (response.ok) {
-            const data = await response.json();
-            if (data && data.success && data.tour) {
-              setActiveTour(data.tour);
-              setActiveStopIndex(0);
-              setChatMessages([
-                {
-                  id: `welcome-${Date.now()}`,
-                  role: 'assistant',
-                  text: `¡Xin chào! Soy Nguyễn, tu guía local en ${data.tour.placeName}. Disfruta del recorrido y pregúntame lo que necesites.`,
-                  timestamp: Date.now(),
-                },
-              ]);
-              setIsLoadingTour(false);
-              showToast('¡Free Tour generado con Gemini!');
-              return;
-            }
+          const data = await response.json();
+
+          if (response.ok && data && data.success && data.tour) {
+            setActiveTour(data.tour);
+            setActiveStopIndex(0);
+            setChatMessages([
+              {
+                id: `welcome-${Date.now()}`,
+                role: 'assistant',
+                text: `¡Xin chào! Soy Nguyễn, tu guía local en ${data.tour.placeName}. Disfruta del recorrido y pregúntame lo que necesites.`,
+                timestamp: Date.now(),
+              },
+            ]);
+            setIsLoadingTour(false);
+            showToast(`¡Free Tour (${VIBE_CONFIGS[selectedVibe].label}) generado!`);
+            return;
+          } else if (data && data.error) {
+            // Server explicitly rejected as invalid or unknown place
+            setTourError(data.error);
+            setIsLoadingTour(false);
+            return;
           }
         } catch (err) {
-          console.warn('Network tour fetch fallback:', err);
+          console.warn('Network tour fetch error:', err);
         }
       }
 
-      // 3. Robust client-side fallback if offline or server timeout
-      const fallbackTour = createClientFallbackTour(targetPlace, targetCity);
-      setActiveTour(fallbackTour);
-      setActiveStopIndex(0);
-      setChatMessages([
-        {
-          id: `welcome-fb-${Date.now()}`,
-          role: 'assistant',
-          text: `¡Xin chào! Soy Nguyễn, tu guía local en ${fallbackTour.placeName}. He preparado esta guía para ti. ¡Pregúntame cualquier duda que tengas!`,
-          timestamp: Date.now(),
-        },
-      ]);
-      setIsLoadingTour(false);
-      showToast(`¡Tour cargado para ${targetPlace}!`);
+      // 3. Robust client-side fallback ONLY for legitimate named places if offline
+      if (targetPlace.length >= 3 && !INVALID_TEST_WORDS.includes(targetPlace.toLowerCase())) {
+        const fallbackTour = createClientFallbackTour(targetPlace, targetCity);
+        const adaptedFallback = adaptTourForVibe(fallbackTour, selectedVibe);
+        setActiveTour(adaptedFallback);
+        setActiveStopIndex(0);
+        setChatMessages([
+          {
+            id: `welcome-fb-${Date.now()}`,
+            role: 'assistant',
+            text: `¡Xin chào! Soy Nguyễn, tu guía local en ${fallbackTour.placeName}. He preparado esta audioguía para ti. ¡Pregúntame cualquier duda que tengas!`,
+            timestamp: Date.now(),
+          },
+        ]);
+        setIsLoadingTour(false);
+        showToast(`¡Tour cargado para ${targetPlace}!`);
+      } else {
+        setTourError(`No encontramos «${targetPlace}» en Vietnam. Elige una de las sugerencias.`);
+        setIsLoadingTour(false);
+      }
     },
     [placeQuery, selectedCity, selectedVibe, isOnline, stopAudio, showToast]
   );
@@ -485,10 +497,10 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     };
   }, [stopAudio]);
 
-  // Scroll chat to bottom
+  // Scroll chat messages container internally when new messages arrive (without moving window position)
   useEffect(() => {
-    if (chatMessages.length > 0) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainerRef.current && chatMessages.length > 1) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [chatMessages]);
 
@@ -647,348 +659,117 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
         </div>
       )}
 
-      {/* Top Status Bar: Luxury Noir & Gold */}
-      <div className="bg-[#141210] text-stone-100 rounded-3xl p-4 sm:px-6 sm:py-4.5 border border-stone-800 shadow-md">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="p-2.5 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/25 shrink-0 shadow-inner">
-              <Headphones className="w-5 h-5 text-amber-400" />
+      {/* Top Header & Tour Explorer Bar */}
+      <div className="bg-white rounded-3xl p-4 sm:p-6 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-4">
+        {/* Row 1: Title & Action Buttons */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700 shrink-0">
+              <Headphones className="w-5 h-5" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="text-base sm:text-lg font-serif font-bold text-white tracking-wide truncate">
-                  Audioguía Free Tour
-                </h2>
-                <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-stone-900 border border-stone-800 text-xs text-stone-300 font-mono">
-                  <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                  <span className="text-[10px] uppercase font-bold tracking-wider">{isOnline ? 'Online IA' : 'Offline'}</span>
-                </span>
-                {activeTour && (
-                  <span className="text-xs text-amber-300 font-medium truncate hidden sm:inline">
-                    · {activeTour.placeName} ({activeTour.cityName})
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-stone-400 font-light truncate mt-0.5">
-                Narración en español de leyendas, arquitectura, detalles ocultos y preguntas en directo
+            <div>
+              <h2 className="font-serif font-bold text-xl sm:text-2xl text-stone-900 leading-tight">
+                Audioguía Free Tour
+              </h2>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Narración en español, arquitectura, secretos y paradas guiadas
               </p>
             </div>
           </div>
 
-          {/* Right Action Button: Saved tours */}
-          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-            <button
-              id="btn-saved-tours-toggle"
-              onClick={() => setShowSavedList(!showSavedList)}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 border border-stone-700/80 text-xs font-semibold transition active:scale-95 cursor-pointer shadow-2xs"
-            >
-              <Bookmark className="w-3.5 h-3.5 text-amber-400" />
-              <span>Guardados ({savedTours.length})</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Featured Famous Monuments Quick Switcher */}
-      <div id="quick-tours-carousel" className="bg-white rounded-2xl p-3.5 sm:p-4 border border-stone-200 shadow-xs space-y-3">
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-          <span className="text-xs font-semibold text-stone-400 mr-1 shrink-0">Monumento:</span>
-          {CURATED_CLIENT_TOURS.map((tour) => {
-            const isCurrent = activeTour?.placeName === tour.placeName;
-            return (
-              <button
-                key={tour.placeName}
-                id={`pill-tour-${tour.cityName.replace(/\s+/g, '-').toLowerCase()}`}
-                onClick={() => {
-                  stopAudio();
-                  setActiveTour(tour);
-                  setActiveStopIndex(0);
-                  setPlaceQuery(tour.placeName);
-                  setSelectedCity(tour.cityName);
-                  showToast(`Cargado tour: ${tour.placeName}`);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 transition cursor-pointer flex items-center gap-1.5 ${
-                  isCurrent
-                    ? 'bg-stone-900 text-white font-bold shadow-xs'
-                    : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-                }`}
-              >
-                <span>📍 {tour.placeName.split('(')[0].trim()}</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${isCurrent ? 'bg-amber-400 text-stone-950 font-bold' : 'bg-stone-200 text-stone-600'}`}>
-                  {tour.cityName}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Row 2: Vibe Selector segmented controls */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 border-t border-stone-100 pb-0.5">
-          <span className="text-xs font-semibold text-stone-400 mr-1 shrink-0">Enfoque:</span>
-          {VIBE_OPTIONS.map((vibe) => {
-            const isSelected = selectedVibe === vibe.id;
-            return (
-              <button
-                key={vibe.id}
-                type="button"
-                onClick={() => setSelectedVibe(vibe.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                  isSelected
-                    ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
-                    : 'bg-stone-100 hover:bg-stone-200 text-stone-600'
-                }`}
-              >
-                <span>{vibe.icon}</span>
-                <span>{vibe.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Saved Tours List View Modal/Drawer */}
-      {showSavedList && (
-        <div id="saved-tours-section" className="bg-white rounded-2xl p-5 border border-stone-200 shadow-sm space-y-4 animate-fade-in">
-          <div className="flex items-center justify-between pb-3 border-b border-stone-200">
-            <div className="flex items-center gap-2">
-              <Bookmark className="w-4 h-4 text-amber-600" />
-              <h3 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
-                Tours Descargados para Uso Offline
-              </h3>
-            </div>
-            <button
-              onClick={() => setShowSavedList(false)}
-              className="text-xs text-stone-500 hover:text-stone-800 font-semibold"
-            >
-              Cerrar ✕
-            </button>
-          </div>
-
-          {savedTours.length === 0 ? (
-            <div className="text-center py-6 text-stone-500 text-xs">
-              No tienes tours guardados todavía. Cuando visualices un tour, pulsa "Guardar para Viaje" para tenerlo disponible 100% sin internet.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {savedTours.map((t) => (
-                <div
-                  key={t.placeName}
-                  className="bg-stone-50 hover:bg-stone-100 rounded-xl p-3 border border-stone-200 transition-all flex flex-col justify-between gap-2 text-left"
-                >
-                  <div>
-                    <div className="flex items-center justify-between gap-1 text-[11px] text-amber-700 font-semibold mb-1">
-                      <span>{t.cityName}</span>
-                      <span>⏱️ {t.durationMinutes} min</span>
-                    </div>
-                    <h4 className="text-xs font-bold text-stone-900 line-clamp-1">{t.placeName}</h4>
-                    <p className="text-[11px] text-stone-600 line-clamp-2 mt-0.5">{t.tagline}</p>
-                  </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-stone-200">
-                    <button
-                      onClick={() => {
-                        stopAudio();
-                        setActiveTour(t);
-                        setShowSavedList(false);
-                        showToast(`Cargado tour offline: ${t.placeName}`);
-                      }}
-                      className="text-xs font-semibold text-amber-600 hover:text-amber-700 flex items-center gap-1"
-                    >
-                      <span>Abrir tour</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        const updated = deleteSavedFreeTour(t.placeName);
-                        setSavedTours(updated);
-                        showToast('Tour eliminado.');
-                      }}
-                      className="text-stone-400 hover:text-red-500 p-1"
-                      title="Eliminar tour"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Search & Custom Place Selection Section */}
-      <div id="tour-search-box" className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <label className="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-amber-600" />
-            <span>¿En qué monumento o lugar estás ahora?</span>
-          </label>
-
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Right Action Buttons: GPS + Saved (vertically centered) */}
+          <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
             <button
               type="button"
               id="btn-detect-gps"
               onClick={handleDetectGps}
               disabled={isLocatingGps}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
+              title="Detectar monumento más cercano mediante GPS"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 text-xs font-semibold transition active:scale-95 cursor-pointer disabled:opacity-50"
             >
-              <Navigation className={`w-3.5 h-3.5 ${isLocatingGps ? 'animate-spin' : 'text-amber-600'}`} />
-              <span>{isLocatingGps ? 'Buscando satélites...' : '📍 Detectar mi lugar exacto'}</span>
+              <Navigation className={`w-3.5 h-3.5 ${isLocatingGps ? 'animate-spin text-amber-600' : 'text-stone-500'}`} />
+              <span>{isLocatingGps ? 'Buscando...' : 'Cerca de mí'}</span>
             </button>
 
             <button
-              type="button"
-              onClick={() => setShowGpsHelper(!showGpsHelper)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
-                showGpsHelper
-                  ? 'bg-amber-600 text-white border-amber-600 font-bold'
-                  : 'bg-stone-100 hover:bg-amber-50 text-stone-700 hover:text-amber-900 border-stone-300'
+              id="btn-saved-tours-toggle"
+              onClick={() => setShowSavedList(!showSavedList)}
+              title="Ver tours descargados para acceso sin conexión"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition active:scale-95 cursor-pointer ${
+                showSavedList
+                  ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200'
               }`}
             >
-              <Compass className="w-3.5 h-3.5 text-amber-600" />
-              <span>Simular Posición</span>
+              <Bookmark className="w-3.5 h-3.5 text-amber-500" />
+              <span>Guardados ({savedTours.length})</span>
             </button>
           </div>
         </div>
 
-        {/* GPS Diagnostic & Simulation Assistant Card */}
-        {showGpsHelper && (
-          <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 text-xs text-amber-950 space-y-3 animate-fade-in shadow-xs">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Compass className="w-4 h-4 text-amber-700 shrink-0" />
-                <span className="font-bold text-amber-900 text-sm">
-                  {gpsError ? 'Diagnóstico de Señal GPS' : '🧭 Simulación de Posición en Vietnam'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowGpsHelper(false)}
-                className="text-stone-500 hover:text-stone-800 text-xs font-bold p-1 cursor-pointer"
-              >
-                ✕ Cerrar
-              </button>
+        {/* Row 2: Vibe Selector Chips, Search Controls & Suggestions */}
+        <div className="space-y-2.5">
+          {/* Vibe Selector Chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+            <span className="text-[11px] font-semibold text-stone-400 mr-1 shrink-0">Enfoque:</span>
+            {VIBE_OPTIONS.map((vibe) => {
+              const isSelected = selectedVibe === vibe.id;
+              return (
+                <button
+                  key={vibe.id}
+                  type="button"
+                  onClick={() => handleSelectVibe(vibe.id)}
+                  title={vibe.desc}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer shrink-0 flex items-center gap-1.5 active:scale-95 ${
+                    isSelected
+                      ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                      : 'bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200/50'
+                  }`}
+                >
+                  <span>{vibe.icon}</span>
+                  <span>{vibe.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Search bar & City Selector */}
+          <div className="pt-2 border-t border-stone-100 flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                id="input-tour-place"
+                type="text"
+                value={placeQuery}
+                onChange={(e) => setPlaceQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && placeQuery.trim()) {
+                    handleGenerateTour();
+                  }
+                }}
+                placeholder="Buscar templo o monumento"
+                className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:bg-white text-stone-900 transition-all placeholder:text-stone-400"
+              />
             </div>
 
-            {gpsError ? (
-              <div className="space-y-2">
-                <p className="text-amber-900 leading-relaxed font-medium">
-                  {gpsError.message}
-                </p>
-                <p className="text-amber-800/80 leading-relaxed text-[11px]">
-                  {gpsError.userTip}
-                </p>
-                {gpsError.isIframeBlocked && (
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => window.open(window.location.href, '_blank')}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Abrir app en ventana completa (Habilitar GPS nativo)</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-amber-900 leading-relaxed">
-                Selecciona cualquier monumento para situarte virtualmente en él y escuchar su audioguía:
-              </p>
-            )}
-
-            <div>
-              <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider block mb-2">
-                O sitúate con 1 clic en un monumento emblemático de Vietnam:
-              </span>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {VIETNAM_SIMULATION_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleSimulatePosition(preset.id)}
-                    className="p-2.5 rounded-xl bg-white hover:bg-amber-100/70 border border-amber-200 text-left transition cursor-pointer flex flex-col gap-0.5 shadow-2xs group"
-                  >
-                    <div className="flex items-center gap-1.5 font-bold text-stone-900 group-hover:text-amber-800 text-xs">
-                      <span>{preset.icon}</span>
-                      <span className="truncate">{preset.cityName}</span>
-                    </div>
-                    <span className="text-[11px] text-stone-600 truncate">
-                      {preset.poiName}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {gpsNotice && !showGpsHelper && (
-          <div className="bg-amber-50 text-amber-900 px-3.5 py-2 rounded-xl text-xs border border-amber-200 flex items-center gap-2">
-            <Info className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>{gpsNotice}</span>
-          </div>
-        )}
-
-        {/* Input bar */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              id="input-tour-place"
-              type="text"
-              value={placeQuery}
-              onChange={(e) => setPlaceQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && placeQuery.trim()) {
-                  handleGenerateTour();
-                }
-              }}
-              placeholder="Buscar templo, lugar o monumento..."
-              className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-base sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:bg-white text-stone-900 transition-all placeholder:text-stone-400"
-            />
+            <select
+              id="select-tour-city"
+              value={selectedCity}
+              onChange={(e) => setSelectedCity(e.target.value)}
+              aria-label="Seleccionar ciudad de Vietnam"
+              className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm font-medium text-stone-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shrink-0"
+            >
+              {POPULAR_CITIES.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+              <option value="Vietnam">Otra ciudad de Vietnam</option>
+            </select>
           </div>
 
-          <select
-            id="select-tour-city"
-            value={selectedCity}
-            onChange={(e) => setSelectedCity(e.target.value)}
-            aria-label="Seleccionar ciudad de Vietnam"
-            className="px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs sm:text-sm font-medium text-stone-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shrink-0"
-          >
-            {POPULAR_CITIES.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-            <option value="Vietnam">Otra ciudad de Vietnam</option>
-          </select>
-
-          <button
-            id="btn-start-tour"
-            onClick={() => handleGenerateTour()}
-            disabled={isLoadingTour || !placeQuery.trim()}
-            className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-xl text-sm font-semibold shadow-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-          >
-            {isLoadingTour ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                <span>Generando Tour...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-amber-200" />
-                <span>Empezar Free Tour</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Quick Monument Suggestions by selected City */}
-        <div className="pt-1">
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
-            Lugares populares en {selectedCity}:
-          </div>
-          <div className="flex flex-wrap gap-1.5">
+          {/* Quick suggestions for active city */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {POPULAR_CITIES.find((c) => c.name === selectedCity)?.samplePois.map((poiName) => (
               <button
                 key={poiName}
@@ -996,14 +777,42 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                   setPlaceQuery(poiName);
                   handleGenerateTour(poiName);
                 }}
-                className="px-2.5 py-1 bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-900 rounded-lg text-xs font-medium border border-stone-200/80 transition-all flex items-center gap-1"
+                className="px-2.5 py-1 bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-900 rounded-lg text-[11px] font-medium border border-stone-200/60 transition flex items-center gap-1 shrink-0 cursor-pointer active:scale-95"
               >
                 <span>{poiName}</span>
-                <ChevronRight className="w-3 h-3 opacity-50" />
               </button>
             ))}
           </div>
+
+          {/* Cargar Tour button */}
+          <div className="pt-1 flex justify-end">
+            <button
+              id="btn-start-tour"
+              onClick={() => handleGenerateTour()}
+              disabled={isLoadingTour || !placeQuery.trim()}
+              className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold rounded-xl text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {isLoadingTour ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-stone-950" />
+                  <span>Generando tour...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-stone-950" />
+                  <span>Cargar Tour</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
+
+        {gpsNotice && !showGpsHelper && (
+          <div className="bg-amber-50 text-amber-900 px-3.5 py-2 rounded-xl text-xs border border-amber-200 flex items-center gap-2">
+            <Info className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{gpsNotice}</span>
+          </div>
+        )}
 
         {tourError && (
           <div className="bg-red-50 text-red-800 p-3 rounded-xl border border-red-200 text-xs flex items-center gap-2">
@@ -1032,67 +841,45 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
 
       {/* ACTIVE TOUR VIEW */}
       {activeTour && !isLoadingTour && (
-        <div id="active-tour-view" className="space-y-6 animate-fade-in">
-          {/* Tour Header Banner */}
-          <div className="bg-stone-900 text-white rounded-2xl p-5 sm:p-6 border border-stone-800 shadow-md">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2 text-xs font-medium mb-1.5">
-                  <span className="bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-md border border-amber-500/30">
-                    📍 {activeTour.cityName}
-                  </span>
-                  <span className="bg-stone-800 text-stone-300 px-2.5 py-0.5 rounded-md border border-stone-700">
-                    ⏱️ ~{activeTour.durationMinutes} minutos de recorrido
-                  </span>
-                  <span className="bg-stone-800 text-stone-300 px-2.5 py-0.5 rounded-md border border-stone-700">
-                    🚶‍♂️ {activeTour.stops.length} paradas guiadas
-                  </span>
-                </div>
-
-                <h2 className="text-xl sm:text-2xl font-bold text-stone-100 tracking-tight">
-                  {activeTour.placeName}
-                </h2>
-
-                {activeTour.vietnameseName && (
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm font-semibold text-amber-300">
-                      🇻🇳 {activeTour.vietnameseName}
-                    </span>
-                    <button
-                      onClick={() => speakVietnamese(activeTour.vietnameseName || '')}
-                      title="Escuchar pronunciación nativa en vietnamita"
-                      className="p-1 hover:bg-stone-800 rounded-md text-amber-400 hover:text-amber-300 transition-colors"
-                    >
-                      <Volume2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                <p className="text-stone-300 text-xs sm:text-sm italic mt-2 max-w-2xl">
-                  "{activeTour.tagline}"
-                </p>
+        <div id="active-tour-view" className="space-y-4 animate-fade-in">
+          {/* Unified Tour Card & Audioguide Player */}
+          <div className="bg-white rounded-3xl p-4 sm:p-6 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-3.5">
+            {/* Top row: Badges + Action Buttons */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                <span className="font-semibold text-stone-700 bg-stone-100 px-2.5 py-1 rounded-lg border border-stone-200/60">
+                  📍 {activeTour.cityName}
+                </span>
+                <span className={`px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1 ${VIBE_CONFIGS[selectedVibe].badgeColor}`}>
+                  <span>{VIBE_CONFIGS[selectedVibe].icon}</span>
+                  <span>{VIBE_CONFIGS[selectedVibe].shortLabel}</span>
+                </span>
+                <span className="text-stone-500 font-medium hidden sm:inline text-xs">
+                  • ~{activeTour.durationMinutes} min • {activeTour.stops.length} paradas
+                </span>
               </div>
 
-              {/* Action buttons: Save & Share */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Action Buttons: Save & Share */}
+              <div className="flex items-center gap-1.5 ml-auto">
                 <button
                   id="btn-save-tour-toggle"
                   onClick={handleToggleSaveTour}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition active:scale-95 cursor-pointer ${
                     isCurrentTourSaved
-                      ? 'bg-amber-500 text-stone-950 shadow-sm'
-                      : 'bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700'
+                      ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                      : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/70'
                   }`}
+                  title={isCurrentTourSaved ? 'Tour guardado sin conexión' : 'Guardar tour'}
                 >
                   {isCurrentTourSaved ? (
                     <>
-                      <BookmarkCheck className="w-4 h-4 text-stone-950" />
-                      <span>Guardado Offline</span>
+                      <BookmarkCheck className="w-3.5 h-3.5 text-stone-950" />
+                      <span>Guardado</span>
                     </>
                   ) : (
                     <>
-                      <Bookmark className="w-4 h-4 text-amber-400" />
-                      <span>Guardar para Viaje</span>
+                      <Bookmark className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Guardar</span>
                     </>
                   )}
                 </button>
@@ -1104,20 +891,42 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                       navigator.clipboard.writeText(
                         `Free Tour de ${activeTour.placeName} (${activeTour.cityName}):\n\n${activeTour.audioGuideScript}\n\nParadas:\n${activeTour.stops.map((s) => `${s.number}. ${s.title}: ${s.story}`).join('\n')}`
                       );
-                      showToast('¡Guía completa copiada al portapapeles!');
+                      showToast('¡Guía copiada al portapapeles!');
                     }
                   }}
-                  className="p-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-xl border border-stone-700 text-xs transition-all"
+                  className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-600 hover:text-stone-900 rounded-xl border border-stone-200/70 text-xs transition cursor-pointer active:scale-95"
                   title="Copiar guía completa"
                 >
-                  <Share2 className="w-4 h-4" />
+                  <Share2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Audio Guide Player Toolbar */}
-            <div className="mt-5 pt-4 border-t border-stone-800 bg-stone-950/60 -mx-5 -mb-5 sm:-mx-6 sm:-mb-6 p-4 sm:px-6 rounded-b-2xl flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+            {/* Place Title & Subtitle */}
+            <div>
+              <h2 className="text-xl sm:text-2xl font-serif font-bold text-stone-900 tracking-tight">
+                {activeTour.placeName}
+              </h2>
+              {activeTour.vietnameseName && activeTour.vietnameseName.trim().toLowerCase() !== activeTour.placeName.trim().toLowerCase() && (
+                <div className="flex items-center gap-1.5 text-xs text-stone-500 mt-0.5">
+                  <span className="font-semibold text-stone-700">🇻🇳 {activeTour.vietnameseName}</span>
+                  <button
+                    onClick={() => speakVietnamese(activeTour.vietnameseName || '')}
+                    title="Escuchar pronunciación nativa"
+                    className="p-0.5 text-amber-600 hover:text-amber-700 transition"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+              <p className="text-stone-600 text-xs sm:text-sm italic mt-1">
+                {activeTour.tagline.replace(/^["']|["']$/g, '')}
+              </p>
+            </div>
+
+            {/* Integrated Audioguide Player Toolbar */}
+            <div className="pt-2 border-t border-stone-100 flex items-center justify-between gap-2 flex-wrap bg-stone-50/80 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 rounded-xl">
+              <div className="flex items-center gap-2">
                 <button
                   id="btn-toggle-audio-guide"
                   onClick={() => {
@@ -1129,17 +938,17 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                       playAudio(activeTour.audioGuideScript, `Audioguía: ${activeTour.placeName}`);
                     }
                   }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
                 >
                   {isPlayingAudio && !isPausedAudio ? (
                     <>
-                      <Pause className="w-4 h-4 fill-current" />
-                      <span>Pausar Audioguía</span>
+                      <Pause className="w-3.5 h-3.5 fill-current" />
+                      <span>Pausar</span>
                     </>
                   ) : (
                     <>
-                      <Play className="w-4 h-4 fill-current" />
-                      <span>{isPausedAudio ? 'Reanudar' : 'Escuchar Audioguía'}</span>
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>{isPausedAudio ? 'Reanudar' : 'Escuchar'}</span>
                     </>
                   )}
                 </button>
@@ -1148,7 +957,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                   <button
                     id="btn-stop-audio"
                     onClick={stopAudio}
-                    className="p-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-xl text-xs transition-all cursor-pointer"
+                    className="p-1.5 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-xl text-xs transition cursor-pointer"
                     title="Detener audio"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
@@ -1158,7 +967,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                 <button
                   id="btn-toggle-audio-speed"
                   onClick={toggleSpeed}
-                  className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-amber-300 rounded-lg text-xs font-mono font-bold transition-all border border-stone-700 cursor-pointer"
+                  className="px-2 py-1 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-lg text-xs font-mono font-bold transition border border-stone-300/60 cursor-pointer"
                   title="Cambiar velocidad de narración"
                 >
                   {playbackSpeed.toFixed(1)}x
@@ -1166,73 +975,43 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
               </div>
 
               {/* Sound wave visualizer / playback indicator */}
-              <div className="flex items-center gap-2 text-xs text-stone-400">
+              <div className="flex items-center gap-2 text-xs text-stone-500 ml-auto">
                 {isPlayingAudio && !isPausedAudio ? (
-                  <div className="flex items-center gap-2">
-                    <AudioWaveIndicator isPlaying={true} size="md" colorClass="text-amber-400" />
-                    <span className="text-amber-300 font-medium truncate max-w-[180px] sm:max-w-[260px]">
-                      {speakingTextTitle || 'Voz Natural reproduciendo...'}
+                  <div className="flex items-center gap-1.5">
+                    <AudioWaveIndicator isPlaying={true} size="sm" colorClass="text-amber-600" />
+                    <span className="text-amber-700 font-medium text-xs truncate max-w-[140px] sm:max-w-[200px]">
+                      {speakingTextTitle || 'Reproduciendo...'}
                     </span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/60 text-[10px] font-semibold">
-                      <Sparkles className="w-3 h-3 text-amber-400" />
-                      <span>Voz Natural IA</span>
-                    </span>
-                    <span className="text-stone-400 hidden sm:flex items-center gap-1.5">
-                      <Headphones className="w-3.5 h-3.5 text-stone-500" />
-                      <span>Ideal con auriculares</span>
-                    </span>
-                  </div>
+                  <span className="text-stone-400 text-xs hidden sm:inline">
+                    ~{activeTour.durationMinutes} min de recorrido
+                  </span>
                 )}
               </div>
             </div>
-          </div>
 
-          {/* Introductory Narrative Script Card with Synchronized Reading */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Compass className="w-4 h-4 text-amber-600" />
-                <h3 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
-                  Narrativa del Guía Local
-                </h3>
-              </div>
-              <button
-                onClick={() => playAudio(activeTour.audioGuideScript, 'Narrativa del Guía')}
-                className="text-xs font-semibold text-amber-700 hover:text-amber-800 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer"
-              >
-                <AudioWaveIndicator
-                  isPlaying={isPlayingAudio && speakingTextTitle.includes('Narrativa')}
-                  size="sm"
-                  colorClass="text-amber-700"
-                />
-                <span>Leer en voz alta</span>
-              </button>
+            {/* Narrative text with live synchronized reading */}
+            <div className="pt-1 text-stone-700 text-xs sm:text-sm leading-relaxed font-serif">
+              {isPlayingAudio && speakingTextTitle.includes('Audioguía') && audioSentences.length > 0 ? (
+                <div className="space-y-1.5">
+                  {audioSentences.map((sent, sIdx) => (
+                    <span
+                      key={sIdx}
+                      className={`transition-all rounded-sm px-0.5 inline ${
+                        sIdx === currentSentenceIndex
+                          ? 'bg-amber-200 text-stone-950 font-medium'
+                          : 'text-stone-700'
+                      }`}
+                    >
+                      {sent}{' '}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="whitespace-pre-line">{activeTour.audioGuideScript}</p>
+              )}
             </div>
-
-            {/* If currently speaking this script, highlight active sentence */}
-            {isPlayingAudio && speakingTextTitle.includes('Narrativa') && audioSentences.length > 0 ? (
-              <div className="text-stone-700 text-sm leading-relaxed font-serif space-y-2">
-                {audioSentences.map((sent, sIdx) => (
-                  <span
-                    key={sIdx}
-                    className={`transition-all rounded-sm px-0.5 inline ${
-                      sIdx === currentSentenceIndex
-                        ? 'bg-amber-200 text-stone-950 font-medium'
-                        : 'text-stone-700'
-                    }`}
-                  >
-                    {sent}{' '}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-line font-serif">
-                {activeTour.audioGuideScript}
-              </p>
-            )}
           </div>
 
           {/* PARADAS DEL TOUR (Interactive Stops) */}
@@ -1451,7 +1230,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
             )}
 
             {/* Conversation messages scroll area */}
-            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+            <div ref={chatContainerRef} className="space-y-3 max-h-72 overflow-y-auto pr-1">
               {chatMessages.map((msg) => {
                 const isUser = msg.role === 'user';
                 return (
@@ -1484,7 +1263,6 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                   <span className="italic">Nguyễn está respondiendo...</span>
                 </div>
               )}
-              <div ref={chatEndRef} />
             </div>
 
             {/* Chat Input Field */}

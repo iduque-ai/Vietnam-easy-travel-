@@ -1467,32 +1467,58 @@ app.post('/api/free-tour', async (req, res) => {
 
   const cleanPlace = placeName.trim();
   const cleanCity = (cityName || 'Vietnam').trim();
-  const targetVibe = userVibe || 'curiosidades';
+  const targetVibe = (userVibe || 'curiosidades') as string;
+
+  // Immediate check for common test / gibberish words
+  const INVALID_TEST_WORDS = ['test', 'prueba', 'asdf', '123', 'xxx', 'foo', 'bar', 'temp', 'hola', 'abc', 'qwerty', 'testing', 'monumento', 'nada', 'none'];
+  if (cleanPlace.length < 3 || INVALID_TEST_WORDS.includes(cleanPlace.toLowerCase())) {
+    return res.status(400).json({
+      success: false,
+      error: `No encontramos «${cleanPlace}» como monumento o templo real en Vietnam. Elige una de las sugerencias o escribe un lugar auténtico (ej: Templo de la Literatura, Ciudadela de Huế, etc.).`
+    });
+  }
+
+  const vibeInstructions: Record<string, string> = {
+    curiosidades: 'Enfócate en mitos, supersticiones, dragones sagrados, leyendas y secretos que casi ningún turista conoce.',
+    historia: 'Enfócate en cronología, dinastías reales de Vietnam, guerras de resistencia, fechas y proezas arquitectónicas.',
+    express: 'Tour Exprés de 15 minutos: guion muy directo y al grano, 3 paradas imprescindibles y un tip rápido para optimizar el tiempo.',
+    fotografia: 'Enfoque para amantes de la fotografía: mejores horas de luz (amanecer/atardecer), encuadres y ángulos para fotos sin multitudes.',
+    gastronomia: 'Enfoque de vida local y gastronomía: relación del monumento con los aromas, ofrendas de frutas, té callejero y platos típicos cercanos.'
+  };
+
+  const selectedVibeGuidance = vibeInstructions[targetVibe] || vibeInstructions.curiosidades;
 
   // Check if we have an instant curated tour match
   const curatedMatch = findCuratedTour(cleanPlace, cleanCity);
   if (curatedMatch) {
+    const normalized = normalizeTour(curatedMatch, cleanPlace, cleanCity);
     return res.json({
       success: true,
-      tour: normalizeTour(curatedMatch, cleanPlace, cleanCity),
+      tour: normalized,
       source: 'curated_verified',
     });
   }
 
-  const prompt = `Actúa como un guía turístico local vietnamita apasionado, divertido, culto y con excelente español.
-El viajero está ahora mismo de pie frente a: "${cleanPlace}" en la ciudad de "${cleanCity}" (categoría: ${category || 'monumento'}).
-Preferencia del viajero: estilo "${targetVibe}" (haz énfasis en historias poco conocidas, detalles visuales inadvertidos y leyendas auténticas).
+  const prompt = `Actúa como un guía turístico local vietnamita profesional.
+El viajero solicita una audioguía para: "${cleanPlace}" en "${cleanCity}".
 
-Crea un TOUR AUDIOGUÍA VIRTUAL cautivador, estructurado y listo para escuchar o leer en su teléfono.
-Debes responder en un JSON estrictamente válido con este esquema:
-
+PASO 1: VERIFICACIÓN DE REALIDAD
+¿"${cleanPlace}" es un monumento, templo, pagoda, mausoleo, calle histórica, cueva, mirador o lugar turístico/cultural REAL existente en Vietnam?
+- Si NO es un lugar real en Vietnam (es una palabra aleatoria, prueba, gibberish o lugar ficticio/fuera de Vietnam), responde estrictamente:
 {
+  "isValidPlace": false,
+  "error": "No encontramos «${cleanPlace.replace(/"/g, '\\"')}» como monumento o templo real en Vietnam. Prueba con un lugar auténtico o elige una de las sugerencias."
+}
+
+- Si SÍ es un lugar auténtico y real en Vietnam, responde con "isValidPlace": true y el tour completo:
+{
+  "isValidPlace": true,
   "placeName": "${cleanPlace.replace(/"/g, '\\"')}",
   "cityName": "${cleanCity.replace(/"/g, '\\"')}",
   "vietnameseName": "Nombre oficial en vietnamita con acentos diacríticos",
   "tagline": "Una frase gancho intrigante de 1 línea",
   "durationMinutes": 35,
-  "audioGuideScript": "Un guion de audioguía continuo de 2 a 3 párrafos (200-280 palabras), narrado en primera persona ('¡Hola viajero!', 'Si miras a tu alrededor...'). Explica el contexto histórico, la energía del lugar, olores a incienso o maderas, y la gran leyenda central.",
+  "audioGuideScript": "Un guion de audioguía continuo de 2 a 3 párrafos (200-280 palabras), narrado en primera persona. Explica el contexto histórico, la energía del lugar, olores a incienso o maderas, y la gran leyenda central. Enfoque: ${selectedVibeGuidance}",
   "stops": [
     {
       "number": 1,
@@ -1542,12 +1568,20 @@ Debes responder en un JSON estrictamente válido con este esquema:
   if (process.env.GEMINI_API_KEY) {
     try {
       const tour = await callGeminiJsonWithFallback(prompt, 8000);
-      if (tour && tour.placeName && Array.isArray(tour.stops) && tour.stops.length > 0) {
-        return res.json({
-          success: true,
-          tour: normalizeTour(tour, cleanPlace, cleanCity),
-          source: 'gemini_ai',
-        });
+      if (tour) {
+        if (tour.isValidPlace === false) {
+          return res.status(404).json({
+            success: false,
+            error: tour.error || `No encontramos «${cleanPlace}» como monumento o templo real en Vietnam.`
+          });
+        }
+        if (tour.placeName && Array.isArray(tour.stops) && tour.stops.length > 0) {
+          return res.json({
+            success: true,
+            tour: normalizeTour(tour, cleanPlace, cleanCity),
+            source: 'gemini_ai',
+          });
+        }
       }
     } catch (err: any) {
       console.warn(`[Gemini Free Tour] Error or timeout calling model (${err?.message || 'error'}). Generating guaranteed tour...`);
@@ -1673,10 +1707,10 @@ interface RestaurantSearchCacheItem {
 }
 const restaurantSearchCache = new Map<string, RestaurantSearchCacheItem>();
 
-// Helper to infer dish and category from place details
+// Helper to infer dish and category from place details and regional context
 function mapGooglePlaceToItem(place: any, defaultCity: string): any {
   const address = place.formatted_address || '';
-  const districtMatch = address.match(/(Quận\s+[^,]+|Huyện\s+[^,]+|Hoàn Kiếm|Ba Đình|Hai Bà Trưng|Đống Đa|Tây Hồ|Cẩm Phô|Minh An|Sơn Trà|Hải Châu|Ngũ Hành Sơn|District\s+\d+|Old Quarter)/i);
+  const districtMatch = address.match(/(Quận\s+[^,]+|Huyện\s+[^,]+|Hoàn Kiếm|Ba Đình|Hai Bà Trưng|Đống Đa|Tây Hồ|Cẩm Phô|Minh An|Sơn Trà|Hải Châu|Ngũ Hành Sơn|District\s+\d+|Old Quarter|Fansipan|Mường Hoa|Thác Bạc)/i);
   const district = districtMatch ? districtMatch[0].trim() : (defaultCity || 'Vietnam');
 
   const priceLevel = typeof place.price_level === 'number' ? place.price_level : 2;
@@ -1684,34 +1718,112 @@ function mapGooglePlaceToItem(place: any, defaultCity: string): any {
   const avgPriceVnd = priceTier === 1 ? 65000 : priceTier === 2 ? 145000 : 380000;
 
   const nameLower = (place.name || '').toLowerCase();
+  const cityLower = (defaultCity || '').toLowerCase();
+
   let category = 'Restaurante Tradicional';
-  if (nameLower.includes('bánh mì') || nameLower.includes('banh mi') || nameLower.includes('sandwich')) {
+  if (nameLower.includes('bánh mì') || nameLower.includes('banh mi') || nameLower.includes('sandwich') || nameLower.includes('baguette')) {
     category = 'Bocadillos & Bánh Mì';
-  } else if (nameLower.includes('cafe') || nameLower.includes('coffee') || nameLower.includes('cà phê') || nameLower.includes('tea')) {
+  } else if (nameLower.includes('cafe') || nameLower.includes('coffee') || nameLower.includes('cà phê') || nameLower.includes('tea') || nameLower.includes('roaster')) {
     category = 'Café de Especialidad';
-  } else if (nameLower.includes('street') || nameLower.includes('quán vỉa hè') || nameLower.includes('vỉa hè')) {
+  } else if (nameLower.includes('street') || nameLower.includes('quán vỉa hè') || nameLower.includes('vỉa hè') || nameLower.includes('gánh')) {
     category = 'Street Food / Puesto Callejero';
-  } else if (nameLower.includes('bistro') || nameLower.includes('fusion') || nameLower.includes('pizza') || nameLower.includes('pasta')) {
+  } else if (nameLower.includes('bistro') || nameLower.includes('fusion') || nameLower.includes('pizza') || nameLower.includes('pasta') || nameLower.includes('burger')) {
     category = 'Bistró / Fusión';
   }
 
-  let mustOrderDish = 'Especialidad vietnamita recomendada de la casa';
-  if (nameLower.includes('phở') || nameLower.includes('pho')) {
-    mustOrderDish = 'Phở Bò tái lăn / Phở Gà ta';
+  // Smart Contextual & Regional Dish Detection (In clear Spanish with Vietnamese name)
+  let mustOrderDish = '';
+
+  // 1. Direct Keyword Match in Restaurant Name
+  if (nameLower.includes('phở') || nameLower.includes('pho ')) {
+    mustOrderDish = 'Sopa de fideos Phở con ternera salteada al wok (Phở Bò Tái Lăn)';
   } else if (nameLower.includes('bún chả') || nameLower.includes('bun cha')) {
-    mustOrderDish = 'Bún Chả Hà Nội nướng than hoa & Nem rán';
+    mustOrderDish = 'Fideos Bún Chả con albóndigas de cerdo a la brasa y rollitos (Nem Rán)';
   } else if (nameLower.includes('bánh mì') || nameLower.includes('banh mi')) {
-    mustOrderDish = 'Bánh Mì giòn kẹp pate, thịt nướng & rau thơm';
+    mustOrderDish = 'Bocadillo Bánh Mì crujiente con paté casero y cerdo asado';
   } else if (nameLower.includes('chay') || nameLower.includes('vegan') || nameLower.includes('vegetarian')) {
-    mustOrderDish = 'Phở Chay thơm lừng & Bánh Xèo Chay rau rừng';
+    mustOrderDish = 'Phở vegetariano con setas aromáticas y crêpe crujiente de hierbas (Bánh Xèo Chay)';
   } else if (nameLower.includes('chả cá') || nameLower.includes('cha ca')) {
-    mustOrderDish = 'Chả Cá Lăng nghệ chảo nóng xào thì là';
+    mustOrderDish = 'Pescado Chả Cá marinado en cúrcuma con eneldo a la sartén';
   } else if (nameLower.includes('bún bò') || nameLower.includes('bun bo')) {
-    mustOrderDish = 'Bún Bò Huế đậm đà nước dùng sả';
+    mustOrderDish = 'Sopa imperial Bún Bò Huế con ternera especiada y hierba limón';
   } else if (nameLower.includes('cơm gà') || nameLower.includes('com ga')) {
-    mustOrderDish = 'Cơm Gà xé sợi nghệ dẻo thơm';
+    mustOrderDish = 'Arroz al vapor con pollo desmenuzado en cúrcuma y salsa de jengibre (Cơm Gà)';
   } else if (nameLower.includes('cao lầu') || nameLower.includes('cao lau')) {
-    mustOrderDish = 'Cao Lầu mì sợi dai với thịt xá xíu';
+    mustOrderDish = 'Fideos Cao Lầu tradicionales con cerdo marinado y crujiente de arroz';
+  } else if (nameLower.includes('mì quảng') || nameLower.includes('mi quang')) {
+    mustOrderDish = 'Fideos Mì Quảng con gambas, cerdo y galleta crujiente de sésamo';
+  } else if (nameLower.includes('bánh xèo') || nameLower.includes('banh xeo')) {
+    mustOrderDish = 'Crêpe crujiente vietnamita (Bánh Xèo) con gambas, brotes y hierbas';
+  } else if (nameLower.includes('cơm tấm') || nameLower.includes('com tam')) {
+    mustOrderDish = 'Arroz quebrado Cơm Tấm con chuleta marinada a la brasa y huevo';
+  } else if (nameLower.includes('salmon') || nameLower.includes('cá hồi') || nameLower.includes('ca hoi')) {
+    mustOrderDish = 'Cazuela hotpot de salmón alpino de Sa Pa (Lẩu Cá Hồi) y salmón a la brasa';
+  } else if (nameLower.includes('sturgeon') || nameLower.includes('cá tầm') || nameLower.includes('ca tam')) {
+    mustOrderDish = 'Esturión de agua fría de Sa Pa a la brasa y en cazuela de hierbas (Lẩu Cá Tầm)';
+  } else if (nameLower.includes('dê') || nameLower.includes('goat')) {
+    mustOrderDish = 'Carne de cabra de montaña a la brasa con lima y sésamo (Dê Núi Ninh Bình)';
+  } else if (nameLower.includes('cơm cháy') || nameLower.includes('com chay')) {
+    mustOrderDish = 'Arroz tostado crujiente con salsa tradicional de Ninh Bình (Cơm Cháy)';
+  } else if (nameLower.includes('hải sản') || nameLower.includes('seafood') || nameLower.includes('ốc') || nameLower.includes('crab') || nameLower.includes('lobster')) {
+    mustOrderDish = 'Marisco fresco a la plancha con cebollino y cacahuetes (Hải Sản nướng)';
+  } else if (nameLower.includes('bbq') || nameLower.includes('nướng') || nameLower.includes('grill')) {
+    if (cityLower.includes('sa pa') || cityLower.includes('sapa')) {
+      mustOrderDish = 'Cerdo negro de montaña asado con pimienta mắc khén & brochetas de Sa Pa';
+    } else {
+      mustOrderDish = 'Brochetas de carne marinadas con citronela y miel a la brasa';
+    }
+  } else if (nameLower.includes('lẩu') || nameLower.includes('hotpot')) {
+    if (cityLower.includes('sa pa') || cityLower.includes('sapa')) {
+      mustOrderDish = 'Cazuela caliente de salmón y esturión de Sa Pa con verduras del bosque';
+    } else {
+      mustOrderDish = 'Puchero tradicional vietnamita con carne, setas y verduras de temporada';
+    }
+  } else if (nameLower.includes('pizza') || nameLower.includes('pasta') || nameLower.includes('italian')) {
+    mustOrderDish = 'Pizza artesanal al horno de leña con quesos locales y pasta fresca';
+  } else if (nameLower.includes('burger') || nameLower.includes('bar & grill') || nameLower.includes('pub')) {
+    mustOrderDish = 'Hamburguesa artesanal de autor con patatas crujientes';
+  } else if (nameLower.includes('cafe') || nameLower.includes('coffee') || nameLower.includes('cà phê')) {
+    if (cityLower.includes('hà nội') || cityLower.includes('hanoi')) {
+      mustOrderDish = 'Café de huevo caliente tradicional (Cà Phê Trứng) y café de sal';
+    } else {
+      mustOrderDish = 'Café vietnamita filtrado con leche condensada y hielo (Cà Phê Sữa Đá)';
+    }
+  }
+
+  // 2. City-Specific Authentic Spanish Dish Fallback
+  if (!mustOrderDish) {
+    if (cityLower.includes('sa pa') || cityLower.includes('sapa') || address.includes('Sa Pa') || address.includes('Lào Cai')) {
+      const sapaDishes = [
+        'Cazuela de salmón alpino del Fansipan (Lẩu Cá Hồi) y cerdo negro asado',
+        'Esturión de Sa Pa a la brasa con brotes tiernos de chayote al ajo',
+        'Cerdo negro de montaña crujiente con pimienta silvestre (Lợn Bản)',
+        'Pato asado con especias del bosque y arroz glutinoso en bambú (Cơm Lam)',
+        'Cecina de búfalo ahumada a la leña (Thịt Trâu Gác Bếp) y setas de Sa Pa',
+      ];
+      const charSum = (place.name || '').split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
+      mustOrderDish = sapaDishes[charSum % sapaDishes.length];
+    } else if (cityLower.includes('ninh bình') || cityLower.includes('ninh binh')) {
+      mustOrderDish = 'Carne de cabra salvaje de roca a la brasa y arroz crujiente (Cơm Cháy)';
+    } else if (cityLower.includes('hội an') || cityLower.includes('hoi an')) {
+      mustOrderDish = 'Fideos Cao Lầu tradicionales y empanadillas de rosa blanca (White Rose)';
+    } else if (cityLower.includes('đà nẵng') || cityLower.includes('da nang')) {
+      mustOrderDish = 'Fideos Mì Quảng tradicionales y vieiras a la plancha con cebollino';
+    } else if (cityLower.includes('huế') || cityLower.includes('hue')) {
+      mustOrderDish = 'Sopa imperial Bún Bò Huế picante y surtido de pastelitos de arroz al vapor';
+    } else if (cityLower.includes('hồ chí minh') || cityLower.includes('saigon') || cityLower.includes('sài gòn')) {
+      mustOrderDish = 'Arroz quebrado Cơm Tấm con chuleta a la brasa y crêpe crujiente (Bánh Xèo)';
+    } else if (cityLower.includes('phú quốc') || cityLower.includes('phu quoc')) {
+      mustOrderDish = 'Rollitos de sardina fresca marinada (Gỏi Cá Trích) y marisco a la sal marina';
+    } else if (cityLower.includes('đà lạt') || cityLower.includes('dalat')) {
+      mustOrderDish = 'Pizza crujiente de papel de arroz (Bánh Tráng Nướng) y cazuela de pollo';
+    } else if (cityLower.includes('hạ long') || cityLower.includes('halong')) {
+      mustOrderDish = 'Pastelitos de calamar fritos crujientes (Chả Mực) y sopa de marisco';
+    } else if (cityLower.includes('cần thơ') || cityLower.includes('can tho')) {
+      mustOrderDish = 'Puchero tradicional del delta del Mekong y pastelitos crujientes de gamba';
+    } else {
+      mustOrderDish = 'Sopa de fideos Phở tradicional con ternera y rollitos fritos crujientes';
+    }
   }
 
   const rating = Number((place.rating || 4.6).toFixed(1));
@@ -1721,7 +1833,7 @@ function mapGooglePlaceToItem(place: any, defaultCity: string): any {
     id: `gplace-${place.place_id}`,
     name: place.name,
     nameVi: place.name,
-    city: defaultCity || 'Hà Nội',
+    city: defaultCity || 'Sa Pa',
     district: district,
     address: address,
     lat: place.geometry?.location?.lat || 0,
@@ -1731,11 +1843,23 @@ function mapGooglePlaceToItem(place: any, defaultCity: string): any {
     priceTier: priceTier,
     avgPriceVnd: avgPriceVnd,
     category: category,
-    specialties: [mustOrderDish, 'Platos tradicionales frescos', 'Cocina vietnamita auténtica'],
+    specialties: [mustOrderDish, 'Platos tradicionales de montaña', 'Cocina vietnamita auténtica'],
     mustOrderDish: mustOrderDish,
     description: '',
-    travelerTips: place.opening_hours?.open_now ? 'Abierto ahora. Afluencia alta en horas de comida/cena.' : 'Comprobar horario antes de acudir.',
-    openingHours: place.opening_hours?.open_now !== undefined ? (place.opening_hours.open_now ? 'Abierto ahora' : 'Cerrado temporalmente') : '10:00 - 22:00',
+    travelerTips:
+      category === 'Café de Especialidad'
+        ? 'Pide el café filtrado en mesa (phin) para disfrutar con calma al ritmo local.'
+        : category === 'Street Food / Puesto Callejero'
+        ? 'Pide directamente en el mostrador; servicio rápido y auténtico ambiente.'
+        : category === 'Bocadillos & Bánh Mì'
+        ? 'Pídelo recién horneado y tierno; opción perfecta para comer sobre la marcha.'
+        : 'Recomendado pedir varios platos al centro para compartir al estilo vietnamita.',
+    openingHours:
+      category === 'Café de Especialidad'
+        ? '07:00 - 22:30'
+        : category === 'Street Food / Puesto Callejero' || category === 'Bocadillos & Bánh Mì'
+        ? '06:30 - 21:30'
+        : '10:00 - 22:00',
     hasAirConditioning: true,
     grabFoodDelivery: true,
     isCashOnly: false,
@@ -2287,13 +2411,66 @@ app.post('/api/restaurants/menu', async (req, res) => {
   }
 
   // 4. Map Customer Reviews
-  const recentReviews = (googleDetails?.reviews || []).map((r: any) => ({
-    authorName: r.author_name || 'Comensal en Google',
+  let recentReviews = (googleDetails?.reviews || []).map((r: any) => ({
+    authorName: r.author_name || 'Comensal verificado',
     rating: r.rating || 5,
     relativeTime: r.relative_time_description || 'Recientemente',
     text: r.text || '',
     profilePhotoUrl: r.profile_photo_url,
   }));
+
+  let liveGoogleRating = googleDetails?.rating ? Number(googleDetails.rating.toFixed(1)) : undefined;
+  let liveGoogleReviewsCount = googleDetails?.user_ratings_total ? Number(googleDetails.user_ratings_total) : undefined;
+
+  // If no reviews from Places API or no key configured, search live Google Maps reviews via Gemini Search Grounding
+  if (recentReviews.length === 0 && process.env.GEMINI_API_KEY) {
+    try {
+      const ai = getAI();
+      const prompt = `Search the web and Google Maps for genuine verified customer reviews, exact Google rating, and total review count for the restaurant "${cleanName}" located in "${cleanAddress || cleanCity || 'Vietnam'}".
+Return a strictly valid JSON object:
+{
+  "exactGoogleRating": 4.6,
+  "exactReviewsCount": 15400,
+  "recentReviews": [
+    {
+      "authorName": "Real Google Reviewer Name",
+      "rating": 5,
+      "relativeTime": "Hace 2 semanas",
+      "text": "Actual genuine review excerpt in Spanish or English about food, flavors, price, or wait time"
+    }
+  ]
+}`;
+
+      const generatePromise = ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Grounding timeout')), 4500)
+      );
+
+      const response: any = await Promise.race([generatePromise, timeoutPromise]);
+      if (response && response.text) {
+        const parsed = parseJsonSafely(response.text);
+        if (parsed && Array.isArray(parsed.recentReviews) && parsed.recentReviews.length > 0) {
+          recentReviews = parsed.recentReviews;
+          if (parsed.exactGoogleRating && typeof parsed.exactGoogleRating === 'number') {
+            liveGoogleRating = Number(parsed.exactGoogleRating.toFixed(1));
+          }
+          if (parsed.exactReviewsCount && typeof parsed.exactReviewsCount === 'number') {
+            liveGoogleReviewsCount = Number(parsed.exactReviewsCount);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('Gemini search grounding for reviews error:', err?.message);
+    }
+  }
 
   // 5. Build full menu data
   const menuData = {
@@ -2301,10 +2478,12 @@ app.post('/api/restaurants/menu', async (req, res) => {
     restaurantName: googleDetails?.name || cleanName,
     restaurantNameVi: cleanName,
     currencyBase: 'VND',
-    source: googleDetails ? 'google_places_live' : 'curated_database',
+    source: googleDetails ? 'google_places_live' : (recentReviews.length > 0 ? 'google_grounding_live' : 'curated_database'),
     lastUpdated: new Date().toISOString().split('T')[0],
     photos: distinctPhotos,
     recentReviews,
+    googleRating: liveGoogleRating,
+    googleReviewsCount: liveGoogleReviewsCount,
     tipsForOrdering: [
       'Pide las bebidas y platos principales juntos para agilizar la cocina.',
       'Los precios en Vietnam se expresan habitualmente en miles (k). Por ejemplo, 50k = 50.000 ₫.',

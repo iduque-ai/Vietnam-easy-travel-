@@ -1,4 +1,4 @@
-import { RestaurantItem, BudgetPreference, RestaurantSortOption, RestaurantScoreBreakdown } from '../types';
+import { RestaurantItem, BudgetPreference, CuisineFilterType, RestaurantSortOption, RestaurantScoreBreakdown } from '../types';
 import { calculateDistanceKm } from './geolocation';
 
 /**
@@ -277,14 +277,14 @@ export const BUDGET_TIER_CONFIG = {
   budget: {
     label: 'Económico / Mochilero / Street Food',
     shortLabel: 'Económico (10k - 60k ₫)',
-    description: 'Puestos callejeros legendarios, comida auténtica por menos de 2,50 €',
+    description: 'Puestos callejeros legendarios, comida auténtica por menos de 3 €',
     icon: '🍜',
     maxVnd: 65000,
   },
   moderate: {
     label: 'Medio / Confort & Bistró',
     shortLabel: 'Medio (60k - 180k ₫)',
-    description: 'Restaurantes con aire acondicionado, higiene y platos entre 2,50 € y 7 €',
+    description: 'Restaurantes con aire acondicionado, higiene y platos entre 3 € y 7 €',
     icon: '🥢',
     minVnd: 60000,
     maxVnd: 180000,
@@ -297,3 +297,166 @@ export const BUDGET_TIER_CONFIG = {
     minVnd: 180000,
   },
 } as const;
+
+export const CUISINE_OPTIONS_CONFIG: Array<{
+  id: CuisineFilterType;
+  label: string;
+  icon: string;
+  shortDescription: string;
+}> = [
+  { id: 'all', label: 'Todas', icon: '🍽️', shortDescription: 'Todo tipo de comida' },
+  { id: 'local', label: 'Local & Típica', icon: '🥢', shortDescription: 'Phở, Bún Chả, Cơm Tấm, Cao Lầu' },
+  { id: 'street_food', label: 'Street Food', icon: '🍜', shortDescription: 'Puestos callejeros & Bánh Mì' },
+  { id: 'vegetarian', label: 'Vegetariana & Vegana', icon: '🌱', shortDescription: 'Comida Chay, Tofu & Plant-based' },
+  { id: 'western', label: 'Occidental & Fusión', icon: '🍕', shortDescription: 'Pizza artesanal, Burger, Bistro' },
+  { id: 'seafood', label: 'Marisco & Pescado', icon: '🦐', shortDescription: 'Hải Sản, Pescado a la brasa' },
+  { id: 'cafe', label: 'Café & Postres', icon: '☕', shortDescription: 'Café de Huevo, Coco, Matcha & Dulces' },
+];
+
+/**
+ * Robust Cuisine Filter matching function:
+ * Works seamlessly with both curated offline catalog and live Google Places results!
+ */
+export function matchesCuisineFilter(
+  restaurant: RestaurantItem,
+  filter: CuisineFilterType
+): boolean {
+  if (filter === 'all') return true;
+
+  // If explicit cuisine types array is defined
+  if (restaurant.cuisineTypes && restaurant.cuisineTypes.includes(filter)) {
+    return true;
+  }
+
+  const textToScan = [
+    restaurant.name,
+    restaurant.nameVi,
+    restaurant.category,
+    restaurant.mustOrderDish,
+    restaurant.description,
+    restaurant.travelerTips,
+    restaurant.badgeLabel || '',
+    ...(restaurant.specialties || []),
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  switch (filter) {
+    case 'vegetarian':
+      return (
+        textToScan.includes('chay') ||
+        textToScan.includes('vegan') ||
+        textToScan.includes('vegetar') ||
+        textToScan.includes('tofu') ||
+        textToScan.includes('đậu phụ') ||
+        textToScan.includes('chickpea') ||
+        textToScan.includes('plant-based') ||
+        textToScan.includes('nấm')
+      );
+
+    case 'western':
+      return (
+        restaurant.category === 'Bistró / Fusión' ||
+        textToScan.includes('pizza') ||
+        textToScan.includes('4p') ||
+        textToScan.includes('burger') ||
+        textToScan.includes('pasta') ||
+        textToScan.includes('bistró') ||
+        textToScan.includes('bistro') ||
+        textToScan.includes('fusión') ||
+        textToScan.includes('fusion') ||
+        textToScan.includes('occidental') ||
+        textToScan.includes('italo') ||
+        textToScan.includes('italiano') ||
+        textToScan.includes('frances') ||
+        textToScan.includes('francés') ||
+        textToScan.includes('french') ||
+        textToScan.includes('european') ||
+        textToScan.includes('europeo') ||
+        textToScan.includes('tapas') ||
+        textToScan.includes('burrata') ||
+        textToScan.includes('queso') ||
+        textToScan.includes('cheese') ||
+        textToScan.includes('truffle') ||
+        textToScan.includes('steak')
+      );
+
+    case 'street_food':
+      return (
+        restaurant.category === 'Street Food / Puesto Callejero' ||
+        restaurant.category === 'Bocadillos & Bánh Mì' ||
+        textToScan.includes('bánh mì') ||
+        textToScan.includes('banh mi') ||
+        textToScan.includes('callejero') ||
+        textToScan.includes('street food') ||
+        textToScan.includes('vỉa hè') ||
+        textToScan.includes('puesto') ||
+        textToScan.includes('quẩy') ||
+        textToScan.includes('bánh xèo') ||
+        textToScan.includes('nem nướng') ||
+        textToScan.includes('chả giò')
+      );
+
+    case 'seafood':
+      return (
+        textToScan.includes('hải sản') ||
+        textToScan.includes('marisco') ||
+        textToScan.includes('seafood') ||
+        textToScan.includes('pescado') ||
+        textToScan.includes('chả cá') ||
+        textToScan.includes('cá hồi') ||
+        textToScan.includes('cá tầm') ||
+        textToScan.includes('cá lăng') ||
+        textToScan.includes('tôm') ||
+        textToScan.includes('cua') ||
+        textToScan.includes('ghẹ') ||
+        textToScan.includes('mực') ||
+        textToScan.includes('ốc') ||
+        textToScan.includes('sò') ||
+        textToScan.includes('vieira') ||
+        textToScan.includes('almeja') ||
+        textToScan.includes('cangrejo') ||
+        textToScan.includes('gamba') ||
+        textToScan.includes('calamar')
+      );
+
+    case 'cafe':
+      return (
+        restaurant.category === 'Café de Especialidad' ||
+        textToScan.includes('cà phê') ||
+        textToScan.includes('café') ||
+        textToScan.includes('cafe') ||
+        textToScan.includes('coffee') ||
+        textToScan.includes('trứng') ||
+        textToScan.includes('egg coffee') ||
+        textToScan.includes('chè') ||
+        textToScan.includes('postre') ||
+        textToScan.includes('tea') ||
+        textToScan.includes('trà') ||
+        textToScan.includes('smoothie') ||
+        textToScan.includes('bakery')
+      );
+
+    case 'local':
+      // Not exclusively western pizza/burger, includes typical Vietnamese cuisine
+      return (
+        !textToScan.includes('pizza') &&
+        !textToScan.includes('burger') &&
+        (restaurant.category === 'Restaurante Tradicional' ||
+          restaurant.category === 'Street Food / Puesto Callejero' ||
+          restaurant.category === 'Alta Cocina / Michelin' ||
+          restaurant.category === 'Bocadillos & Bánh Mì' ||
+          textToScan.includes('vietnam') ||
+          textToScan.includes('phở') ||
+          textToScan.includes('bún') ||
+          textToScan.includes('cơm') ||
+          textToScan.includes('cao lầu') ||
+          textToScan.includes('mì quảng') ||
+          textToScan.includes('lẩu') ||
+          textToScan.includes('thịt'))
+      );
+
+    default:
+      return true;
+  }
+}

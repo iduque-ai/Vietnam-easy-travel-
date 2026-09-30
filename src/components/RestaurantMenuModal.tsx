@@ -84,7 +84,7 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
   const formatVndToEur = useCallback((vnd: number) => {
     if (!eurRate || eurRate <= 0) return '';
     const eur = (vnd / eurRate).toFixed(2).replace('.', ',');
-    return `~${eur} €`;
+    return `${eur} €`;
   }, [eurRate]);
 
   // Fetch live Google Place photos and reviews for any restaurant
@@ -139,7 +139,9 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
               recentReviews: (liveData.recentReviews && liveData.recentReviews.length > 0)
                 ? liveData.recentReviews
                 : prev.recentReviews,
-              source: liveData.photos?.length > 0 ? 'google_places_live' : prev.source,
+              googleRating: liveData.googleRating || prev.googleRating,
+              googleReviewsCount: liveData.googleReviewsCount || prev.googleReviewsCount,
+              source: liveData.photos?.length > 0 ? 'google_places_live' : (liveData.source || prev.source),
             };
           });
           setLivePhotosLoaded(true);
@@ -288,10 +290,13 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                   Michelin {restaurant.michelinGuide}
                 </span>
               )}
+              <span className="px-2.5 py-0.5 rounded-full bg-stone-900 text-amber-300 text-[10px] font-bold flex items-center gap-1 border border-stone-700 font-mono">
+                <span className="text-amber-400">★</span> {(menuData.googleRating || restaurant.rating).toFixed(1)} ({(menuData.googleReviewsCount || restaurant.reviewsCount).toLocaleString('es-ES')} reseñas)
+              </span>
               {menuData.source === 'google_places_live' && (
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 text-[10px] font-bold flex items-center gap-1 border border-emerald-500/30 font-mono uppercase tracking-wider">
                   <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  Reviews en vivo
+                  Google Maps en vivo
                 </span>
               )}
             </div>
@@ -729,34 +734,56 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
           {/* TAB 3: RESEÑAS DE LA CARTA */}
           {activeTab === 'reviews' && (
             <div className="space-y-3.5">
-              <div className="p-3 bg-stone-950/40 border border-stone-800 rounded-xl text-xs text-stone-300">
-                Reseñas verificadas de comensales que mencionan platos específicos, tamaños de raciones y precios.
+              <div className="p-3.5 bg-stone-950/60 border border-stone-800 rounded-xl flex items-center justify-between flex-wrap gap-2 text-xs text-stone-300">
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-400 font-bold text-sm">
+                    ★ {(menuData.googleRating || restaurant.rating).toFixed(1)}
+                  </span>
+                  <span className="text-stone-300">
+                    Basado en <strong>{(menuData.googleReviewsCount || restaurant.reviewsCount).toLocaleString('es-ES')}</strong> reseñas verificadas.
+                  </span>
+                </div>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${restaurant.name} ${restaurant.address || restaurant.city || 'Vietnam'}`.trim())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-400 hover:text-amber-300 font-semibold underline flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Ver todas las reseñas</span>
+                </a>
               </div>
 
-              {menuData.recentReviews?.map((rev, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 rounded-xl bg-stone-850 border border-stone-800 space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-300 font-bold text-xs flex items-center justify-center border border-amber-500/30">
-                        {rev.authorName.charAt(0).toUpperCase()}
+              {menuData.recentReviews && menuData.recentReviews.length > 0 ? (
+                menuData.recentReviews.map((rev, idx) => (
+                  <div
+                    key={idx}
+                    className="p-4 rounded-xl bg-stone-850 border border-stone-800 space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-300 font-bold text-xs flex items-center justify-center border border-amber-500/30">
+                          {rev.authorName.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-bold text-sm text-stone-200">{rev.authorName}</span>
                       </div>
-                      <span className="font-bold text-sm text-stone-200">{rev.authorName}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-amber-400 font-bold text-xs">
+                          {'★'.repeat(Math.round(rev.rating || 5))}
+                        </span>
+                        <span className="text-[11px] text-stone-500 ml-1">{rev.relativeTime}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-amber-400 font-bold text-xs">
-                        {'★'.repeat(Math.round(rev.rating))}
-                      </span>
-                      <span className="text-[11px] text-stone-500 ml-1">{rev.relativeTime}</span>
-                    </div>
+                    <p className="text-xs text-stone-300 leading-relaxed">
+                      "{rev.text}"
+                    </p>
                   </div>
-                  <p className="text-xs text-stone-300 leading-relaxed">
-                    "{rev.text}"
-                  </p>
+                ))
+              ) : (
+                <div className="p-6 text-center text-stone-400 bg-stone-900/50 rounded-xl border border-stone-800">
+                  <p className="text-xs">Cargando reseñas en vivo...</p>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -784,7 +811,7 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                   <li className="flex items-start gap-2">
                     <span className="text-amber-400 font-bold shrink-0">•</span>
                     <span>
-                      <strong>Servilletas húmedas (Khăn lạnh):</strong> En muchos restaurantes tradicionales te pondrán una toallita envasada. Si la abres, suelen cobrar entre 2.000 ₫ y 5.000 ₫ (~0,10 €) al final en la cuenta.
+                      <strong>Servilletas húmedas (Khăn lạnh):</strong> En muchos restaurantes tradicionales te pondrán una toallita envasada. Si la abres, suelen cobrar entre 2.000 ₫ y 5.000 ₫ (0,10 €) al final en la cuenta.
                     </span>
                   </li>
                 </ul>
