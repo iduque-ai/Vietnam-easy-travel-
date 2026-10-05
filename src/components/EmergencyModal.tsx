@@ -16,6 +16,7 @@ import {
   Check,
 } from 'lucide-react';
 import { speakVietnamese } from '../utils/storage';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 interface EmergencyModalProps {
   isOpen: boolean;
@@ -83,6 +84,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
   vietnamTime,
   spainTime,
 }) => {
+  useScrollLock(isOpen);
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -94,7 +96,7 @@ export const EmergencyModal: React.FC<EmergencyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
       <div className="bg-[#FAF8F5] rounded-3xl border border-stone-200/90 max-w-xl w-full shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden my-6">
         {/* Header - Luxury Noir with Rose Accent */}
         <div className="bg-[#141210] text-white px-6 py-4.5 flex items-center justify-between border-b border-stone-800">

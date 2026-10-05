@@ -1,4 +1,4 @@
-export type ActiveTabType = 'converter' | 'translator' | 'restaurants' | 'maps' | 'itinerary' | 'freetour';
+export type ActiveTabType = 'converter' | 'translator' | 'restaurants' | 'trip' | 'freetour' | 'maps' | 'itinerary';
 
 export type CurrencyCode = 'EUR' | 'USD' | 'GBP' | 'AUD' | 'CAD' | 'JPY' | 'CHF' | 'MXN' | 'SGD' | 'THB';
 

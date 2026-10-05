@@ -9,6 +9,7 @@ import {
   Sparkles,
   Gauge,
   User,
+  Languages,
 } from 'lucide-react';
 import {
   SpeechSettings,
@@ -17,7 +18,9 @@ import {
   playNaturalSpeech,
   stopAllSpeech,
   subscribeSpeechState,
+  subscribeSpeechSettings,
 } from '../utils/speechSynthesis';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 interface VoiceSettingsModalProps {
   isOpen: boolean;
@@ -30,12 +33,22 @@ export const VoiceSettingsModal: React.FC<VoiceSettingsModalProps> = ({
   onClose,
   isOnline,
 }) => {
+  useScrollLock(isOpen);
+
   const [settings, setSettings] = useState<SpeechSettings>(() => getSavedSpeechSettings());
   const [isPlayingTest, setIsPlayingTest] = useState(false);
+  const [testLang, setTestLang] = useState<'vi' | 'es'>('vi');
 
   useEffect(() => {
     const unsub = subscribeSpeechState((state) => {
-      setIsPlayingTest(state.isSpeaking && state.speakingId === 'test-voice-sample');
+      setIsPlayingTest(state.isSpeaking && (state.speakingId === 'test-voice-sample-vi' || state.speakingId === 'test-voice-sample-es'));
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeSpeechSettings((s) => {
+      setSettings(s);
     });
     return unsub;
   }, []);
@@ -49,9 +62,9 @@ export const VoiceSettingsModal: React.FC<VoiceSettingsModalProps> = ({
     if (autoPreview) {
       setTimeout(() => {
         playNaturalSpeech({
-          text: 'Xin chào! Cảm ơn bạn rất nhiều.',
-          lang: 'vi-VN',
-          id: 'test-voice-sample',
+          text: testLang === 'vi' ? 'Xin chào! Cảm ơn bạn rất nhiều.' : '¡Hola! Te ayudamos en tu viaje.',
+          lang: testLang === 'vi' ? 'vi-VN' : 'es-ES',
+          id: `test-voice-sample-${testLang}`,
           speed: newSettings.speedValue,
           gender: newSettings.gender,
           engineMode: newSettings.engineMode,
@@ -60,12 +73,14 @@ export const VoiceSettingsModal: React.FC<VoiceSettingsModalProps> = ({
     }
   };
 
-  const handleTestVoice = (lang: 'vi' | 'es' = 'vi') => {
+  const handleTestVoice = (lang: 'vi' | 'es') => {
+    const sampleId = `test-voice-sample-${lang}`;
     if (isPlayingTest) {
       stopAllSpeech();
       return;
     }
 
+    setTestLang(lang);
     const testText =
       lang === 'vi'
         ? 'Xin chào! Tôi có thể giúp gì cho bạn? Chúc bạn có một chuyến đi tuyệt vời.'
@@ -74,7 +89,7 @@ export const VoiceSettingsModal: React.FC<VoiceSettingsModalProps> = ({
     playNaturalSpeech({
       text: testText,
       lang: lang === 'vi' ? 'vi-VN' : 'es-ES',
-      id: 'test-voice-sample',
+      id: sampleId,
       speed: settings.speedValue,
       gender: settings.gender,
       engineMode: settings.engineMode,
@@ -83,7 +98,7 @@ export const VoiceSettingsModal: React.FC<VoiceSettingsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in"
       onClick={onClose}
     >
       <div
@@ -98,10 +113,10 @@ export const VoiceSettingsModal: React.FC<VoiceSettingsModalProps> = ({
             </div>
             <div>
               <h3 className="font-serif font-bold text-base text-stone-900">
-                Ajuste de Pronunciación
+                Ajuste de Voz & Pronunciación
               </h3>
               <p className="text-xs text-stone-500">
-                Personaliza la velocidad y el tipo de voz
+                Configuración global para traductor, diccionario y guías
               </p>
             </div>
           </div>
@@ -120,7 +135,7 @@ export const VoiceSettingsModal: React.FC<VoiceSettingsModalProps> = ({
           <div className="space-y-2">
             <label className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-amber-600" />
-              <span>Voz</span>
+              <span>Tipo de Voz</span>
             </label>
             <div className="grid grid-cols-2 gap-2.5">
               <button
@@ -240,27 +255,51 @@ export const VoiceSettingsModal: React.FC<VoiceSettingsModalProps> = ({
               </span>
             </div>
 
-            <button
-              type="button"
-              onClick={() => handleTestVoice('vi')}
-              className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer active:scale-95 shadow-2xs ${
-                isPlayingTest
-                  ? 'bg-rose-600 text-white animate-pulse ring-2 ring-rose-300'
-                  : 'bg-stone-900 hover:bg-stone-800 text-amber-300'
-              }`}
-            >
-              {isPlayingTest ? (
-                <>
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                  <span>Detener prueba</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Escuchar frase de ejemplo 🔊</span>
-                </>
-              )}
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleTestVoice('vi')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs ${
+                  isPlayingTest && testLang === 'vi'
+                    ? 'bg-rose-600 text-white animate-pulse ring-2 ring-rose-300'
+                    : 'bg-stone-900 hover:bg-stone-800 text-amber-300'
+                }`}
+              >
+                {isPlayingTest && testLang === 'vi' ? (
+                  <>
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                    <span>Parar</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>🇻🇳 Vietnamita</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTestVoice('es')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs ${
+                  isPlayingTest && testLang === 'es'
+                    ? 'bg-rose-600 text-white animate-pulse ring-2 ring-rose-300'
+                    : 'bg-stone-900 hover:bg-stone-800 text-amber-300'
+                }`}
+              >
+                {isPlayingTest && testLang === 'es' ? (
+                  <>
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                    <span>Parar</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>🇪🇸 Español</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 

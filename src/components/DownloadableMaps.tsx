@@ -41,7 +41,8 @@ import {
   Pin,
   useMap,
 } from '@vis.gl/react-google-maps';
-import { PointOfInterest, RegionMapPack, ExchangeRatesData } from '../types';
+import { PointOfInterest, RegionMapPack, ExchangeRatesData, CurrencyCode } from '../types';
+import { getCurrencyInfo, calculateForeignToVndRate } from '../utils/currencyUtils';
 import { REGION_PACKS, POINTS_OF_INTEREST } from '../data/pois';
 import {
   getDownloadedPackIds,
@@ -94,6 +95,7 @@ interface DownloadableMapsProps {
   onStartFreeTour?: (poi: PointOfInterest) => void;
   itineraryState: ItineraryState;
   initialRegionId?: string;
+  selectedCurrency?: CurrencyCode;
 }
 
 export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
@@ -103,6 +105,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
   onStartFreeTour,
   itineraryState,
   initialRegionId,
+  selectedCurrency = 'EUR',
 }) => {
   const [downloadedPacks, setDownloadedPacks] = useState<string[]>(getDownloadedPackIds);
   const [favoritePois, setFavoritePois] = useState<string[]>(getFavoritePoiIds);
@@ -292,9 +295,9 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
     setSelectedLocationTarget(null);
   };
 
-  const usdVndRate = ratesData.rates['VND'] || 26000;
-  const eurRate = ratesData.rates['EUR'] || 0.8965;
-  const eurToVnd = usdVndRate / eurRate;
+  const foreignToVndRate = calculateForeignToVndRate(ratesData.rates, selectedCurrency);
+  const currInfo = getCurrencyInfo(selectedCurrency);
+  const eurToVnd = foreignToVndRate;
 
   const currentRegion = useMemo(() => {
     return REGION_PACKS.find((r) => r.id === selectedRegionId) || REGION_PACKS[0];
@@ -409,7 +412,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
       content += `   • Coordenadas GPS: ${poi.lat}, ${poi.lng}\n`;
       content += `   • Entrada: ${
         poi.ticketVnd > 0
-          ? `${poi.ticketVnd.toLocaleString('es-ES')} ₫ (≈ ${(poi.ticketVnd / eurToVnd).toFixed(2)} €)`
+          ? `${poi.ticketVnd.toLocaleString('es-ES')} ₫ (≈ ${(poi.ticketVnd / foreignToVndRate).toFixed(selectedCurrency === 'JPY' ? 0 : 2)} ${currInfo.symbol})`
           : 'Gratis'
       }\n`;
       content += `   • Horario: ${poi.openingHours}\n`;
@@ -820,7 +823,8 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
       {unifiedViewMode === 'split' && (
         <MapItineraryPanel
           itineraryState={itineraryState}
-          eurToVnd={eurToVnd}
+          eurToVnd={foreignToVndRate}
+          currencySymbol={currInfo.symbol}
           onLocatePoi={(poi) => {
             setSelectedPoi(poi);
             setSelectedLocationTarget({ lat: poi.lat, lng: poi.lng });
@@ -1364,7 +1368,7 @@ export const DownloadableMaps: React.FC<DownloadableMapsProps> = ({
                       <>
                         {selectedPoi.ticketVnd.toLocaleString('es-ES')} ₫
                         <span className="text-[10px] text-stone-500 font-normal block">
-                          ≈ {(selectedPoi.ticketVnd / eurToVnd).toFixed(2)} €
+                          ≈ {(selectedPoi.ticketVnd / foreignToVndRate).toFixed(selectedCurrency === 'JPY' ? 0 : 2)} {currInfo.symbol}
                         </span>
                       </>
                     ) : (

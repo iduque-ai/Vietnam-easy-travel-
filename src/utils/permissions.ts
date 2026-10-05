@@ -13,12 +13,57 @@ export interface AppPermissionsState {
 }
 
 const STORAGE_KEY = 'vietnam_travel_app_permissions_v1';
+const DISABLED_KEY = 'vietnam_travel_permissions_disabled_in_app';
 
 let currentPermissions: AppPermissionsState = {
   geolocation: 'unknown',
   microphone: 'unknown',
   lastChecked: 0,
 };
+
+export function isPermissionDeactivatedInApp(type: 'geolocation' | 'microphone'): boolean {
+  try {
+    const raw = localStorage.getItem(DISABLED_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return Boolean(parsed[type]);
+    }
+  } catch {}
+  return false;
+}
+
+export function deactivatePermission(type: 'geolocation' | 'microphone'): void {
+  try {
+    const raw = localStorage.getItem(DISABLED_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    parsed[type] = true;
+    localStorage.setItem(DISABLED_KEY, JSON.stringify(parsed));
+  } catch {}
+  currentPermissions[type] = 'denied';
+  currentPermissions.lastChecked = Date.now();
+  notifyListeners();
+}
+
+export function deactivateAllPermissions(): void {
+  try {
+    localStorage.setItem(DISABLED_KEY, JSON.stringify({ geolocation: true, microphone: true }));
+  } catch {}
+  currentPermissions.geolocation = 'denied';
+  currentPermissions.microphone = 'denied';
+  currentPermissions.lastChecked = Date.now();
+  notifyListeners();
+}
+
+export function reactivatePermission(type: 'geolocation' | 'microphone'): void {
+  try {
+    const raw = localStorage.getItem(DISABLED_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      delete parsed[type];
+      localStorage.setItem(DISABLED_KEY, JSON.stringify(parsed));
+    }
+  } catch {}
+}
 
 // Try to initialize from cached status
 try {
@@ -30,6 +75,13 @@ try {
   }
 } catch {
   // Ignore storage errors
+}
+
+if (isPermissionDeactivatedInApp('geolocation')) {
+  currentPermissions.geolocation = 'denied';
+}
+if (isPermissionDeactivatedInApp('microphone')) {
+  currentPermissions.microphone = 'denied';
 }
 
 type PermissionListener = (state: AppPermissionsState) => void;
@@ -95,13 +147,22 @@ export async function queryBrowserPermissions(): Promise<AppPermissionsState> {
       const micResult = await (navigator as any).permissions.query({ name: 'microphone' as any });
       mic = (micResult.state as PermissionStatusType) || 'unknown';
       micResult.onchange = () => {
-        currentPermissions.microphone = (micResult.state as PermissionStatusType) || 'unknown';
-        currentPermissions.lastChecked = Date.now();
-        notifyListeners();
+        if (!isPermissionDeactivatedInApp('microphone')) {
+          currentPermissions.microphone = (micResult.state as PermissionStatusType) || 'unknown';
+          currentPermissions.lastChecked = Date.now();
+          notifyListeners();
+        }
       };
     } catch {
       // 'microphone' query not supported in Safari/Firefox
     }
+  }
+
+  if (isPermissionDeactivatedInApp('geolocation')) {
+    geo = 'denied';
+  }
+  if (isPermissionDeactivatedInApp('microphone')) {
+    mic = 'denied';
   }
 
   currentPermissions = {
@@ -122,6 +183,8 @@ export async function requestGeolocationPermission(): Promise<{
   message: string;
   coords?: { latitude: number; longitude: number; accuracy?: number };
 }> {
+  // Clear any manual deactivation override on explicit user request
+  reactivatePermission('geolocation');
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
     currentPermissions.geolocation = 'denied';
     notifyListeners();
@@ -218,6 +281,8 @@ export async function requestMicrophonePermission(): Promise<{
   status: PermissionStatusType;
   message: string;
 }> {
+  // Clear any manual deactivation override on explicit user request
+  reactivatePermission('microphone');
   if (
     typeof navigator === 'undefined' ||
     !navigator.mediaDevices ||

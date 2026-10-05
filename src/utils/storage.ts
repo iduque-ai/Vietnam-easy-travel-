@@ -229,9 +229,9 @@ export function setDefaultTranslatorSubTab(subTab: string): void {
 
 // ================= ITINERARY STORAGE =================
 export const BLANK_INITIAL_PLAN: ItineraryPlan = {
-  id: 'plan-blank-' + Date.now(),
-  title: 'Mi Viaje a Vietnam (Desde cero)',
-  description: 'Planifica tu ruta paso a paso de menos a más (ciudades, días, bloques horarios y paradas).',
+  id: 'plan-my-trip',
+  title: 'Mi Viaje a Vietnam',
+  description: 'Ruta personalizada',
   startDate: new Date().toISOString().split('T')[0],
   endDate: '',
   destinations: ['Hà Nội'],
@@ -242,8 +242,8 @@ export const BLANK_INITIAL_PLAN: ItineraryPlan = {
       id: 'day-1',
       dayNumber: 1,
       destinationCity: 'Hà Nội',
-      title: 'Día 1: Llegada y primer contacto',
-      notes: 'Añade paradas o lugares de interés.',
+      title: 'Día 1: Hanói',
+      notes: '',
       stops: [],
     },
   ],
@@ -255,7 +255,11 @@ export function getItineraryPlans(): ItineraryPlan[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        // If the only stored plan was the old hardcoded generic template, start fresh with blank personal plan
+        const hasUserPlan = parsed.some((p) => p.id !== 'plan-classic-north-south-14d');
+        if (hasUserPlan) {
+          return parsed;
+        }
       }
     }
   } catch (e) {
@@ -264,6 +268,7 @@ export function getItineraryPlans(): ItineraryPlan[] {
   // Initialize with blank starting plan
   try {
     localStorage.setItem(ITINERARIES_KEY, JSON.stringify([BLANK_INITIAL_PLAN]));
+    localStorage.setItem(ACTIVE_ITINERARY_ID_KEY, BLANK_INITIAL_PLAN.id);
   } catch {}
   return [BLANK_INITIAL_PLAN];
 }
@@ -279,10 +284,10 @@ export function saveItineraryPlans(plans: ItineraryPlan[]): void {
 export function getActivePlanId(): string {
   try {
     const raw = localStorage.getItem(ACTIVE_ITINERARY_ID_KEY);
-    if (raw) return raw;
+    if (raw && raw !== 'plan-classic-north-south-14d') return raw;
   } catch {}
   const plans = getItineraryPlans();
-  return plans.length > 0 ? plans[0].id : 'plan-classic-north-south-14d';
+  return plans.length > 0 ? plans[0].id : BLANK_INITIAL_PLAN.id;
 }
 
 export function saveActivePlanId(id: string): void {
@@ -338,36 +343,36 @@ export const DEFAULT_ALLERGY_CARDS: AllergyCardData[] = [
     id: 'card-peanut-tree-nuts',
     title: 'Alergia a Cacahuetes y Frutos Secos',
     personName: 'Ficha Principal',
-    conditions: ['Cacahuetes / Maní', 'Frutos secos (anacardos, nueces)', 'Aceite de cacahuete'],
-    vietnameseLarge: 'XIN CHÚ Ý ĐẶC BIỆT! Tôi bị DỊ ỨNG NGUY HIỂM TÍNH MẠNG với ĐẬU PHỘNG (LẠC) và CÁC LOẠI HẠT. Xin TUYỆT ĐỐI KHÔNG CHO đậu phộng, dầu lạc, hạt điều vào thức ăn của tôi. Cảm ơn bạn!',
-    phonetic: 'Sin choo ee dac biet! Toi bi di ung nguy hiem tinh mang voi dau phong (lac)...',
-    allowedFoods: ['Cơm trắng (Arroz blanco)', 'Trứng chiên (Huevo frito)', 'Thịt luộc (Carne cocida)', 'Rau luộc (Verdura hervida)', 'Phở bò không lạc'],
-    forbiddenIngredients: ['Đậu phộng / Lạc (Cacahuete)', 'Dầu lạc (Aceite cacahuete)', 'Bơ đậu phộng', 'Hạt điều (Anacardo)', 'Muối mè đậu phộng'],
-    emergencyNote: 'Nếu tôi ăn phải đậu phộng, tôi sẽ bị sốc phản vệ và nghẹt thở. Vui lòng gọi cấp cứu 115 ngay lập tức!',
+    conditions: ['Cacahuetes y maní', 'Frutos secos (anacardos, nueces)', 'Aceite de cacahuete'],
+    vietnameseLarge: 'XIN CHÀO! TÔI BỊ DỊ ỨNG NGUY HIỂM TÍNH MẠNG VỚI ĐẬU PHỘNG (LẠC) VÀ CÁC LOẠI HẠT.\n\nXin vui lòng:\n1. TUYỆT ĐỐI KHÔNG CHO đậu phộng, dầu lạc, hạt điều vào món ăn của tôi.\n2. KHÔNG DÙNG dầu đã chiên qua đậu phộng.\n\nĂn phải sẽ bị sốc phản vệ nguy hiểm. Xin cảm ơn!',
+    phonetic: 'Sin chao! Toi bi di ung: Tuyet doi khong an dau phong, hat dieu. Xin cam on!',
+    allowedFoods: ['Cơm trắng', 'Trứng chiên', 'Thịt luộc', 'Rau luộc', 'Phở bò chín không lạc'],
+    forbiddenIngredients: ['Đậu phộng / Lạc', 'Dầu lạc', 'Hạt điều', 'Bơ đậu phộng', 'Muối mè đậu phộng'],
+    emergencyNote: 'Nếu tôi có dấu hiệu khó thở hoặc sốc phản vệ, vui lòng gọi cấp cứu 115 ngay lập tức.',
     createdAt: 1726900000000,
   },
   {
     id: 'card-seafood-shellfish',
     title: 'Alergia a Marisco y Crustáceos',
     personName: 'Ficha Marisco',
-    conditions: ['Marisco', 'Gambas / Camarones', 'Calamar', 'Cangrejo'],
-    vietnameseLarge: 'TÔI BỊ DỊ ỨNG RẤT NẶNG VỚI HẢI SẢN (TÔM, CUA, MỰC, TÉP, NGHÊU, SÒ). Xin KHÔNG DÙNG bất kỳ loại hải sản nào hoặc nước luộc hải sản để nấu cho tôi!',
-    phonetic: 'Toi bi di ung rat nang voi hai san: tom, cua, muc, tep...',
-    allowedFoods: ['Thịt gà (Pollo)', 'Thịt bò (Ternera)', 'Thịt heo (Cerdo)', 'Cơm trắng', 'Trứng chiên'],
-    forbiddenIngredients: ['Tôm / Tép (Gambas)', 'Cua / Ghẹ (Cangrejo)', 'Mực (Calamar)', 'Mắm ruốc / Mắm tôm', 'Nước dùng ninh hải sản'],
-    emergencyNote: 'Tôi sẽ bị sưng thanh quản và khó thở nếu dính hải sản. Cần gọi cấp cứu 115.',
+    conditions: ['Marisco y crustáceos', 'Gambas y langostinos', 'Calamar', 'Cangrejo'],
+    vietnameseLarge: 'XIN CHÀO! TÔI BỊ DỊ ỨNG RẤT NẶNG VỚI HẢI SẢN (TÔM, CUA, MỰC, NGHÊU, SÒ).\n\nXin vui lòng:\n1. TUYỆT ĐỐI KHÔNG DÙNG bất kỳ loại hải sản nào.\n2. KHÔNG DÙNG nước luộc hải sản để nấu món ăn cho tôi.\n\nĂn phải sẽ rất nguy hiểm. Xin cảm ơn!',
+    phonetic: 'Sin chao! Toi bi di ung rat nang voi hai san: tom, cua, muc. Xin cam on!',
+    allowedFoods: ['Thịt gà', 'Thịt bò', 'Thịt heo', 'Cơm trắng', 'Trứng chiên'],
+    forbiddenIngredients: ['Tôm / Tép', 'Cua / Ghẹ', 'Mực', 'Mắm ruốc / Mắm tôm', 'Nước dùng ninh hải sản'],
+    emergencyNote: 'Nếu tôi bị sưng thanh quản hoặc khó thở, vui lòng gọi cấp cứu 115 ngay lập tức.',
     createdAt: 1726900100000,
   },
   {
     id: 'card-vegetarian-strict',
-    title: 'Vegetariano / Vegano Estricto (Ăn Chay)',
+    title: 'Dieta Vegetariana y Vegana (Ăn Chay)',
     personName: 'Dieta Vegetariana',
-    conditions: ['Carne y pollo', 'Pescado y marisco', 'Salsa de pescado tradicional', 'Grasa animal'],
-    vietnameseLarge: 'TÔI ĂN CHAY (THANH TỊNH). Xin KHÔNG CHO: thịt, cá, hải sản, mỡ động vật và TUYỆT ĐỐI KHÔNG DÙNG NƯỚC MẮM thường. Xin dùng xì dầu (nước tương) hoặc nước mắm chay. Cảm ơn bạn!',
-    phonetic: 'Toi an chay thanh tinh. Xin khong cho thit, ca, hai san, nuoc mam ca...',
-    allowedFoods: ['Đậu phụ / Đậu hũ (Tofu)', 'Rau xào xì dầu', 'Nấm các loại (Setas)', 'Cơm trắng', 'Bún chay'],
-    forbiddenIngredients: ['Nước mắm cá (Salsa de pescado)', 'Mỡ heo (Manteca)', 'Hạt nêm thịt Knorr', 'Tép khô'],
-    emergencyNote: 'Xin đảm bảo chảo và muôi không dính mỡ động vật.',
+    conditions: ['Carne y pollo', 'Pescado y marisco', 'Salsa de pescado tradicional', 'Manteca y grasa animal'],
+    vietnameseLarge: 'XIN CHÀO! TÔI ĂN CHAY THANH TỊNH (THUẦN CHAY).\n\nXin vui lòng:\n1. KHÔNG CHO thịt, cá, hải sản, mỡ động vật.\n2. TUYỆT ĐỐI KHÔNG DÙNG nước mắm cá truyền thống (xin dùng nước tương / xì dầu hoặc nước mắm chay).\n\nXin cảm ơn nhà hàng!',
+    phonetic: 'Sin chao! Toi an chay thanh tinh. Khong an thit, ca, hai san, nuoc mam. Xin cam on!',
+    allowedFoods: ['Đậu phụ / Đậu hũ', 'Rau xào xì dầu', 'Nấm các loại', 'Cơm trắng', 'Bún chay'],
+    forbiddenIngredients: ['Nước mắm cá', 'Mỡ heo', 'Thịt các loại', 'Hạt nêm thịt heo', 'Tép khô'],
+    emergencyNote: 'Xin vui lòng đảm bảo chảo và muôi không dính mỡ động vật.',
     createdAt: 1726900200000,
   },
 ];

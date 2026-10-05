@@ -8,22 +8,32 @@ import { Header } from './components/Header';
 import { CurrencyConverter } from './components/CurrencyConverter';
 import { VietnameseTranslator } from './components/VietnameseTranslator';
 import { RestaurantFinder } from './components/RestaurantFinder';
-import { DownloadableMaps } from './components/DownloadableMaps';
-import { ItineraryPlanner } from './components/ItineraryPlanner';
+import { TripPlanner } from './components/TripPlanner';
 import { FreeTourGuide } from './components/FreeTourGuide';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { PermissionsModal } from './components/PermissionsModal';
 import { EmergencyModal } from './components/EmergencyModal';
-import { ExchangeRatesData, ActiveTabType, PointOfInterest } from './types';
+import { VoiceSettingsModal } from './components/VoiceSettingsModal';
+import { ExchangeRatesData, ActiveTabType, PointOfInterest, CurrencyCode } from './types';
 import { getSavedRates, saveRates, isRatesStale } from './utils/storage';
 import { fetchLiveExchangeRates } from './utils/currencyApi';
 import { useItineraryState } from './utils/useItineraryState';
 import { VIETNAM_SIMULATION_PRESETS } from './utils/geolocation';
+import { getCurrencyInfo } from './utils/currencyUtils';
 import { Compass, Wifi, WifiOff, Clock, ShieldCheck, HeartPulse, HelpCircle } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTabType>('converter');
   const [translatorSubTab, setTranslatorSubTab] = useState<'conversation' | 'phrases' | 'food' | 'allergy' | undefined>(undefined);
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>(() => {
+    try {
+      const saved = localStorage.getItem('vietnam_travel_preferred_currency');
+      if (saved) return saved as CurrencyCode;
+    } catch {
+      // fallback
+    }
+    return 'EUR';
+  });
   const [isOnline, setIsOnline] = useState<boolean>(() => {
     try {
       const override = localStorage.getItem('vietnam_travel_online_manual_override');
@@ -41,6 +51,7 @@ export default function App() {
   const [freeTourTargetPoi, setFreeTourTargetPoi] = useState<PointOfInterest | null>(null);
   const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState<boolean>(false);
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState<boolean>(false);
+  const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState<boolean>(false);
 
   // Centralized shared itinerary state for Maps & Planner
   const itineraryState = useItineraryState();
@@ -161,6 +172,18 @@ export default function App() {
     saveRates(newRates);
     const eurVnd = Math.round(newRates.rates.VND / (newRates.rates.EUR || 0.8965));
     setOfflineToast(`Tasa personalizada guardada: 1 € = ${eurVnd.toLocaleString('es-ES')} ₫`);
+    setTimeout(() => setOfflineToast(null), 3500);
+  }, []);
+
+  const handleSelectCurrency = useCallback((currency: CurrencyCode) => {
+    setSelectedCurrency(currency);
+    try {
+      localStorage.setItem('vietnam_travel_preferred_currency', currency);
+    } catch {
+      // ignore
+    }
+    const curr = getCurrencyInfo(currency);
+    setOfflineToast(`Divisa de referencia: ${curr.flag} ${curr.name} (${curr.code})`);
     setTimeout(() => setOfflineToast(null), 3500);
   }, []);
 
@@ -286,12 +309,23 @@ export default function App() {
         isOnline={isOnline}
         isRefreshing={isRefreshing}
         onRefreshRates={() => refreshRates(true, true)}
+        onSaveCustomRates={handleUpdateCustomRates}
         onOpenConversationMode={handleOpenConversationMode}
         onToggleOnlineMode={handleToggleOnlineMode}
         onOpenPermissionsModal={() => setIsPermissionsModalOpen(true)}
         onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+        onOpenVoiceSettings={() => setIsVoiceSettingsOpen(true)}
         vietnamTime={vietnamTime}
         spainTime={spainTime}
+        selectedCurrency={selectedCurrency}
+        onSelectCurrency={handleSelectCurrency}
+      />
+
+      {/* Unified Voice & Pronunciation Modal */}
+      <VoiceSettingsModal
+        isOpen={isVoiceSettingsOpen}
+        onClose={() => setIsVoiceSettingsOpen(false)}
+        isOnline={isOnline}
       />
 
       {/* Permissions Modal (Contextual only when requested) */}
@@ -337,11 +371,16 @@ export default function App() {
             onRefreshRates={() => refreshRates(true, true)}
             onSaveCustomRates={handleUpdateCustomRates}
             isRefreshing={isRefreshing}
+            selectedCurrency={selectedCurrency}
           />
         )}
 
         {activeTab === 'translator' && (
-          <VietnameseTranslator isOnline={isOnline} initialSubTab={translatorSubTab} />
+          <VietnameseTranslator
+            isOnline={isOnline}
+            initialSubTab={translatorSubTab}
+            onOpenVoiceSettings={() => setIsVoiceSettingsOpen(true)}
+          />
         )}
 
         {activeTab === 'restaurants' && (
@@ -349,34 +388,25 @@ export default function App() {
             ratesData={ratesData}
             isOnline={isOnline}
             itineraryState={itineraryState}
-            onNavigateToItinerary={() => setActiveTab('itinerary')}
+            onNavigateToItinerary={() => setActiveTab('trip')}
             onToggleOnlineMode={handleToggleOnlineMode}
             onOpenPermissionsModal={() => setIsPermissionsModalOpen(true)}
             onNavigateToAllergies={() => {
               setTranslatorSubTab('allergy');
               setActiveTab('translator');
             }}
+            selectedCurrency={selectedCurrency}
           />
         )}
 
-        {activeTab === 'maps' && (
-          <DownloadableMaps
+        {(activeTab === 'trip' || activeTab === 'itinerary' || activeTab === 'maps') && (
+          <TripPlanner
             ratesData={ratesData}
             isOnline={isOnline}
-            onNavigateToItinerary={() => setActiveTab('itinerary')}
-            onStartFreeTour={handleStartFreeTour}
             itineraryState={itineraryState}
-            initialRegionId={targetMapRegionId}
-          />
-        )}
-
-        {activeTab === 'itinerary' && (
-          <ItineraryPlanner
-            ratesData={ratesData}
-            isOnline={isOnline}
-            onNavigateToMaps={handleNavigateToMaps}
+            selectedCurrency={selectedCurrency}
             onStartFreeTour={handleStartFreeTour}
-            itineraryState={itineraryState}
+            onOpenPermissionsModal={() => setIsPermissionsModalOpen(true)}
           />
         )}
 

@@ -37,9 +37,11 @@ import {
   Car,
   Compass,
 } from 'lucide-react';
-import { ItineraryPlan, ItineraryDay, ItineraryStop, PointOfInterest, ExchangeRatesData } from '../types';
+import { ItineraryPlan, ItineraryDay, ItineraryStop, PointOfInterest, ExchangeRatesData, CurrencyCode } from '../types';
+import { getCurrencyInfo, calculateForeignToVndRate } from '../utils/currencyUtils';
 import { POINTS_OF_INTEREST } from '../data/pois';
 import { DEFAULT_ITINERARIES } from '../data/defaultItineraries';
+import { useScrollLock } from '../hooks/useScrollLock';
 import {
   getItineraryPlans,
   saveItineraryPlans,
@@ -61,6 +63,7 @@ interface ItineraryPlannerProps {
   onNavigateToMaps?: (dayId?: string) => void;
   onStartFreeTour?: (poi: PointOfInterest) => void;
   itineraryState?: ItineraryState;
+  selectedCurrency?: CurrencyCode;
 }
 
 export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
@@ -69,6 +72,7 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
   onNavigateToMaps,
   onStartFreeTour,
   itineraryState,
+  selectedCurrency = 'EUR',
 }) => {
   const [internalPlans, setInternalPlans] = useState<ItineraryPlan[]>(getItineraryPlans);
   const [internalActivePlanId, setInternalActivePlanId] = useState<string>(getActivePlanId);
@@ -135,6 +139,17 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
   // Export / Backup Modal
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
+  const isAnyItineraryModalOpen =
+    isPlanModalOpen ||
+    isDayModalOpen ||
+    isStopModalOpen ||
+    Boolean(editingStopData) ||
+    Boolean(movingStopData) ||
+    isTemplatesModalOpen ||
+    isExportModalOpen;
+
+  useScrollLock(isAnyItineraryModalOpen);
+
   // Hidden file input for importing JSON backup
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -147,9 +162,9 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
   const [activeMapStopId, setActiveMapStopId] = useState<string | undefined>(undefined);
   const [copiedGrabStopId, setCopiedGrabStopId] = useState<string | null>(null);
 
-  const usdVndRate = ratesData.rates['VND'] || 26000;
-  const eurRate = ratesData.rates['EUR'] || 0.8965;
-  const eurToVnd = usdVndRate / eurRate;
+  const foreignToVndRate = calculateForeignToVndRate(ratesData.rates, selectedCurrency);
+  const currInfo = getCurrencyInfo(selectedCurrency);
+  const eurToVnd = foreignToVndRate;
 
   // Active plan memo
   const activePlan = useMemo(() => {
@@ -735,7 +750,7 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
     content += `RESUMEN DE RUTA:\n`;
     content += `• Total días planificados: ${activePlan.days.length}\n`;
     content += `• Total paradas/lugares: ${totalStopsCount} (${visitedStopsCount} visitados)\n`;
-    content += `• Presupuesto estimado de entradas: ${totalTicketsVnd.toLocaleString('es-ES')} ₫ (≈ ${(totalTicketsVnd / eurToVnd).toFixed(2)} €)\n`;
+    content += `• Presupuesto estimado de entradas: ${totalTicketsVnd.toLocaleString('es-ES')} ₫ (≈ ${(totalTicketsVnd / foreignToVndRate).toFixed(selectedCurrency === 'JPY' ? 0 : 2)} ${currInfo.symbol})\n`;
     content += `----------------------------------------------------\n\n`;
 
     activePlan.days.forEach((day) => {
@@ -1097,7 +1112,7 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
           <div className="bg-stone-900/60 border border-stone-800/80 px-3.5 py-2.5 rounded-2xl text-center backdrop-blur-xs">
             <span className="text-[10px] uppercase font-bold text-stone-400 block tracking-wider font-mono">Presupuesto</span>
             <span className="text-base sm:text-lg font-black text-amber-300 font-mono tracking-tight">{(planStats.totalTicketVnd / 1000).toLocaleString('es-ES')}k ₫</span>
-            <span className="text-[10px] text-stone-400 block font-mono">≈ {(planStats.totalTicketVnd / eurToVnd).toFixed(1)} €</span>
+            <span className="text-[10px] text-stone-400 block font-mono">≈ {(planStats.totalTicketVnd / foreignToVndRate).toFixed(selectedCurrency === 'JPY' ? 0 : 1)} {currInfo.symbol}</span>
           </div>
         </div>
 
@@ -2282,7 +2297,7 @@ export const ItineraryPlanner: React.FC<ItineraryPlannerProps> = ({
                   />
                   {stopFormTicketVnd > 0 && (
                     <span className="text-[10px] text-stone-500 mt-0.5 block">
-                      ≈ {(stopFormTicketVnd / eurToVnd).toFixed(2)} €
+                      ≈ {(stopFormTicketVnd / foreignToVndRate).toFixed(selectedCurrency === 'JPY' ? 0 : 2)} {currInfo.symbol}
                     </span>
                   )}
                 </div>

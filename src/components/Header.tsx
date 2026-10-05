@@ -11,6 +11,8 @@ import {
   Menu,
   X,
   ChevronRight,
+  ChevronDown,
+  Coins,
   Sparkles,
   UtensilsCrossed,
   Mic,
@@ -22,15 +24,24 @@ import {
   ShieldAlert,
   PhoneCall,
   Lock,
+  Volume2,
+  Clock,
+  SlidersHorizontal,
 } from 'lucide-react';
-import { ExchangeRatesData, ActiveTabType } from '../types';
+import { ExchangeRatesData, ActiveTabType, CurrencyCode } from '../types';
+import { CURRENCIES, getCurrencyInfo, calculateForeignToVndRate } from '../utils/currencyUtils';
 import {
   PermissionStatusType,
   subscribePermissions,
   queryBrowserPermissions,
-  requestGeolocationPermission,
-  requestMicrophonePermission,
 } from '../utils/permissions';
+import {
+  SpeechSettings,
+  getSavedSpeechSettings,
+  subscribeSpeechSettings,
+} from '../utils/speechSynthesis';
+import { useScrollLock } from '../hooks/useScrollLock';
+import { CustomRateModal } from './CustomRateModal';
 
 interface HeaderProps {
   activeTab: ActiveTabType;
@@ -39,12 +50,16 @@ interface HeaderProps {
   isOnline: boolean;
   isRefreshing: boolean;
   onRefreshRates: () => void;
+  onSaveCustomRates?: (newRates: ExchangeRatesData) => void;
   onOpenConversationMode?: () => void;
   onToggleOnlineMode?: () => void;
   onOpenPermissionsModal?: () => void;
   onOpenEmergencyModal?: () => void;
+  onOpenVoiceSettings?: () => void;
   vietnamTime?: string;
   spainTime?: string;
+  selectedCurrency: CurrencyCode;
+  onSelectCurrency: (currency: CurrencyCode) => void;
 }
 
 const NAV_ITEMS: {
@@ -72,22 +87,15 @@ const NAV_ITEMS: {
     id: 'restaurants',
     label: 'Dónde Comer & Restaurantes',
     shortLabel: 'Dónde Comer',
-    description: 'Restaurantes verificados >4.5★, mapa interactivo y algoritmo según presupuesto',
+    description: 'Restaurantes verificados >4.5★, mapa interactivo y recomendaciones',
     icon: UtensilsCrossed,
   },
   {
-    id: 'maps',
-    label: 'Mapas & Ciudades',
-    shortLabel: 'Mapas',
-    description: 'Mapas turísticos descargables y enlaces directos a Google Maps',
+    id: 'trip',
+    label: 'Mi Viaje & Rutas',
+    shortLabel: 'Mi Viaje',
+    description: 'Ruta diaria personalizada con mapa interactivo y paradas',
     icon: MapPin,
-  },
-  {
-    id: 'itinerary',
-    label: 'Itinerario de Viaje',
-    shortLabel: 'Itinerario',
-    description: 'Planes detallados por día, horarios y recomendaciones',
-    icon: CalendarDays,
   },
   {
     id: 'freetour',
@@ -105,17 +113,27 @@ export const Header: React.FC<HeaderProps> = ({
   isOnline,
   isRefreshing,
   onRefreshRates,
+  onSaveCustomRates,
   onOpenConversationMode,
   onToggleOnlineMode,
   onOpenPermissionsModal,
   onOpenEmergencyModal,
+  onOpenVoiceSettings,
   vietnamTime,
   spainTime,
+  selectedCurrency,
+  onSelectCurrency,
 }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isCustomRateModalOpen, setIsCustomRateModalOpen] = useState(false);
+  useScrollLock(isDrawerOpen);
   const [geoStatus, setGeoStatus] = useState<PermissionStatusType>('unknown');
   const [micStatus, setMicStatus] = useState<PermissionStatusType>('unknown');
-  const [isRequestingPerms, setIsRequestingPerms] = useState(false);
+  const [speechSettings, setSpeechSettings] = useState<SpeechSettings>(() => getSavedSpeechSettings());
+
+  useEffect(() => {
+    return subscribeSpeechSettings((s) => setSpeechSettings(s));
+  }, []);
 
   useEffect(() => {
     const unsub = subscribePermissions((state) => {
@@ -132,13 +150,6 @@ export const Header: React.FC<HeaderProps> = ({
     }
   }, [isDrawerOpen]);
 
-  const handleRequestPermissions = async () => {
-    setIsRequestingPerms(true);
-    await requestGeolocationPermission();
-    await requestMicrophonePermission();
-    setIsRequestingPerms(false);
-  };
-
   // Close drawer on escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -150,22 +161,12 @@ export const Header: React.FC<HeaderProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Prevent background scroll when drawer is open
-  useEffect(() => {
-    if (isDrawerOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isDrawerOpen]);
-
-  // Format rate sample (~29k EUR)
+  // Format rate sample
   const usdToVnd = ratesData.rates['VND'] || 26000;
   const eurRate = ratesData.rates['EUR'] || 0.8965;
   const eurToVnd = Math.round(usdToVnd / eurRate);
+  const currInfo = getCurrencyInfo(selectedCurrency);
+  const selectedToVnd = calculateForeignToVndRate(ratesData.rates, selectedCurrency);
 
   const formattedDate = new Date(ratesData.timestamp).toLocaleDateString('es-ES', {
     day: '2-digit',
@@ -173,11 +174,6 @@ export const Header: React.FC<HeaderProps> = ({
     hour: '2-digit',
     minute: '2-digit',
   });
-
-  const handleSelectTab = (id: ActiveTabType) => {
-    setActiveTab(id);
-    setIsDrawerOpen(false);
-  };
 
   return (
     <>
@@ -224,7 +220,9 @@ export const Header: React.FC<HeaderProps> = ({
             <nav className="flex items-center gap-1 bg-stone-900/90 p-1 rounded-xl border border-stone-800/80 backdrop-blur-xs" aria-label="Tabs">
               {NAV_ITEMS.map((item) => {
                 const IconComponent = item.icon;
-                const isActive = activeTab === item.id;
+                const isActive =
+                  activeTab === item.id ||
+                  (item.id === 'trip' && (activeTab === 'itinerary' || activeTab === 'maps'));
                 return (
                   <button
                     key={item.id}
@@ -243,7 +241,7 @@ export const Header: React.FC<HeaderProps> = ({
               })}
             </nav>
 
-            {/* Right Action: SOS Emergencias / Permissions / Refresh */}
+            {/* Right Action: SOS Emergencias / Refresh */}
             <div className="flex items-center gap-2 shrink-0">
               {onOpenEmergencyModal && (
                 <button
@@ -255,25 +253,6 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
                   <span>SOS 115 / 113</span>
-                </button>
-              )}
-
-              {onOpenPermissionsModal && (
-                <button
-                  id="btn-open-permissions-desktop"
-                  onClick={onOpenPermissionsModal}
-                  title="Gestionar Permisos (GPS y Micrófono)"
-                  aria-label="Gestionar Permisos"
-                  className={`p-2 rounded-xl border transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
-                    geoStatus === 'granted' && micStatus === 'granted'
-                      ? 'bg-stone-900/80 hover:bg-stone-800 text-emerald-400 border-stone-800'
-                      : 'bg-stone-900/80 hover:bg-stone-800 text-amber-300 border-stone-800'
-                  }`}
-                >
-                  <ShieldCheck className="w-4 h-4 shrink-0" />
-                  <span className="hidden lg:inline text-stone-200">
-                    {geoStatus === 'granted' && micStatus === 'granted' ? 'Permisos' : 'Permisos'}
-                  </span>
                 </button>
               )}
 
@@ -325,7 +304,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* Mobile Actions: SOS + Permissions + Drawer */}
+            {/* Mobile Actions: SOS + Drawer */}
             <div className="flex items-center gap-1.5 shrink-0">
               {onOpenEmergencyModal && (
                 <button
@@ -337,22 +316,6 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
                   <span>SOS</span>
-                </button>
-              )}
-
-              {onOpenPermissionsModal && (
-                <button
-                  id="btn-open-mobile-permissions"
-                  onClick={onOpenPermissionsModal}
-                  className={`p-1.5 rounded-xl border flex items-center justify-center cursor-pointer active:scale-95 transition ${
-                    geoStatus === 'granted' && micStatus === 'granted'
-                      ? 'bg-stone-900 text-emerald-400 border-stone-800'
-                      : 'bg-stone-900 text-amber-300 border-stone-800'
-                  }`}
-                  title="Gestionar Permisos de la App (GPS y Micrófono)"
-                  aria-label="Permisos del dispositivo"
-                >
-                  <ShieldCheck className="w-4 h-4" />
                 </button>
               )}
 
@@ -421,198 +384,224 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* Rate Widget inside Drawer */}
-            <div className="p-4 border-b border-stone-800 bg-stone-950/20">
-              <div className="flex items-center justify-between text-xs text-stone-400 mb-1.5">
-                <span>Tipo de cambio oficial</span>
-                <button
-                  onClick={onRefreshRates}
-                  disabled={isRefreshing || !isOnline}
-                  className="text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1 cursor-pointer disabled:opacity-40"
-                >
-                  <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  <span>Actualizar</span>
-                </button>
-              </div>
-              <div className="bg-stone-800/80 rounded-xl p-3 border border-stone-700/60 font-mono flex items-center justify-between">
-                <div>
-                  <div className="text-amber-400 font-bold text-sm">1 EUR (€)</div>
-                  <div className="text-xs text-stone-400">≈ {eurToVnd.toLocaleString('es-ES')} VND (₫)</div>
+            {/* Drawer Content */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Local Clocks */}
+              {(vietnamTime || spainTime) && (
+                <div className="bg-stone-950/40 p-3 rounded-2xl border border-stone-800/80">
+                  <div className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Horas Locales</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="bg-stone-900/90 p-2 rounded-xl border border-stone-800">
+                      <span className="text-[10px] text-stone-400 block font-medium">🇻🇳 Hanói / HCMC</span>
+                      <span className="text-sm font-bold text-amber-400 font-mono">{vietnamTime || '--:--'}</span>
+                    </div>
+                    <div className="bg-stone-900/90 p-2 rounded-xl border border-stone-800">
+                      <span className="text-[10px] text-stone-400 block font-medium">🇪🇸 España (CET)</span>
+                      <span className="text-sm font-bold text-stone-300 font-mono">{spainTime || '--:--'}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-stone-300 font-medium text-xs">1 USD ($)</div>
-                  <div className="text-[11px] text-stone-400">≈ {Math.round(usdToVnd).toLocaleString('es-ES')} VND (₫)</div>
-                </div>
-              </div>
-            </div>
+              )}
 
-            {/* Quick SOS Card in Drawer */}
-            {onOpenEmergencyModal && (
-              <div className="px-4 py-3 border-b border-stone-800 bg-rose-950/20">
+              {/* Reference Currency Setting Card in Drawer */}
+              <div className="bg-stone-950/40 p-3.5 rounded-2xl border border-stone-800/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Coins className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[11px] font-bold text-stone-300 uppercase tracking-wider">
+                      Divisa de referencia
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 font-mono">
+                    {currInfo.flag} {currInfo.code} ({currInfo.symbol})
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={selectedCurrency}
+                    onChange={(e) => onSelectCurrency(e.target.value as CurrencyCode)}
+                    aria-label="Seleccionar divisa de referencia"
+                    className="w-full bg-stone-900/90 hover:bg-stone-850 text-stone-200 border border-stone-800 hover:border-amber-500/40 rounded-xl px-3 py-2 pr-8 text-xs font-semibold focus:outline-none focus:border-amber-400 cursor-pointer transition appearance-none shadow-2xs"
+                  >
+                    {CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code} className="bg-stone-900 text-stone-200">
+                        {c.flag} {c.code} — {c.name} ({c.symbol})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-2.5 pointer-events-none text-stone-400">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Rate Widget inside Drawer */}
+              <div className="bg-stone-950/40 p-3.5 rounded-2xl border border-stone-800/80 space-y-2">
+                <div className="flex items-center justify-between text-xs text-stone-400">
+                  <span className="font-semibold text-stone-300 text-[11px] uppercase tracking-wider">
+                    Tipo de cambio
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={onRefreshRates}
+                      disabled={isRefreshing || !isOnline}
+                      className="text-amber-400 hover:text-amber-300 font-medium text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                      title={isOnline ? 'Actualizar tasas en directo' : 'Sin conexión a internet'}
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                      <span>Actualizar</span>
+                    </button>
+                    {onSaveCustomRates && (
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomRateModalOpen(true)}
+                        className="text-amber-400 hover:text-amber-300 font-medium text-xs flex items-center gap-1 cursor-pointer"
+                        title="Ajustar manualmente la tasa de cambio"
+                      >
+                        <SlidersHorizontal className="w-3 h-3" />
+                        <span>Ajustar</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="bg-stone-900/90 rounded-xl p-3 border border-stone-800 font-mono flex items-center justify-between">
+                  <div>
+                    <div className="text-amber-400 font-bold text-sm">
+                      1 {currInfo.code} ({currInfo.symbol})
+                    </div>
+                    <div className="text-xs text-stone-400">
+                      ≈ {Math.round(selectedToVnd).toLocaleString('es-ES')} VND (₫)
+                    </div>
+                  </div>
+                  {selectedCurrency !== 'USD' ? (
+                    <div className="text-right">
+                      <div className="text-stone-300 font-medium text-xs">1 USD ($)</div>
+                      <div className="text-[11px] text-stone-400">≈ {Math.round(usdToVnd).toLocaleString('es-ES')} VND (₫)</div>
+                    </div>
+                  ) : (
+                    <div className="text-right">
+                      <div className="text-stone-300 font-medium text-xs">1 EUR (€)</div>
+                      <div className="text-[11px] text-stone-400">≈ {eurToVnd.toLocaleString('es-ES')} VND (₫)</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Voice & Pronunciation Unified Card */}
+              {onOpenVoiceSettings && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsDrawerOpen(false);
-                    onOpenEmergencyModal();
-                  }}
-                  className="w-full p-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-700/70 text-rose-200 text-xs font-bold flex items-center justify-between transition cursor-pointer shadow-xs"
+                  onClick={onOpenVoiceSettings}
+                  className="w-full text-left bg-stone-950/40 hover:bg-stone-900/80 p-3.5 rounded-2xl border border-stone-800/80 hover:border-amber-500/40 space-y-2.5 transition cursor-pointer active:scale-98 group shadow-xs"
+                  title="Configurar voz y pronunciación"
                 >
-                  <div className="flex items-center gap-2">
-                    <ShieldAlert className="w-4 h-4 text-rose-400" />
-                    <span>Emergencias & Embajada 24h</span>
-                  </div>
-                  <span className="text-[10px] bg-rose-800 text-rose-100 px-2 py-0.5 rounded-md">115 / 113</span>
-                </button>
-              </div>
-            )}
-
-            {/* Navigation Options List */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-              <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider px-3 py-1">
-                Secciones de la Guía
-              </div>
-
-              {NAV_ITEMS.map((item) => {
-                const IconComponent = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    id={`drawer-tab-${item.id}`}
-                    onClick={() => handleSelectTab(item.id)}
-                    className={`w-full p-3 rounded-xl transition text-left flex items-start gap-3.5 cursor-pointer ${
-                      isActive
-                        ? 'bg-amber-500 text-stone-950 shadow-md font-semibold'
-                        : 'text-stone-200 hover:bg-stone-800/90 border border-transparent hover:border-stone-700/60'
-                    }`}
-                  >
-                    <div
-                      className={`p-2 rounded-lg mt-0.5 ${
-                        isActive
-                          ? 'bg-stone-950 text-amber-400'
-                          : 'bg-stone-800 text-amber-400'
-                      }`}
-                    >
-                      <IconComponent className="w-5 h-5" />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-[11px] font-bold text-stone-300 uppercase tracking-wider">
+                        Voz & Pronunciación
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-sm">{item.label}</span>
-                        <ChevronRight className={`w-4 h-4 ${isActive ? 'text-stone-950' : 'text-stone-500'}`} />
+                    <ChevronRight className="w-4 h-4 text-stone-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition" />
+                  </div>
+
+                  <div className="bg-stone-900/90 group-hover:bg-stone-850 p-2.5 rounded-xl border border-stone-800 flex items-center justify-between transition">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl">{speechSettings.gender === 'female' ? '👩' : '👨'}</span>
+                      <div>
+                        <div className="text-xs font-bold text-stone-200">
+                          Voz {speechSettings.gender === 'female' ? 'Femenina' : 'Masculina'}
+                        </div>
+                        <div className="text-[10px] text-stone-400">
+                          Velocidad {speechSettings.speedPreset === 'slow' ? 'Lenta (0.8x)' : speechSettings.speedPreset === 'fast' ? 'Rápida (1.1x)' : 'Normal (0.95x)'}
+                        </div>
                       </div>
-                      <p
-                        className={`text-xs mt-0.5 line-clamp-2 leading-relaxed ${
-                          isActive ? 'text-stone-800' : 'text-stone-400'
+                    </div>
+                    <span className="text-[10px] font-medium text-amber-400 group-hover:underline">
+                      Configurar
+                    </span>
+                  </div>
+                </button>
+              )}
+
+              {/* Permissions Unified Card */}
+              {onOpenPermissionsModal && (
+                <button
+                  type="button"
+                  onClick={onOpenPermissionsModal}
+                  className="w-full text-left bg-stone-950/40 hover:bg-stone-900/80 p-3.5 rounded-2xl border border-stone-800/80 hover:border-amber-500/40 space-y-2.5 transition cursor-pointer active:scale-98 group shadow-xs"
+                  title="Gestionar permisos del dispositivo"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-stone-400" />
+                      <span className="text-[11px] font-bold text-stone-300 uppercase tracking-wider">
+                        Permisos del dispositivo
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-stone-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {/* Geolocation status */}
+                    <div className="bg-stone-900/90 group-hover:bg-stone-850 p-2 rounded-lg border border-stone-800 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Navigation className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                        <span className="text-[11px] text-stone-300 font-medium truncate">GPS</span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          geoStatus === 'granted'
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50'
+                            : geoStatus === 'denied'
+                            ? 'bg-rose-950 text-rose-300 border border-rose-800/50'
+                            : 'bg-stone-800 text-stone-400'
                         }`}
                       >
-                        {item.description}
-                      </p>
+                        {geoStatus === 'granted' ? 'Activo' : geoStatus === 'denied' ? 'Bloqueado' : 'Pendiente'}
+                      </span>
                     </div>
-                  </button>
-                );
-              })}
-            </div>
 
-            {/* Permissions Status & Tester Card */}
-            <div className="p-3.5 border-t border-stone-800 bg-stone-950/60">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">
-                  Permisos del dispositivo
-                </span>
-                {onOpenPermissionsModal ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsDrawerOpen(false);
-                      onOpenPermissionsModal();
-                    }}
-                    className="text-[11px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
-                  >
-                    Ver detalles
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleRequestPermissions}
-                    disabled={isRequestingPerms}
-                    className="text-[11px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer disabled:opacity-50"
-                  >
-                    {isRequestingPerms ? 'Comprobando...' : 'Activar / Probar'}
-                  </button>
-                )}
-              </div>
-
-              <div
-                onClick={() => {
-                  if (onOpenPermissionsModal) {
-                    setIsDrawerOpen(false);
-                    onOpenPermissionsModal();
-                  }
-                }}
-                className={`grid grid-cols-2 gap-2 text-xs ${onOpenPermissionsModal ? 'cursor-pointer' : ''}`}
-                title="Toca para gestionar los permisos de geolocalización y micrófono"
-              >
-                {/* Geolocation status */}
-                <div className="bg-stone-900/90 p-2 rounded-lg border border-stone-800 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <Navigation className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                    <span className="text-[11px] text-stone-300 font-medium truncate">GPS</span>
+                    {/* Microphone status */}
+                    <div className="bg-stone-900/90 group-hover:bg-stone-850 p-2 rounded-lg border border-stone-800 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Mic className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span className="text-[11px] text-stone-300 font-medium truncate">Micro</span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          micStatus === 'granted'
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50'
+                            : micStatus === 'denied'
+                            ? 'bg-rose-950 text-rose-300 border border-rose-800/50'
+                            : 'bg-stone-800 text-stone-400'
+                        }`}
+                      >
+                        {micStatus === 'granted' ? 'Activo' : micStatus === 'denied' ? 'Bloqueado' : 'Pendiente'}
+                      </span>
+                    </div>
                   </div>
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      geoStatus === 'granted'
-                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50'
-                        : geoStatus === 'denied'
-                        ? 'bg-rose-950 text-rose-300 border border-rose-800/50'
-                        : 'bg-stone-800 text-stone-400'
-                    }`}
-                  >
-                    {geoStatus === 'granted' ? 'Activo' : geoStatus === 'denied' ? 'Bloqueado' : 'Pendiente'}
-                  </span>
-                </div>
-
-                {/* Microphone status */}
-                <div className="bg-stone-900/90 p-2 rounded-lg border border-stone-800 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <Mic className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span className="text-[11px] text-stone-300 font-medium truncate">Micro</span>
-                  </div>
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      micStatus === 'granted'
-                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50'
-                        : micStatus === 'denied'
-                        ? 'bg-rose-950 text-rose-300 border border-rose-800/50'
-                        : 'bg-stone-800 text-stone-400'
-                    }`}
-                  >
-                    {micStatus === 'granted' ? 'Activo' : micStatus === 'denied' ? 'Bloqueado' : 'Pendiente'}
-                  </span>
-                </div>
-              </div>
-
-              {(geoStatus === 'denied' || micStatus === 'denied') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsDrawerOpen(false);
-                    if (onOpenPermissionsModal) onOpenPermissionsModal();
-                  }}
-                  className="w-full mt-2 py-1.5 px-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                >
-                  <Lock className="w-3 h-3 text-amber-400" />
-                  <span>Cómo desbloquear en el navegador ⚙️</span>
                 </button>
               )}
             </div>
-
-            {/* Drawer Footer */}
-            <div className="p-3 border-t border-stone-800 bg-stone-950/80 text-center text-xs text-stone-500">
-              <p>🇻🇳 Guía Offline de Viaje a Vietnam</p>
-              <p className="text-[10px] text-stone-600 mt-0.5">Tasas, mapas y datos guardados localmente</p>
-            </div>
           </aside>
         </div>
+      )}
+
+      {/* Custom Rate Modal */}
+      {onSaveCustomRates && (
+        <CustomRateModal
+          isOpen={isCustomRateModalOpen}
+          onClose={() => setIsCustomRateModalOpen(false)}
+          ratesData={ratesData}
+          onSaveCustomRates={onSaveCustomRates}
+          onRefreshRates={onRefreshRates}
+          activeCurrency={selectedCurrency}
+        />
       )}
     </>
   );

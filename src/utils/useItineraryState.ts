@@ -248,6 +248,131 @@ export function useItineraryState() {
     [activePlan]
   );
 
+  const addDay = useCallback(
+    (city: string = 'Hà Nội', customTitle?: string) => {
+      if (!activePlan) return;
+      const currentPlans = [...plans];
+      const planIndex = currentPlans.findIndex((p) => p.id === activePlan.id);
+      if (planIndex === -1) return;
+      const plan = { ...currentPlans[planIndex] };
+      const nextDayNum = plan.days.length + 1;
+      const newDayId = `day-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const newDay: ItineraryDay = {
+        id: newDayId,
+        dayNumber: nextDayNum,
+        destinationCity: city,
+        title: customTitle || `Día ${nextDayNum}: ${city}`,
+        notes: '',
+        stops: [],
+      };
+      plan.days = [...plan.days, newDay];
+      if (!plan.destinations.includes(city)) {
+        plan.destinations = [...plan.destinations, city];
+      }
+      plan.updatedAt = Date.now();
+      currentPlans[planIndex] = plan;
+      updatePlans(currentPlans);
+      setSelectedDayId(newDayId);
+    },
+    [activePlan, plans, updatePlans]
+  );
+
+  const removeDay = useCallback(
+    (dayId: string) => {
+      if (!activePlan || activePlan.days.length <= 1) return;
+      const currentPlans = [...plans];
+      const planIndex = currentPlans.findIndex((p) => p.id === activePlan.id);
+      if (planIndex === -1) return;
+      const plan = { ...currentPlans[planIndex] };
+      const remainingDays = plan.days
+        .filter((d) => d.id !== dayId)
+        .map((d, idx) => ({
+          ...d,
+          dayNumber: idx + 1,
+        }));
+      plan.days = remainingDays;
+      plan.updatedAt = Date.now();
+      currentPlans[planIndex] = plan;
+      updatePlans(currentPlans);
+      if (selectedDayId === dayId) {
+        setSelectedDayId(remainingDays[0]?.id || '');
+      }
+    },
+    [activePlan, plans, updatePlans, selectedDayId]
+  );
+
+  const updateDay = useCallback(
+    (dayId: string, updates: Partial<ItineraryDay>) => {
+      if (!activePlan) return;
+      const currentPlans = [...plans];
+      const planIndex = currentPlans.findIndex((p) => p.id === activePlan.id);
+      if (planIndex === -1) return;
+      const plan = { ...currentPlans[planIndex] };
+      plan.days = plan.days.map((d) => (d.id === dayId ? { ...d, ...updates } : d));
+      plan.updatedAt = Date.now();
+      currentPlans[planIndex] = plan;
+      updatePlans(currentPlans);
+    },
+    [activePlan, plans, updatePlans]
+  );
+
+  const updatePlanTitle = useCallback(
+    (title: string) => {
+      if (!activePlan) return;
+      const currentPlans = [...plans];
+      const planIndex = currentPlans.findIndex((p) => p.id === activePlan.id);
+      if (planIndex === -1) return;
+      currentPlans[planIndex] = { ...currentPlans[planIndex], title, updatedAt: Date.now() };
+      updatePlans(currentPlans);
+    },
+    [activePlan, plans, updatePlans]
+  );
+
+  const createNewPersonalPlan = useCallback(
+    (title: string = 'Mi Viaje a Vietnam', firstCity: string = 'Hà Nội') => {
+      const newPlanId = `plan-personal-${Date.now()}`;
+      const newDayId = `day-${Date.now()}-1`;
+      const newPlan: ItineraryPlan = {
+        id: newPlanId,
+        title,
+        description: 'Ruta personalizada',
+        startDate: new Date().toISOString().split('T')[0],
+        destinations: [firstCity],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        days: [
+          {
+            id: newDayId,
+            dayNumber: 1,
+            destinationCity: firstCity,
+            title: `Día 1: ${firstCity}`,
+            notes: '',
+            stops: [],
+          },
+        ],
+      };
+      const nextPlans = [newPlan, ...plans];
+      updatePlans(nextPlans);
+      setActivePlanId(newPlanId);
+      setSelectedDayId(newDayId);
+    },
+    [plans, updatePlans, setActivePlanId]
+  );
+
+  const clearPlanStops = useCallback(
+    (planId: string) => {
+      const currentPlans = [...plans];
+      const planIndex = currentPlans.findIndex((p) => p.id === planId);
+      if (planIndex === -1) return;
+      const plan = { ...currentPlans[planIndex] };
+      plan.days = plan.days.map((d) => ({ ...d, stops: [] }));
+      plan.updatedAt = Date.now();
+      currentPlans[planIndex] = plan;
+      updatePlans(currentPlans);
+    },
+    [plans, updatePlans]
+  );
+
   return {
     plans,
     activePlanId,
@@ -263,6 +388,12 @@ export function useItineraryState() {
     toggleStopVisited,
     reorderStopsInDay,
     getPoiInclusionStatus,
+    addDay,
+    removeDay,
+    updateDay,
+    updatePlanTitle,
+    createNewPersonalPlan,
+    clearPlanStops,
   };
 }
 

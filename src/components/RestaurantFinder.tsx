@@ -28,7 +28,9 @@ import {
   CuisineFilterType,
   RestaurantSortOption,
   ExchangeRatesData,
+  CurrencyCode,
 } from '../types';
+import { getCurrencyInfo, calculateForeignToVndRate } from '../utils/currencyUtils';
 import { RAW_RESTAURANTS_DATA } from '../data/restaurants';
 import {
   filterStrictRestaurants,
@@ -38,6 +40,7 @@ import {
   BUDGET_TIER_CONFIG,
 } from '../utils/restaurantAlgorithm';
 import { checkRestaurantOpenStatus, formatFullOpeningHours } from '../utils/openingHours';
+import { useScrollLock } from '../hooks/useScrollLock';
 import { RestaurantMap, getRestaurantTheme } from './RestaurantMap';
 import { RestaurantMenuModal } from './RestaurantMenuModal';
 import { CitySelectionModal } from './CitySelectionModal';
@@ -58,6 +61,7 @@ interface RestaurantFinderProps {
   onToggleOnlineMode?: () => void;
   onNavigateToAllergies?: () => void;
   onOpenPermissionsModal?: () => void;
+  selectedCurrency?: CurrencyCode;
 }
 
 const CITY_COORDINATES = CITY_COORDINATES_MAP;
@@ -70,6 +74,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
   onToggleOnlineMode,
   onNavigateToAllergies,
   onOpenPermissionsModal,
+  selectedCurrency = 'EUR',
 }) => {
   // Budget & Filter State
   const [budgetPref, setBudgetPref] = useState<BudgetPreference>('all');
@@ -99,6 +104,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
 
   // Modal states
   const [showAddToItineraryModal, setShowAddToItineraryModal] = useState<RestaurantItem | null>(null);
+  useScrollLock(Boolean(showAddToItineraryModal));
   const [viewingMenuRestaurant, setViewingMenuRestaurant] = useState<RestaurantItem | null>(null);
   const [selectedDayIdForAdd, setSelectedDayIdForAdd] = useState<string>('');
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('Almuerzo 13:00');
@@ -475,16 +481,18 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
   }, [userCoords, selectedCity]);
 
   // Format currency helpers
-  const usdToVnd = ratesData.rates['VND'] || 26000;
-  const eurRate = ratesData.rates['EUR'] || 0.8965;
-  const eurToVnd = Math.round(usdToVnd / eurRate);
+  const foreignToVndRate = calculateForeignToVndRate(ratesData.rates, selectedCurrency);
+  const currInfo = getCurrencyInfo(selectedCurrency);
 
   const formatVndToEur = useCallback(
     (vnd: number) => {
-      const eur = vnd / eurToVnd;
-      return `${eur.toFixed(1)} €`;
+      const val = vnd / foreignToVndRate;
+      if (selectedCurrency === 'JPY') {
+        return `${Math.round(val).toLocaleString('es-ES')} ¥`;
+      }
+      return `${val.toFixed(1)} ${currInfo.symbol}`;
     },
-    [eurToVnd]
+    [foreignToVndRate, selectedCurrency, currInfo]
   );
 
   // Handle GPS location request with robust browser geolocation and precision filter
@@ -1567,7 +1575,8 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
         <RestaurantMenuModal
           restaurant={viewingMenuRestaurant}
           onClose={() => setViewingMenuRestaurant(null)}
-          eurRate={ratesData?.rates?.VND || 27000}
+          ratesData={ratesData}
+          selectedCurrency={selectedCurrency}
         />
       )}
 

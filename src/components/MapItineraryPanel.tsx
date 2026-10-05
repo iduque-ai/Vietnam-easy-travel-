@@ -29,6 +29,7 @@ interface MapItineraryPanelProps {
   onNavigateToItinerary?: () => void;
   onQuickAddPoi?: (poi: PointOfInterest) => void;
   availableRegionPois: PointOfInterest[];
+  currencySymbol?: string;
 }
 
 export const MapItineraryPanel: React.FC<MapItineraryPanelProps> = ({
@@ -38,6 +39,7 @@ export const MapItineraryPanel: React.FC<MapItineraryPanelProps> = ({
   onNavigateToItinerary,
   onQuickAddPoi,
   availableRegionPois,
+  currencySymbol = '€',
 }) => {
   const {
     plans,
@@ -194,7 +196,7 @@ export const MapItineraryPanel: React.FC<MapItineraryPanelProps> = ({
               </span>
               {dayTicketTotalVnd > 0 && (
                 <span className="text-[10px] text-stone-500 block">
-                  ≈ {(dayTicketTotalVnd / eurToVnd).toFixed(2)} €
+                  ≈ {(dayTicketTotalVnd / eurToVnd).toFixed(2)} {currencySymbol}
                 </span>
               )}
             </div>

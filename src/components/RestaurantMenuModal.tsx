@@ -4,9 +4,13 @@ import {
   RestaurantMenuItem,
   RestaurantReviewPhoto,
   RestaurantMenuData,
+  CurrencyCode,
+  ExchangeRatesData,
 } from '../types';
+import { getCurrencyInfo, calculateForeignToVndRate } from '../utils/currencyUtils';
 import { CURATED_RESTAURANT_MENUS, generateSmartMenuForRestaurant } from '../data/restaurantMenus';
 import { speakVietnameseNatural } from '../utils/speechSynthesis';
+import { useScrollLock } from '../hooks/useScrollLock';
 import {
   X,
   UtensilsCrossed,
@@ -35,7 +39,9 @@ import {
 interface RestaurantMenuModalProps {
   restaurant: RestaurantItem | null;
   onClose: () => void;
-  eurRate: number; // 1 EUR = X VND (e.g. 29000)
+  eurRate?: number; // fallback: 1 EUR = X VND
+  ratesData?: ExchangeRatesData;
+  selectedCurrency?: CurrencyCode;
 }
 
 type MenuCategoryFilter = 'all' | 'Platos Principales' | 'Entrantes & Frituras' | 'Bebidas & Cafés' | 'Postres & Extras';
@@ -45,8 +51,17 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
   restaurant,
   onClose,
   eurRate,
+  ratesData,
+  selectedCurrency = 'EUR',
 }) => {
+  useScrollLock(Boolean(restaurant));
+
   if (!restaurant) return null;
+
+  const currInfo = getCurrencyInfo(selectedCurrency);
+  const foreignToVndRate = ratesData
+    ? calculateForeignToVndRate(ratesData.rates, selectedCurrency)
+    : (eurRate || 27000);
 
   // Active Main Tab
   const [activeTab, setActiveTab] = useState<'dishes' | 'photos' | 'reviews' | 'tips'>('dishes');
@@ -81,12 +96,16 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
   const [isLoadingLivePhotos, setIsLoadingLivePhotos] = useState<boolean>(false);
   const [livePhotosLoaded, setLivePhotosLoaded] = useState<boolean>(false);
 
-  // Convert VND to EUR
+  // Convert VND to selected currency
   const formatVndToEur = useCallback((vnd: number) => {
-    if (!eurRate || eurRate <= 0) return '';
-    const eur = (vnd / eurRate).toFixed(2).replace('.', ',');
-    return `${eur} €`;
-  }, [eurRate]);
+    if (!foreignToVndRate || foreignToVndRate <= 0) return '';
+    const val = vnd / foreignToVndRate;
+    if (selectedCurrency === 'JPY') {
+      return `${Math.round(val).toLocaleString('es-ES')} ¥`;
+    }
+    const formatted = val.toFixed(2).replace('.', ',');
+    return `${formatted} ${currInfo.symbol}`;
+  }, [foreignToVndRate, selectedCurrency, currInfo]);
 
   // Fetch live Google Place photos and reviews for any restaurant
   useEffect(() => {

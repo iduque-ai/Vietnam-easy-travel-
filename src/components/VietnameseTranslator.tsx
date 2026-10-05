@@ -34,19 +34,24 @@ import {
   subscribeSpeechState,
   stopAllSpeech,
   getSavedSpeechSettings,
+  subscribeSpeechSettings,
   SpeechSettings,
 } from '../utils/storage';
 import { AllergyCardsSection } from './AllergyCardsSection';
 import { ConversationMode, ConversationTargetPhrase } from './ConversationMode';
-import { VoiceSettingsModal } from './VoiceSettingsModal';
 import { AudioWaveIndicator } from './AudioWaveIndicator';
 
 interface VietnameseTranslatorProps {
   isOnline: boolean;
   initialSubTab?: 'conversation' | 'phrases' | 'food' | 'allergy';
+  onOpenVoiceSettings?: () => void;
 }
 
-export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOnline, initialSubTab }) => {
+export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
+  isOnline,
+  initialSubTab,
+  onOpenVoiceSettings,
+}) => {
   const [subTab, setSubTab] = useState<'conversation' | 'phrases' | 'food' | 'allergy'>(() => {
     if (initialSubTab) return initialSubTab;
     if (typeof window !== 'undefined') {
@@ -68,10 +73,9 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
   }, [initialSubTab]);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('compras');
+  const [selectedCategory, setSelectedCategory] = useState<string>('frecuentes');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [customCards, setCustomCards] = useState<CustomTranslationCard[]>(() => getSavedCustomCards());
-  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [speechSettings, setSpeechSettings] = useState<SpeechSettings>(() => getSavedSpeechSettings());
   const [targetConversationPhrase, setTargetConversationPhrase] = useState<ConversationTargetPhrase | null>(null);
   const [speakingState, setSpeakingState] = useState<{
@@ -86,6 +90,14 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
         isSpeaking: state.isSpeaking,
         speakingId: state.speakingId,
       });
+    });
+    return unsub;
+  }, []);
+
+  // Subscribe to speech settings changes
+  useEffect(() => {
+    const unsub = subscribeSpeechSettings((s) => {
+      setSpeechSettings(s);
     });
     return unsub;
   }, []);
@@ -174,7 +186,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
     const matchedCustomCards: (PhraseItem & { isCustom?: boolean })[] = customCards
       .filter((c) => {
         const targetCat = catMap[c.category] || 'cortesia';
-        const matchesCat = isSearching || selectedCategory === 'guardadas' || targetCat === selectedCategory;
+        const matchesCat = isSearching || selectedCategory === 'guardadas' || selectedCategory === 'frecuentes' || targetCat === selectedCategory;
         const matchesQuery =
           !q ||
           c.es.toLowerCase().includes(q) ||
@@ -198,7 +210,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
     const matchedStaticPhrases = (selectedCategory === 'guardadas' && !isSearching)
       ? []
       : TRAVEL_PHRASES.filter((p) => {
-          const matchesCat = isSearching || p.category === selectedCategory;
+          const matchesCat = isSearching || (selectedCategory === 'frecuentes' ? p.priority : p.category === selectedCategory);
           const matchesQuery =
             !q ||
             p.spanish.toLowerCase().includes(q) ||
@@ -310,6 +322,8 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
           isOnline={isOnline}
           targetPhrase={targetConversationPhrase}
           onClearTargetPhrase={() => setTargetConversationPhrase(null)}
+          onNavigateTab={(tab) => setSubTab(tab)}
+          onOpenVoiceSettings={onOpenVoiceSettings}
         />
       )}
 
@@ -331,15 +345,17 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsVoiceModalOpen(true)}
-                className="px-3 py-1.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
-                title="Ajustar velocidad y voz"
-              >
-                <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
-              </button>
+              {onOpenVoiceSettings && (
+                <button
+                  type="button"
+                  onClick={onOpenVoiceSettings}
+                  className="px-3 py-1.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+                  title="Ajuste de voz y pronunciación"
+                >
+                  <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
+                </button>
+              )}
               <span className="bg-stone-900/90 px-2.5 py-1.5 rounded-xl border border-stone-800 font-medium text-xs text-stone-300 font-mono hidden sm:inline-flex items-center shadow-2xs">
                 {filteredPhrases.length} frases
               </span>
@@ -371,6 +387,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
           {/* Categories bar */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs no-scrollbar w-full max-w-full overscroll-x-contain touch-pan-x">
             {[
+              { id: 'frecuentes', label: '⚡ Más Usadas', icon: Zap },
               { id: 'compras', label: '💰 Regateo & Compras', icon: ShoppingBag },
               { id: 'comida', label: '🍜 Comida & Restaurante', icon: UtensilsCrossed },
               { id: 'transporte', label: '🚗 Transporte & Grab', icon: Car },
@@ -603,15 +620,17 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsVoiceModalOpen(true)}
-                className="px-3 py-1.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
-                title="Ajustar velocidad y voz"
-              >
-                <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
-              </button>
+              {onOpenVoiceSettings && (
+                <button
+                  type="button"
+                  onClick={onOpenVoiceSettings}
+                  className="px-3 py-1.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+                  title="Ajuste de voz y pronunciación"
+                >
+                  <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
+                </button>
+              )}
               <span className="bg-stone-900/90 px-2.5 py-1.5 rounded-xl border border-stone-800 font-medium text-xs text-stone-300 font-mono hidden sm:inline-flex items-center shadow-2xs">
                 {filteredDishes.length} platos
               </span>
@@ -722,16 +741,6 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({ isOn
       {subTab === 'allergy' && (
         <AllergyCardsSection isOnline={isOnline} />
       )}
-
-      {/* Voice Settings Modal */}
-      <VoiceSettingsModal
-        isOpen={isVoiceModalOpen}
-        onClose={() => {
-          setIsVoiceModalOpen(false);
-          setSpeechSettings(getSavedSpeechSettings());
-        }}
-        isOnline={isOnline}
-      />
     </div>
   );
 };

@@ -25,8 +25,7 @@ const BOTTOM_NAV_ITEMS: BottomNavItem[] = [
   { id: 'converter', label: 'Divisas', icon: Calculator },
   { id: 'translator', label: 'Traductor', icon: Languages },
   { id: 'restaurants', label: 'Comer', icon: UtensilsCrossed },
-  { id: 'maps', label: 'Mapas', icon: MapPin },
-  { id: 'itinerary', label: 'Ruta', icon: Calendar },
+  { id: 'trip', label: 'Mi Viaje', icon: MapPin },
   { id: 'freetour', label: 'Audio Tour', icon: Compass },
 ];
 
@@ -56,7 +55,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       <div className="flex items-center justify-around px-1 pt-1.5 pb-1">
         {BOTTOM_NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.id;
+          const isActive =
+            activeTab === item.id ||
+            (item.id === 'trip' && (activeTab === 'itinerary' || activeTab === 'maps'));
 
           return (
             <button

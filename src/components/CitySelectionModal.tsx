@@ -13,6 +13,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { VIETNAM_CITIES_CATALOG, VietnamCityDestination } from '../data/cities';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 interface CitySelectionModalProps {
   isOpen: boolean;
@@ -64,6 +65,8 @@ export const CitySelectionModal: React.FC<CitySelectionModalProps> = ({
   isLocatingGps = false,
   onOpenPermissionsModal,
 }) => {
+  useScrollLock(isOpen);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRegionFilter, setSelectedRegionFilter] = useState<'all' | 'popular' | 'north' | 'central' | 'south'>('all');
   const [recentCities, setRecentCities] = useState<VietnamCityDestination[]>([]);

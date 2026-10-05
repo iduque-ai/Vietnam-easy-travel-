@@ -710,6 +710,72 @@ Respond with a strictly valid JSON object with these keys:
   });
 });
 
+// Endpoint to validate if an input is a genuine culinary ingredient or dietary restriction
+app.post('/api/validate-ingredient', async (req, res) => {
+  const { ingredient } = req.body;
+  if (!ingredient || typeof ingredient !== 'string' || ingredient.trim().length < 2) {
+    return res.json({ valid: false, error: 'Por favor introduce un nombre de ingrediente válido (mínimo 2 letras).' });
+  }
+
+  const clean = ingredient.trim();
+  const lower = clean.toLowerCase();
+
+  // 1. Check known dummy / nonsense words
+  const banned = ['test', 'prueba', 'testing', 'asdf', 'xxx', 'abc', '123', 'foo', 'bar', 'temp', 'null', 'undefined', 'qwerty', 'cosa', 'algo', 'nada', 'hola'];
+  if (banned.includes(lower) || /^([a-z0-9])\1{2,}$/i.test(lower) || /^[0-9\W_]+$/.test(clean)) {
+    return res.json({
+      valid: false,
+      error: `"${clean}" no es un ingrediente válido. Por favor introduce un alimento real (ej. apio, kiwi, mostaza).`
+    });
+  }
+
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const prompt = `You are a culinary expert and food safety auditor.
+Evaluate if the following user input refers to an actual, recognizable food ingredient, spice, herb, fruit, vegetable, meat, seafood, dairy, grain, beverage, or dietary restriction/allergen suitable for a restaurant allergy card.
+User input: "${clean}"
+
+Respond strictly with a valid JSON object:
+{
+  "isValidFood": true or false,
+  "canonicalEs": "Proper Title Case name in Spanish (e.g. Apio, Kiwi, Mostaza)",
+  "translationVi": "Authentic Vietnamese name for restaurant cooks (e.g. CẦN TÂY, QUẢ KIWI, MÙ TẠT)",
+  "forbiddenVi": ["List of 1-3 Vietnamese ingredient terms to avoid, e.g. Cần tây tươi, Bột cần tây"],
+  "emoji": "Single most appropriate food emoji (e.g. 🥬, 🥝, 🧂, 🥩, 🦐, 🌾, 🥛)",
+  "reasonIfInvalid": "Short 1-sentence explanation in Spanish if it is not an edible food or culinary ingredient (e.g. 'coche' no es un alimento comestible)."
+}`;
+
+      const parsed = await callGeminiJsonWithFallback(prompt, 2500, ['gemini-3.8-flash', 'gemini-3.1-flash-lite']);
+      if (parsed && typeof parsed.isValidFood === 'boolean') {
+        if (!parsed.isValidFood) {
+          return res.json({
+            valid: false,
+            error: parsed.reasonIfInvalid || `"${clean}" no parece ser un ingrediente o alimento comestible reconocido.`
+          });
+        }
+        return res.json({
+          valid: true,
+          canonicalEs: parsed.canonicalEs || (clean.charAt(0).toUpperCase() + clean.slice(1)),
+          translationVi: parsed.translationVi || clean.toUpperCase(),
+          forbiddenVi: Array.isArray(parsed.forbiddenVi) && parsed.forbiddenVi.length > 0 ? parsed.forbiddenVi : [parsed.translationVi || clean],
+          emoji: parsed.emoji || '🍽️'
+        });
+      }
+    } catch (err) {
+      console.warn('AI ingredient validation error, using local fallback:', err);
+    }
+  }
+
+  // Graceful fallback for offline / model busy:
+  return res.json({
+    valid: true,
+    canonicalEs: clean.charAt(0).toUpperCase() + clean.slice(1),
+    translationVi: clean.toUpperCase(),
+    forbiddenVi: [clean],
+    emoji: '🍽️'
+  });
+});
+
 // Dietary allergy / special request card generator with zero-downtime fallback
 app.post('/api/allergy-card', async (req, res) => {
   const { condition, dietaryRestrictions, conditions } = req.body;
