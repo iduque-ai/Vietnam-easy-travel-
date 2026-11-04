@@ -106,6 +106,19 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
   const [showAddToItineraryModal, setShowAddToItineraryModal] = useState<RestaurantItem | null>(null);
   useScrollLock(Boolean(showAddToItineraryModal));
   const [viewingMenuRestaurant, setViewingMenuRestaurant] = useState<RestaurantItem | null>(null);
+  const [menuModalInitialTab, setMenuModalInitialTab] = useState<'dishes' | 'photos' | 'reviews' | 'tips'>('dishes');
+  const [menuModalInitialPhotoCategory, setMenuModalInitialPhotoCategory] = useState<'all' | 'menu_board' | 'bill' | 'dish' | 'atmosphere'>('all');
+
+  const handleOpenMenuModal = useCallback((
+    restaurant: RestaurantItem,
+    tab: 'dishes' | 'photos' | 'reviews' | 'tips' = 'dishes',
+    photoCategory: 'all' | 'menu_board' | 'bill' | 'dish' | 'atmosphere' = 'all'
+  ) => {
+    setViewingMenuRestaurant(restaurant);
+    setMenuModalInitialTab(tab);
+    setMenuModalInitialPhotoCategory(photoCategory);
+  }, []);
+
   const [selectedDayIdForAdd, setSelectedDayIdForAdd] = useState<string>('');
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('Almuerzo 13:00');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -890,22 +903,22 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
               const isExpanded = expandedCardId === activeRestaurant.id;
 
               return (
-                <div className="p-4 bg-stone-900 text-white rounded-2xl shadow-xl border border-stone-800 space-y-3 animate-fade-in">
-                  {/* Row 1: Rank Badge + Name + Speaker Button (Vertically centered) */}
-                  <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-4 sm:p-5 bg-stone-50/80 text-stone-900 rounded-2xl border border-stone-200/90 space-y-3 animate-fade-in">
+                  {/* Row 1: Rank Badge + Name + Speaker Button */}
+                  <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-xs shrink-0 shadow-xs ${theme.bg} ${theme.border} ${theme.text}`}
+                      className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${theme.bg} ${theme.border} ${theme.text}`}
                       title={`Restaurante #${rankNumber}`}
                     >
                       <span>{isTop1 ? '👑 1' : rankNumber}</span>
                     </div>
 
                     <div className="min-w-0 flex-1 flex flex-col justify-center">
-                      <h4 className="font-bold text-base sm:text-lg text-white leading-tight">
+                      <h4 className="font-serif font-bold text-base sm:text-lg text-stone-900 leading-tight">
                         {activeRestaurant.name}
                       </h4>
                       {activeRestaurant.nameVi && activeRestaurant.nameVi !== activeRestaurant.name && (
-                        <p className="text-xs text-stone-400 italic truncate mt-0.5" title={activeRestaurant.nameVi}>
+                        <p className="text-xs text-stone-500 italic truncate mt-0.5" title={activeRestaurant.nameVi}>
                           {activeRestaurant.nameVi}
                         </p>
                       )}
@@ -915,7 +928,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                       <button
                         type="button"
                         onClick={() => speakVietnamese(activeRestaurant.nameVi)}
-                        className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-400 hover:text-amber-300 border border-stone-700/60 transition cursor-pointer flex items-center justify-center shadow-xs"
+                        className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 transition cursor-pointer flex items-center justify-center"
                         title={`Escuchar pronunciación: ${activeRestaurant.nameVi}`}
                       >
                         <Volume2 className="w-4 h-4" />
@@ -923,35 +936,35 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                     </div>
                   </div>
 
-                  {/* Rating, Reviews & Price Line (VND + EUR + Live Status + Service Icons) */}
-                  <div className="flex items-center gap-2 flex-wrap text-xs text-stone-300 pt-0.5">
-                    <span className="text-amber-400 font-bold flex items-center gap-0.5">
+                  {/* Rating, Reviews & Price Line */}
+                  <div className="flex items-center gap-2 flex-wrap text-xs text-stone-600 pt-0.5">
+                    <span className="text-amber-600 font-bold flex items-center gap-0.5 tabular-nums">
                       ★ {activeRestaurant.rating.toFixed(1)}
                     </span>
-                    <span className="text-stone-400 text-xs">
+                    <span className="text-stone-500 text-xs tabular-nums">
                       ({activeRestaurant.reviewsCount.toLocaleString('es-ES')} reseñas)
                     </span>
-                    <span className="text-stone-600">•</span>
-                    <span className="text-emerald-400 font-mono font-bold text-xs sm:text-sm">
+                    <span className="text-stone-300">•</span>
+                    <span className="text-emerald-700 font-mono font-bold text-xs sm:text-sm tabular-nums">
                       {(activeRestaurant.avgPriceVnd / 1000).toLocaleString('es-ES')}k ₫
                     </span>
-                    <span className="text-stone-300 text-xs font-semibold bg-stone-800 px-2 py-0.5 rounded-md border border-stone-700/60">
+                    <span className="text-stone-700 text-xs font-semibold bg-white px-2 py-0.5 rounded-lg border border-stone-200 tabular-nums">
                       {eurPrice}
                     </span>
                     {(() => {
                       const status = checkRestaurantOpenStatus(activeRestaurant.openingHours);
                       return (
                         <span
-                          className={`px-2 py-0.5 rounded-md text-[11px] font-semibold flex items-center gap-1 ${
+                          className={`px-2 py-0.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 ${
                             status.isOpen
-                              ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-800/70'
-                              : 'bg-stone-800 text-stone-400 border border-stone-700/60'
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              : 'bg-stone-100 text-stone-600 border border-stone-200'
                           }`}
                           title={status.statusText}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
-                              status.isOpen ? 'bg-emerald-400' : 'bg-rose-400'
+                              status.isOpen ? 'bg-emerald-500' : 'bg-rose-500'
                             }`}
                           />
                           <span>{status.isOpen ? 'Abierto' : 'Cerrado'}</span>
@@ -959,11 +972,11 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                       );
                     })()}
 
-                    {/* Service Badges directly next to Open / Closed status */}
+                    {/* Service Badges */}
                     <div className="flex items-center gap-1">
                       {activeRestaurant.hasAirConditioning && (
                         <span
-                          className="px-1.5 py-0.5 rounded-md bg-sky-950/90 text-sky-300 border border-sky-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                          className="px-1.5 py-0.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 text-[11px] flex items-center justify-center cursor-default select-none"
                           title="❄️ Aire Acondicionado disponible"
                         >
                           ❄️
@@ -971,14 +984,14 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                       )}
                       {activeRestaurant.isCashOnly ? (
                         <span
-                          className="px-1.5 py-0.5 rounded-md bg-amber-950/90 text-amber-300 border border-amber-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                          className="px-1.5 py-0.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-[11px] flex items-center justify-center cursor-default select-none"
                           title="💵 Solo pago en efectivo (VND)"
                         >
                           💵
                         </span>
                       ) : (
                         <span
-                          className="px-1.5 py-0.5 rounded-md bg-stone-800/90 text-stone-300 border border-stone-700/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                          className="px-1.5 py-0.5 rounded-lg bg-stone-100 text-stone-700 border border-stone-200 text-[11px] flex items-center justify-center cursor-default select-none"
                           title="💳 Acepta pago con tarjeta"
                         >
                           💳
@@ -986,7 +999,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                       )}
                       {activeRestaurant.grabFoodDelivery && (
                         <span
-                          className="px-1.5 py-0.5 rounded-md bg-emerald-950/90 text-emerald-300 border border-emerald-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                          className="px-1.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] flex items-center justify-center cursor-default select-none"
                           title="🛵 Servicio a domicilio GrabFood disponible"
                         >
                           🛵
@@ -994,7 +1007,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                       )}
                       {activeRestaurant.michelinGuide && (
                         <span
-                          className="px-1.5 py-0.5 rounded-md bg-rose-950/90 text-rose-300 border border-rose-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                          className="px-1.5 py-0.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[11px] flex items-center justify-center cursor-default select-none"
                           title={`⭐ Guía Michelin (${activeRestaurant.michelinGuide})`}
                         >
                           ⭐
@@ -1004,25 +1017,34 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                   </div>
 
                   {/* Row 2: Action Buttons */}
-                  <div className="flex items-center gap-2 pt-1 border-t border-stone-800/80 flex-wrap">
+                  <div className="flex items-center gap-2 pt-2 border-t border-stone-200/80 flex-wrap">
                     <button
                       type="button"
-                      onClick={() => setViewingMenuRestaurant(activeRestaurant)}
-                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
+                      onClick={() => handleOpenMenuModal(activeRestaurant, 'dishes')}
+                      className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95"
                       title="Ver carta de platos, precios y fotos"
                     >
                       <BookOpen className="w-3.5 h-3.5" />
                       <span>Carta</span>
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() => handleOpenMenuModal(activeRestaurant, 'photos', 'menu_board')}
+                      className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                      title="Ver fotos reales de la carta con precios de las reseñas"
+                    >
+                      <span>📋 Cartas con precios</span>
+                    </button>
+
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${activeRestaurant.name} ${activeRestaurant.address || activeRestaurant.city || 'Vietnam'}`.trim())}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-rose-300 border border-stone-700 font-medium text-xs flex items-center gap-1.5 transition"
+                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-semibold text-xs flex items-center gap-1.5 transition"
                       title="Abrir en Google Maps"
                     >
-                      <MapPin className="w-3.5 h-3.5" />
+                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
                       <span>Google Maps</span>
                     </a>
 
@@ -1035,88 +1057,88 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                           setSelectedDayIdForAdd(activePlan.days[0].id);
                         }
                       }}
-                      className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
+                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
                       title="Añadir a un día del itinerario"
                     >
-                      <Plus className="w-3.5 h-3.5" />
+                      <Plus className="w-3.5 h-3.5 text-amber-600" />
                       <span>Itinerario</span>
                     </button>
                   </div>
 
-                  {/* Row 3: Recommended Dish Highlight Box (Plato Imprescindible) */}
-                  <div className="p-3 rounded-xl bg-stone-950/80 border border-amber-500/30 text-xs sm:text-sm text-amber-200 leading-relaxed flex items-start gap-2.5 shadow-inner">
+                  {/* Row 3: Recommended Dish Highlight Box */}
+                  <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 text-xs sm:text-sm text-stone-800 leading-relaxed flex items-start gap-2.5">
                     <span className="text-base shrink-0 select-none">🍲</span>
                     <div className="min-w-0 flex-1">
-                      <span className="text-amber-400 font-bold mr-1.5">Plato estrella:</span>
-                      <span className="font-medium text-amber-100">{activeRestaurant.mustOrderDish}</span>
+                      <span className="text-amber-900 font-bold mr-1.5">Plato estrella:</span>
+                      <span className="font-medium text-stone-800">{activeRestaurant.mustOrderDish}</span>
                     </div>
                   </div>
 
-                  {/* Row 4: Desplegable Más info (Debajo del plato estrella) */}
+                  {/* Row 4: Desplegable Más info */}
                   <div className="flex items-center justify-end -mt-1">
                     <button
                       type="button"
                       onClick={() => toggleExpandCard(activeRestaurant.id)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-400 hover:text-stone-200 hover:bg-stone-800/80 flex items-center gap-1 cursor-pointer transition"
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-500 hover:text-stone-900 hover:bg-stone-200/60 flex items-center gap-1 cursor-pointer transition"
                     >
                       <span>{isExpanded ? 'Menos info' : 'Más info'}</span>
-                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5 text-stone-400" />}
+                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
                   </div>
 
                   {/* Row 5: Expandable Details */}
                   {isExpanded && (
-                    <div className="pt-2.5 border-t border-stone-800 text-xs text-stone-300 space-y-2.5 animate-fade-in">
+                    <div className="pt-2.5 border-t border-stone-200 text-xs text-stone-600 space-y-2.5 animate-fade-in">
                       {activeRestaurant.description &&
                         !activeRestaurant.description.includes('tiempo real en Google Maps') &&
                         !activeRestaurant.description.includes('reseñas verificadas') && (
-                          <p className="leading-relaxed text-stone-300/90 bg-stone-950/60 p-2.5 rounded-xl border border-stone-800/80">
+                          <p className="leading-relaxed text-stone-700 bg-white p-3 rounded-xl border border-stone-200">
                             {activeRestaurant.description}
                           </p>
                         )}
 
                       {/* Horario */}
                       {activeRestaurant.openingHours && (
-                        <div className="p-2.5 rounded-xl bg-stone-950/80 border border-stone-800/80 flex items-start gap-2 text-xs text-stone-300">
-                          <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <div className="p-2.5 rounded-xl bg-white border border-stone-200 flex items-start gap-2 text-xs text-stone-700">
+                          <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                           <div className="min-w-0 flex-1">
-                            <span className="font-semibold text-stone-200 mr-1.5">Horario:</span>
-                            <span className="text-amber-200/95 font-medium">
+                            <span className="font-semibold text-stone-900 mr-1.5">Horario:</span>
+                            <span className="text-stone-700 font-medium">
                               {formatFullOpeningHours(activeRestaurant.openingHours)}
                             </span>
                           </div>
                         </div>
                       )}
 
-                      {/* Servicios del local (directo y conciso) */}
-                      <div className="p-2.5 rounded-xl bg-stone-950/80 border border-stone-800/80 text-xs text-stone-300 space-y-2">
-                        <span className="font-semibold text-stone-200 block">Servicios del local:</span>
+                      {/* Servicios del local */}
+                      <div className="p-2.5 rounded-xl bg-white border border-stone-200 text-xs text-stone-700 space-y-2">
+                        <span className="font-semibold text-stone-900 block">Servicios del local:</span>
                         <div className="flex flex-wrap items-center gap-2">
                           {activeRestaurant.hasAirConditioning && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/80 border border-sky-800/60 text-sky-200 font-medium text-xs">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 border border-sky-200 text-sky-800 font-medium text-xs">
                               <span>❄️</span>
                               <span>Aire acondicionado</span>
                             </span>
                           )}
                           {activeRestaurant.isCashOnly ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/80 border border-amber-800/60 text-amber-200 font-medium text-xs">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 font-medium text-xs">
                               <span>💵</span>
                               <span>Solo efectivo</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-800/90 border border-stone-700/60 text-stone-200 font-medium text-xs">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-100 border border-stone-200 text-stone-700 font-medium text-xs">
                               <span>💳</span>
                               <span>Pago con tarjeta</span>
                             </span>
                           )}
                           {activeRestaurant.grabFoodDelivery && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-800/60 text-emerald-200 font-medium text-xs">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-medium text-xs">
                               <span>🛵</span>
                               <span>GrabFood</span>
                             </span>
                           )}
                           {activeRestaurant.michelinGuide && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-950/80 border border-rose-800/60 text-rose-200 font-medium text-xs">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 font-medium text-xs">
                               <span>⭐</span>
                               <span>Guía Michelin ({activeRestaurant.michelinGuide})</span>
                             </span>
@@ -1127,18 +1149,18 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                       {activeRestaurant.travelerTips &&
                         !activeRestaurant.travelerTips.toLowerCase().includes('abierto ahora') &&
                         !activeRestaurant.travelerTips.toLowerCase().includes('comprobar horario') && (
-                          <div className="p-2.5 rounded-xl bg-amber-950/20 border border-amber-900/30 text-xs text-amber-200/90 flex items-start gap-2">
-                            <span className="text-amber-400 shrink-0 select-none text-sm">💡</span>
+                          <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-stone-800 flex items-start gap-2">
+                            <span className="shrink-0 select-none text-sm">💡</span>
                             <div className="flex-1 min-w-0 leading-relaxed">
-                              <span className="font-bold text-amber-300 mr-1.5">Consejo:</span>
+                              <span className="font-bold text-amber-900 mr-1.5">Consejo:</span>
                               <span>{activeRestaurant.travelerTips}</span>
                             </div>
                           </div>
                         )}
 
                       {activeRestaurant.address && (
-                        <div className="text-xs text-stone-400 flex items-start gap-1.5 pt-0.5">
-                          <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                        <div className="text-xs text-stone-500 flex items-start gap-1.5 pt-0.5">
+                          <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
                           <span className="leading-snug">{activeRestaurant.address}</span>
                         </div>
                       )}
@@ -1150,10 +1172,10 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
           </div>
         </div>
       ) : (
-        /* LIST VIEW: Full List of Restaurant Cards matching the sleek Map Card design */
+        /* LIST VIEW: Clean Light Restaurant Cards */
         <div className="space-y-3">
           {sortedScoredEntries.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-stone-300 space-y-3">
+            <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-stone-300 space-y-3">
               <UtensilsCrossed className="w-8 h-8 text-stone-300 mx-auto" />
               <h4 className="font-bold text-stone-800 text-sm">No hay restaurantes con los filtros actuales</h4>
               <p className="text-xs text-stone-500 max-w-md mx-auto leading-relaxed">
@@ -1174,7 +1196,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {sortedScoredEntries.map((entry, index) => {
                 const { restaurant } = entry;
                 const isTop1 = index === 0;
@@ -1188,29 +1210,29 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                   <div
                     key={restaurant.id}
                     id={`restaurant-card-${restaurant.id}`}
-                    className={`p-4 bg-stone-900 text-white rounded-2xl shadow-xl border transition-all duration-200 space-y-3 ${
+                    className={`p-4 sm:p-5 bg-white text-stone-900 rounded-3xl shadow-[0_2px_16px_rgba(28,25,23,0.03)] border transition-all duration-200 space-y-3 ${
                       isSelected
-                        ? 'border-amber-500 ring-2 ring-amber-400/40 bg-stone-900'
+                        ? 'border-amber-500 ring-2 ring-amber-400/30'
                         : isTop1
-                        ? 'border-amber-500/80'
-                        : 'border-stone-800 hover:border-stone-700'
+                        ? 'border-amber-400'
+                        : 'border-stone-200/90 hover:border-amber-400/80'
                     }`}
                   >
-                    {/* Row 1: Rank Badge + Name + Speaker Button (Vertically centered) */}
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    {/* Row 1: Rank Badge + Name + Speaker Button */}
+                    <div className="flex items-center gap-3 min-w-0">
                       <div
-                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-xs shrink-0 shadow-xs ${theme.bg} ${theme.border} ${theme.text}`}
+                        className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${theme.bg} ${theme.border} ${theme.text}`}
                         title={`Restaurante #${number}`}
                       >
                         <span>{isTop1 ? '👑 1' : number}</span>
                       </div>
 
                       <div className="min-w-0 flex-1 flex flex-col justify-center">
-                        <h4 className="font-bold text-base sm:text-lg text-white leading-tight">
+                        <h4 className="font-serif font-bold text-base sm:text-lg text-stone-900 leading-tight">
                           {restaurant.name}
                         </h4>
                         {restaurant.nameVi && restaurant.nameVi !== restaurant.name && (
-                          <p className="text-xs text-stone-400 italic truncate mt-0.5" title={restaurant.nameVi}>
+                          <p className="text-xs text-stone-500 italic truncate mt-0.5" title={restaurant.nameVi}>
                             {restaurant.nameVi}
                           </p>
                         )}
@@ -1223,7 +1245,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                             e.stopPropagation();
                             speakVietnamese(restaurant.nameVi);
                           }}
-                          className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-400 hover:text-amber-300 border border-stone-700/60 transition cursor-pointer flex items-center justify-center shadow-xs"
+                          className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 transition cursor-pointer flex items-center justify-center"
                           title={`Escuchar pronunciación: ${restaurant.nameVi}`}
                         >
                           <Volume2 className="w-4 h-4" />
@@ -1232,34 +1254,34 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                     </div>
 
                     {/* Rating, Reviews count & Price & Status & Service Icons */}
-                    <div className="flex items-center gap-2 flex-wrap text-xs text-stone-300 pt-0.5">
-                      <span className="text-amber-400 font-bold flex items-center gap-0.5">
+                    <div className="flex items-center gap-2 flex-wrap text-xs text-stone-600 pt-0.5">
+                      <span className="text-amber-600 font-bold flex items-center gap-0.5 tabular-nums">
                         ★ {restaurant.rating.toFixed(1)}
                       </span>
-                      <span className="text-stone-400 text-xs">
+                      <span className="text-stone-500 text-xs tabular-nums">
                         ({restaurant.reviewsCount.toLocaleString('es-ES')} reseñas)
                       </span>
-                      <span className="text-stone-600">•</span>
-                      <span className="text-emerald-400 font-mono font-bold text-xs sm:text-sm">
+                      <span className="text-stone-300">•</span>
+                      <span className="text-emerald-700 font-mono font-bold text-xs sm:text-sm tabular-nums">
                         {(restaurant.avgPriceVnd / 1000).toLocaleString('es-ES')}k ₫
                       </span>
-                      <span className="text-stone-300 text-xs font-semibold bg-stone-800 px-2 py-0.5 rounded-md border border-stone-700/60">
+                      <span className="text-stone-700 text-xs font-semibold bg-stone-50 px-2 py-0.5 rounded-lg border border-stone-200 tabular-nums">
                         {eurPrice}
                       </span>
                       {(() => {
                         const status = checkRestaurantOpenStatus(restaurant.openingHours);
                         return (
                           <span
-                            className={`px-2 py-0.5 rounded-md text-[11px] font-semibold flex items-center gap-1 ${
+                            className={`px-2 py-0.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 ${
                               status.isOpen
-                                ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-800/70'
-                                : 'bg-stone-800 text-stone-400 border border-stone-700/60'
+                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                : 'bg-stone-100 text-stone-600 border border-stone-200'
                             }`}
                             title={status.statusText}
                           >
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${
-                                status.isOpen ? 'bg-emerald-400' : 'bg-rose-400'
+                                status.isOpen ? 'bg-emerald-500' : 'bg-rose-500'
                               }`}
                             />
                             <span>{status.isOpen ? 'Abierto' : 'Cerrado'}</span>
@@ -1267,11 +1289,11 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                         );
                       })()}
 
-                      {/* Service Badges directly next to Open / Closed status */}
+                      {/* Service Badges */}
                       <div className="flex items-center gap-1">
                         {restaurant.hasAirConditioning && (
                           <span
-                            className="px-1.5 py-0.5 rounded-md bg-sky-950/90 text-sky-300 border border-sky-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                            className="px-1.5 py-0.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 text-[11px] flex items-center justify-center cursor-default select-none"
                             title="❄️ Aire Acondicionado disponible"
                           >
                             ❄️
@@ -1279,14 +1301,14 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                         )}
                         {restaurant.isCashOnly ? (
                           <span
-                            className="px-1.5 py-0.5 rounded-md bg-amber-950/90 text-amber-300 border border-amber-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                            className="px-1.5 py-0.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-[11px] flex items-center justify-center cursor-default select-none"
                             title="💵 Solo pago en efectivo (VND)"
                           >
                             💵
                           </span>
                         ) : (
                           <span
-                            className="px-1.5 py-0.5 rounded-md bg-stone-800/90 text-stone-300 border border-stone-700/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                            className="px-1.5 py-0.5 rounded-lg bg-stone-100 text-stone-700 border border-stone-200 text-[11px] flex items-center justify-center cursor-default select-none"
                             title="💳 Acepta pago con tarjeta"
                           >
                             💳
@@ -1294,7 +1316,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                         )}
                         {restaurant.grabFoodDelivery && (
                           <span
-                            className="px-1.5 py-0.5 rounded-md bg-emerald-950/90 text-emerald-300 border border-emerald-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                            className="px-1.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] flex items-center justify-center cursor-default select-none"
                             title="🛵 Servicio a domicilio GrabFood disponible"
                           >
                             🛵
@@ -1302,7 +1324,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                         )}
                         {restaurant.michelinGuide && (
                           <span
-                            className="px-1.5 py-0.5 rounded-md bg-rose-950/90 text-rose-300 border border-rose-800/60 text-[11px] flex items-center justify-center cursor-default select-none"
+                            className="px-1.5 py-0.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[11px] flex items-center justify-center cursor-default select-none"
                             title={`⭐ Guía Michelin (${restaurant.michelinGuide})`}
                           >
                             ⭐
@@ -1311,8 +1333,8 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                       </div>
                     </div>
 
-                    {/* Row 2: Action Buttons & Expand Toggle */}
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-stone-800/80 flex-wrap">
+                    {/* Row 2: Action Buttons */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-stone-100 flex-wrap">
                       <div className="flex items-center gap-2 flex-wrap">
                         {/* Ver en Mapa button */}
                         <button
@@ -1321,7 +1343,7 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                             setSelectedRestaurant(restaurant);
                             setViewMode('map');
                           }}
-                          className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition"
+                          className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95 transition"
                           title="Ver este restaurante en el mapa"
                         >
                           <MapIcon className="w-3.5 h-3.5" />
@@ -1331,22 +1353,32 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                         {/* Ver Carta button */}
                         <button
                           type="button"
-                          onClick={() => setViewingMenuRestaurant(restaurant)}
-                          className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
+                          onClick={() => handleOpenMenuModal(restaurant, 'dishes')}
+                          className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200/80 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
                           title="Ver carta de platos, precios y fotos"
                         >
-                          <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                          <BookOpen className="w-3.5 h-3.5 text-amber-600" />
                           <span>Carta</span>
+                        </button>
+
+                        {/* Ver Cartas con Precios button */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenMenuModal(restaurant, 'photos', 'menu_board')}
+                          className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                          title="Ver fotos reales de la carta con precios de las reseñas"
+                        >
+                          <span>📋 Cartas con precios</span>
                         </button>
 
                         <a
                           href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${restaurant.name} ${restaurant.address || restaurant.city || 'Vietnam'}`.trim())}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-rose-300 border border-stone-700 font-medium text-xs flex items-center gap-1.5 transition"
+                          className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/80 font-medium text-xs flex items-center gap-1.5 transition"
                           title="Abrir en Google Maps"
                         >
-                          <MapPin className="w-3.5 h-3.5" />
+                          <MapPin className="w-3.5 h-3.5 text-rose-500" />
                           <span>Google Maps</span>
                         </a>
 
@@ -1359,89 +1391,89 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                               setSelectedDayIdForAdd(activePlan.days[0].id);
                             }
                           }}
-                          className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
+                          className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/80 font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
                           title="Añadir a un día del itinerario"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3.5 h-3.5 text-amber-600" />
                           <span>Itinerario</span>
                         </button>
                       </div>
                     </div>
 
-                    {/* Row 3: Recommended Dish Highlight Box (Plato Imprescindible) */}
-                    <div className="p-3 rounded-xl bg-stone-950/80 border border-amber-500/30 text-xs sm:text-sm text-amber-200 leading-relaxed flex items-start gap-2.5 shadow-inner">
+                    {/* Row 3: Recommended Dish Highlight Box */}
+                    <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/70 text-xs sm:text-sm text-stone-800 leading-relaxed flex items-start gap-2.5">
                       <span className="text-base shrink-0 select-none">🍲</span>
                       <div className="min-w-0 flex-1">
-                        <span className="text-amber-400 font-bold mr-1.5">Plato estrella:</span>
-                        <span className="font-medium text-amber-100">{restaurant.mustOrderDish}</span>
+                        <span className="text-amber-900 font-bold mr-1.5">Plato estrella:</span>
+                        <span className="font-medium text-stone-800">{restaurant.mustOrderDish}</span>
                       </div>
                     </div>
 
-                    {/* Row 4: Desplegable Más info (Debajo del plato estrella) */}
+                    {/* Row 4: Desplegable Más info */}
                     <div className="flex items-center justify-end -mt-1">
                       <button
                         type="button"
                         onClick={() => toggleExpandCard(restaurant.id)}
-                        className="px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-400 hover:text-stone-200 hover:bg-stone-800/80 flex items-center gap-1 cursor-pointer transition"
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-500 hover:text-stone-900 hover:bg-stone-100 flex items-center gap-1 cursor-pointer transition"
                       >
                         <span>{isExpanded ? 'Menos info' : 'Más info'}</span>
-                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5 text-stone-400" />}
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       </button>
                     </div>
 
                     {/* Row 5: Expandable Details */}
                     {isExpanded && (
-                      <div className="pt-2.5 border-t border-stone-800 text-xs text-stone-300 space-y-2.5 animate-fade-in">
+                      <div className="pt-2.5 border-t border-stone-100 text-xs text-stone-600 space-y-2.5 animate-fade-in">
                         {restaurant.description &&
                           !restaurant.description.includes('tiempo real en Google Maps') &&
                           !restaurant.description.includes('reseñas verificadas') && (
-                            <p className="leading-relaxed text-stone-300/90 bg-stone-950/60 p-2.5 rounded-xl border border-stone-800/80">
+                            <p className="leading-relaxed text-stone-700 bg-stone-50 p-3 rounded-xl border border-stone-200/80">
                               {restaurant.description}
                             </p>
                           )}
 
                         {/* Horario */}
                         {restaurant.openingHours && (
-                          <div className="p-2.5 rounded-xl bg-stone-950/80 border border-stone-800/80 flex items-start gap-2 text-xs text-stone-300">
-                            <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                          <div className="p-2.5 rounded-xl bg-stone-50 border border-stone-200/80 flex items-start gap-2 text-xs text-stone-700">
+                            <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                             <div className="min-w-0 flex-1">
-                              <span className="font-semibold text-stone-200 mr-1.5">Horario:</span>
-                              <span className="text-amber-200/95 font-medium">
+                              <span className="font-semibold text-stone-900 mr-1.5">Horario:</span>
+                              <span className="text-stone-700 font-medium">
                                 {formatFullOpeningHours(restaurant.openingHours)}
                               </span>
                             </div>
                           </div>
                         )}
 
-                        {/* Servicios del local (directo y conciso) */}
-                        <div className="p-2.5 rounded-xl bg-stone-950/80 border border-stone-800/80 text-xs text-stone-300 space-y-2">
-                          <span className="font-semibold text-stone-200 block">Servicios del local:</span>
+                        {/* Servicios del local */}
+                        <div className="p-2.5 rounded-xl bg-stone-50 border border-stone-200/80 text-xs text-stone-700 space-y-2">
+                          <span className="font-semibold text-stone-900 block">Servicios del local:</span>
                           <div className="flex flex-wrap items-center gap-2">
                             {restaurant.hasAirConditioning && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/80 border border-sky-800/60 text-sky-200 font-medium text-xs">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 border border-sky-200 text-sky-800 font-medium text-xs">
                                 <span>❄️</span>
                                 <span>Aire acondicionado</span>
                               </span>
                             )}
                             {restaurant.isCashOnly ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/80 border border-amber-800/60 text-amber-200 font-medium text-xs">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 font-medium text-xs">
                                 <span>💵</span>
                                 <span>Solo efectivo</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-800/90 border border-stone-700/60 text-stone-200 font-medium text-xs">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-stone-200 text-stone-700 font-medium text-xs">
                                 <span>💳</span>
                                 <span>Pago con tarjeta</span>
                               </span>
                             )}
                             {restaurant.grabFoodDelivery && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-800/60 text-emerald-200 font-medium text-xs">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-medium text-xs">
                                 <span>🛵</span>
                                 <span>GrabFood</span>
                               </span>
                             )}
                             {restaurant.michelinGuide && (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-950/80 border border-rose-800/60 text-rose-200 font-medium text-xs">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 font-medium text-xs">
                                 <span>⭐</span>
                                 <span>Guía Michelin ({restaurant.michelinGuide})</span>
                               </span>
@@ -1452,18 +1484,18 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
                         {restaurant.travelerTips &&
                           !restaurant.travelerTips.toLowerCase().includes('abierto ahora') &&
                           !restaurant.travelerTips.toLowerCase().includes('comprobar horario') && (
-                            <div className="p-2.5 rounded-xl bg-amber-950/20 border border-amber-900/30 text-xs text-amber-200/90 flex items-start gap-2">
-                              <span className="text-amber-400 shrink-0 select-none text-sm">💡</span>
+                            <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-stone-800 flex items-start gap-2">
+                              <span className="shrink-0 select-none text-sm">💡</span>
                               <div className="flex-1 min-w-0 leading-relaxed">
-                                <span className="font-bold text-amber-300 mr-1.5">Consejo:</span>
+                                <span className="font-bold text-amber-900 mr-1.5">Consejo:</span>
                                 <span>{restaurant.travelerTips}</span>
                               </div>
                             </div>
                           )}
 
                         {restaurant.address && (
-                          <div className="text-xs text-stone-400 flex items-start gap-1.5 pt-0.5">
-                            <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                          <div className="text-xs text-stone-500 flex items-start gap-1.5 pt-0.5">
+                            <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
                             <span className="leading-snug">{restaurant.address}</span>
                           </div>
                         )}
@@ -1577,6 +1609,8 @@ export const RestaurantFinder: React.FC<RestaurantFinderProps> = ({
           onClose={() => setViewingMenuRestaurant(null)}
           ratesData={ratesData}
           selectedCurrency={selectedCurrency}
+          initialTab={menuModalInitialTab}
+          initialPhotoCategory={menuModalInitialPhotoCategory}
         />
       )}
 

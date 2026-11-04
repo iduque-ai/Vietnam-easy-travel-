@@ -22,7 +22,11 @@ interface RestaurantSummaryCardProps {
   restaurant: RestaurantItem;
   rankNumber?: number;
   eurRate?: number;
-  onViewMenu?: (restaurant: RestaurantItem) => void;
+  onViewMenu?: (
+    restaurant: RestaurantItem,
+    initialTab?: 'dishes' | 'photos' | 'reviews' | 'tips',
+    initialPhotoCategory?: 'all' | 'menu_board' | 'bill' | 'dish' | 'atmosphere'
+  ) => void;
   onAddToItinerary?: (restaurant: RestaurantItem) => void;
   onClose?: () => void;
   isFloatingOverlay?: boolean;
@@ -182,17 +186,31 @@ export const RestaurantSummaryCard: React.FC<RestaurantSummaryCardProps> = ({
       {/* Action Buttons Row (Wide, easily clickable on all screen sizes) */}
       <div className="mt-3 pt-3 border-t border-stone-800 flex flex-wrap items-center gap-2">
         {onViewMenu && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewMenu(restaurant);
-            }}
-            className="flex-1 min-w-[130px] py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md active:scale-95"
-          >
-            <BookOpen className="w-4 h-4 text-stone-950" />
-            <span>Ver Carta & Fotos</span>
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewMenu(restaurant, 'dishes');
+              }}
+              className="flex-1 min-w-[120px] py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md active:scale-95"
+            >
+              <BookOpen className="w-4 h-4 text-stone-950" />
+              <span>Ver Carta & Menú</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewMenu(restaurant, 'photos', 'menu_board');
+              }}
+              className="py-2 px-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs flex items-center justify-center gap-1 border border-amber-500/40 transition cursor-pointer active:scale-95 shrink-0"
+              title="Ver fotos reales de la carta con precios tomadas por comensales en reseñas"
+            >
+              <span>📋 Cartas con precios</span>
+            </button>
+          </>
         )}
 
         <a

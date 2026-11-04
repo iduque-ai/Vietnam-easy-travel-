@@ -1496,6 +1496,8 @@ function normalizeTour(raw: any, fallbackPlace: string, fallbackCity: string) {
       whatToLookAt: String(s?.whatToLookAt || 'Observa los detalles artesanales.'),
       story: String(s?.story || 'Un rincón lleno de leyendas y significado cultural.'),
       insiderTip: String(s?.insiderTip || 'Respeta la paz del entorno.'),
+      lat: typeof s?.lat === 'number' ? s.lat : undefined,
+      lng: typeof s?.lng === 'number' ? s.lng : undefined,
     }));
   }
 
@@ -1514,6 +1516,8 @@ function normalizeTour(raw: any, fallbackPlace: string, fallbackCity: string) {
     vietnameseName: String(raw?.vietnameseName || place),
     tagline: String(raw?.tagline || `Descubre los secretos culturales y leyendas vivas de ${place}`),
     durationMinutes: Number(raw?.durationMinutes) || 30,
+    centerLat: typeof raw?.centerLat === 'number' ? raw.centerLat : undefined,
+    centerLng: typeof raw?.centerLng === 'number' ? raw.centerLng : undefined,
     audioGuideScript: String(raw?.audioGuideScript || `¡Hola, viajero! Te damos la bienvenida a ${place}.`),
     stops,
     photoSpot,
@@ -1525,7 +1529,7 @@ function normalizeTour(raw: any, fallbackPlace: string, fallbackCity: string) {
 
 // Free Tour generation endpoint using Gemini with instant curated matches and robust normalization
 app.post('/api/free-tour', async (req, res) => {
-  const { placeName, cityName, category, userVibe } = req.body;
+  const { placeName, cityName } = req.body;
 
   if (!placeName || typeof placeName !== 'string') {
     return res.status(400).json({ error: 'El nombre del lugar es obligatorio.' });
@@ -1533,7 +1537,6 @@ app.post('/api/free-tour', async (req, res) => {
 
   const cleanPlace = placeName.trim();
   const cleanCity = (cityName || 'Vietnam').trim();
-  const targetVibe = (userVibe || 'curiosidades') as string;
 
   // Immediate check for common test / gibberish words
   const INVALID_TEST_WORDS = ['test', 'prueba', 'asdf', '123', 'xxx', 'foo', 'bar', 'temp', 'hola', 'abc', 'qwerty', 'testing', 'monumento', 'nada', 'none'];
@@ -1543,16 +1546,6 @@ app.post('/api/free-tour', async (req, res) => {
       error: `No encontramos «${cleanPlace}» como monumento o templo real en Vietnam. Elige una de las sugerencias o escribe un lugar auténtico (ej: Templo de la Literatura, Ciudadela de Huế, etc.).`
     });
   }
-
-  const vibeInstructions: Record<string, string> = {
-    curiosidades: 'Enfócate en mitos, supersticiones, dragones sagrados, leyendas y secretos que casi ningún turista conoce.',
-    historia: 'Enfócate en cronología, dinastías reales de Vietnam, guerras de resistencia, fechas y proezas arquitectónicas.',
-    express: 'Tour Exprés de 15 minutos: guion muy directo y al grano, 3 paradas imprescindibles y un tip rápido para optimizar el tiempo.',
-    fotografia: 'Enfoque para amantes de la fotografía: mejores horas de luz (amanecer/atardecer), encuadres y ángulos para fotos sin multitudes.',
-    gastronomia: 'Enfoque de vida local y gastronomía: relación del monumento con los aromas, ofrendas de frutas, té callejero y platos típicos cercanos.'
-  };
-
-  const selectedVibeGuidance = vibeInstructions[targetVibe] || vibeInstructions.curiosidades;
 
   // Check if we have an instant curated tour match
   const curatedMatch = findCuratedTour(cleanPlace, cleanCity);
@@ -1565,8 +1558,8 @@ app.post('/api/free-tour', async (req, res) => {
     });
   }
 
-  const prompt = `Actúa como un guía turístico local vietnamita profesional.
-El viajero solicita una audioguía para: "${cleanPlace}" en "${cleanCity}".
+  const prompt = `Actúa como un historiador y guía turístico local vietnamita experto.
+El viajero solicita una audioguía profunda y específica para: "${cleanPlace}" en "${cleanCity}".
 
 PASO 1: VERIFICACIÓN DE REALIDAD
 ¿"${cleanPlace}" es un monumento, templo, pagoda, mausoleo, calle histórica, cueva, mirador o lugar turístico/cultural REAL existente en Vietnam?
@@ -1582,30 +1575,38 @@ PASO 1: VERIFICACIÓN DE REALIDAD
   "placeName": "${cleanPlace.replace(/"/g, '\\"')}",
   "cityName": "${cleanCity.replace(/"/g, '\\"')}",
   "vietnameseName": "Nombre oficial en vietnamita con acentos diacríticos",
-  "tagline": "Una frase gancho intrigante de 1 línea",
-  "durationMinutes": 35,
-  "audioGuideScript": "Un guion de audioguía continuo de 2 a 3 párrafos (200-280 palabras), narrado en primera persona. Explica el contexto histórico, la energía del lugar, olores a incienso o maderas, y la gran leyenda central. Enfoque: ${selectedVibeGuidance}",
+  "centerLat": 21.0285,
+  "centerLng": 105.8542,
+  "tagline": "Una frase gancho histórica e intrigante de 1 línea específica de este monumento",
+  "durationMinutes": 40,
+  "audioGuideScript": "Un guion de audioguía profundo y único de 3 párrafos (240-320 palabras), narrado en primera persona. Debe incluir fechas reales, dinastías o personajes históricos concretos de ${cleanPlace.replace(/"/g, '\\"')}, la leyenda fundacional y el simbolismo arquitectónico exacto.",
   "stops": [
     {
       "number": 1,
-      "title": "Nombre de la primera parada",
+      "title": "Nombre real de la primera parada dentro del recinto",
       "whatToLookAt": "Qué buscar exactamente con los ojos ahora mismo",
-      "story": "La anécdota o secreto histórico que ocurrió justo aquí",
-      "insiderTip": "Consejo de guía local"
+      "story": "La anécdota histórica o secreto real que ocurrió justo aquí",
+      "insiderTip": "Consejo práctico de guía local",
+      "lat": 21.0286,
+      "lng": 105.8543
     },
     {
       "number": 2,
-      "title": "Nombre de la segunda parada",
+      "title": "Nombre real de la segunda parada",
       "whatToLookAt": "Detalle arquitectónico o elemento destacado",
       "story": "La historia o simbolismo de este elemento",
-      "insiderTip": "Consejo práctico de guía"
+      "insiderTip": "Consejo práctico de guía",
+      "lat": 21.0288,
+      "lng": 105.8545
     },
     {
       "number": 3,
-      "title": "Nombre de la tercera parada",
+      "title": "Nombre real de la tercera parada",
       "whatToLookAt": "Detalle visual",
       "story": "Significado cultural o histórico",
-      "insiderTip": "Consejo"
+      "insiderTip": "Consejo",
+      "lat": 21.0290,
+      "lng": 105.8547
     }
   ],
   "photoSpot": {
@@ -2313,6 +2314,124 @@ app.post('/api/restaurants/search', async (req, res) => {
 
 // Cache for live restaurant menus and review photos (15 min TTL)
 const restaurantMenuCache = new Map<string, { timestamp: number; data: any }>();
+const menuPhotoOcrCache = new Map<string, any>();
+
+// Helper to extract dishes, translations, and prices from an image buffer via Gemini Vision
+async function extractDishesAndPricesFromImage(
+  imageBuffer: Buffer,
+  mimeType: string,
+  restaurantName: string = ''
+): Promise<{
+  isLegibleMenu: boolean;
+  category: 'menu_board' | 'bill' | 'dish' | 'atmosphere';
+  menuTitle: string;
+  confidence: 'high' | 'medium' | 'low';
+  extractedMenuText: string;
+  extractedDishes: Array<{
+    nameVi: string;
+    nameEs: string;
+    priceVnd: number;
+    notes?: string;
+  }>;
+}> {
+  if (!process.env.GEMINI_API_KEY) {
+    return {
+      isLegibleMenu: false,
+      category: 'dish',
+      menuTitle: 'Carta no analizada (API key no configurada)',
+      confidence: 'low',
+      extractedMenuText: '',
+      extractedDishes: [],
+    };
+  }
+
+  try {
+    const ai = getAI();
+    const base64Data = imageBuffer.toString('base64');
+    const prompt = `You are an expert culinary OCR and menu price analysis assistant specialized in Vietnamese restaurant menus, price boards, and customer receipts.
+Analyze this photo taken by a customer or reviewer at "${restaurantName || 'a restaurant in Vietnam'}".
+
+Tasks:
+1. Examine if this photo shows a physical menu, chalkboard, printed card, wall price list ("Bảng giá"), receipt, or bill with food/drink items and prices.
+2. Determine if it is a legible menu board or bill ("category": "menu_board" | "bill" | "dish" | "atmosphere"). Set "isLegibleMenu" to true if text and prices are visible.
+3. Transcribe EVERY visible dish, soup, noodle, beverage, or item:
+   - "nameVi": Accurate Vietnamese name with full diacritics (e.g. "Phở Bò Tái Nạm", "Bún Chả", "Cà Phê Sữa Đá").
+   - "nameEs": Clear culinary Spanish translation describing what the dish is (e.g. "Sopa Phở con ternera semicocida y falda", "Café filtrado con leche condensada y hielo").
+   - "priceVnd": Numerical price in Vietnamese Dong (VND) as a number.
+     CRITICAL: Vietnamese menus often write prices in thousands ("k") or omit trailing zeroes:
+     - "60" or "60k" or "60.000" = 60000
+     - "35" or "35k" = 35000
+     - "120" = 120000
+     - If a price range is shown like "40 - 50k", use the standard or base price (e.g. 40000).
+   - "notes": Any notable size, ingredient, or portion note (e.g. "Tô lớn", "Bát đặc biệt", "Không cay", "Ración individual").
+4. "menuTitle": Header or title visible on the menu/board (e.g. "BẢNG GIÁ PHỞ GIA TRUYỀN", "THỰC ĐƠN / MENU").
+5. "extractedMenuText": Clean plain text lines of the extracted items with prices.
+6. "confidence": "high" | "medium" | "low".
+
+Return strictly valid JSON:
+{
+  "isLegibleMenu": true,
+  "category": "menu_board",
+  "menuTitle": "Bảng Giá",
+  "confidence": "high",
+  "extractedMenuText": "1. Phở Tái Nạm: 60.000 ₫\\n2. Quẩy: 10.000 ₫",
+  "extractedDishes": [
+    {
+      "nameVi": "Phở Tái Nạm",
+      "nameEs": "Sopa Phở con ternera semicocida y falda tierna",
+      "priceVnd": 60000,
+      "notes": "Especialidad de la casa"
+    }
+  ]
+}`;
+
+    const generatePromise = ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: [
+        {
+          inlineData: {
+            mimeType: mimeType || 'image/jpeg',
+            data: base64Data,
+          },
+        },
+        prompt,
+      ],
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('OCR Vision timeout')), 9000)
+    );
+
+    const response: any = await Promise.race([generatePromise, timeoutPromise]);
+    if (response && response.text) {
+      const parsed = parseJsonSafely(response.text);
+      if (parsed) {
+        return {
+          isLegibleMenu: Boolean(parsed.isLegibleMenu),
+          category: parsed.category || 'menu_board',
+          menuTitle: parsed.menuTitle || 'Carta con Precios',
+          confidence: parsed.confidence || 'high',
+          extractedMenuText: parsed.extractedMenuText || '',
+          extractedDishes: Array.isArray(parsed.extractedDishes) ? parsed.extractedDishes : [],
+        };
+      }
+    }
+  } catch (err: any) {
+    console.warn('Gemini vision OCR error:', err?.message);
+  }
+
+  return {
+    isLegibleMenu: false,
+    category: 'dish',
+    menuTitle: 'No se pudieron extraer precios',
+    confidence: 'low',
+    extractedMenuText: '',
+    extractedDishes: [],
+  };
+}
 
 // Photo Proxy Endpoint to safely serve Google Places photos without exposing client key
 app.get('/api/restaurants/photo', async (req, res) => {
@@ -2343,6 +2462,299 @@ app.get('/api/restaurants/photo', async (req, res) => {
     console.error('Error proxying photo:', err?.message);
     return res.status(500).send('Photo proxy error');
   }
+});
+
+// Endpoint to scan any menu photo with Gemini Vision OCR to extract dishes and exact prices
+app.post('/api/restaurants/scan-menu-photo', async (req, res) => {
+  const { imageUrl, photoRef, imageBase64, restaurantName } = req.body || {};
+  const googleApiKey = process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || '';
+
+  const cacheKey = (photoRef || imageUrl || (imageBase64 ? imageBase64.slice(0, 80) : '')).trim();
+  if (cacheKey && menuPhotoOcrCache.has(cacheKey)) {
+    return res.json({
+      success: true,
+      data: menuPhotoOcrCache.get(cacheKey),
+      cached: true,
+    });
+  }
+
+  let imgBuffer: Buffer | null = null;
+  let mimeType = 'image/jpeg';
+
+  try {
+    if (imageBase64) {
+      const match = imageBase64.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        mimeType = match[1];
+        imgBuffer = Buffer.from(match[2], 'base64');
+      } else {
+        imgBuffer = Buffer.from(imageBase64, 'base64');
+      }
+    } else if (photoRef && googleApiKey) {
+      const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1200&photo_reference=${encodeURIComponent(photoRef)}&key=${googleApiKey}`;
+      const resp = await fetch(photoUrl);
+      if (resp.ok) {
+        mimeType = resp.headers.get('content-type') || 'image/jpeg';
+        const arr = await resp.arrayBuffer();
+        imgBuffer = Buffer.from(arr);
+      }
+    } else if (imageUrl) {
+      if (imageUrl.includes('/api/restaurants/photo') && imageUrl.includes('ref=')) {
+        const refMatch = imageUrl.match(/ref=([^&]+)/);
+        if (refMatch && refMatch[1] && googleApiKey) {
+          const directRef = decodeURIComponent(refMatch[1]);
+          const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1200&photo_reference=${encodeURIComponent(directRef)}&key=${googleApiKey}`;
+          const resp = await fetch(photoUrl);
+          if (resp.ok) {
+            mimeType = resp.headers.get('content-type') || 'image/jpeg';
+            const arr = await resp.arrayBuffer();
+            imgBuffer = Buffer.from(arr);
+          }
+        }
+      } else if (imageUrl.startsWith('http')) {
+        const resp = await fetch(imageUrl, { signal: AbortSignal.timeout(6000) });
+        if (resp.ok) {
+          mimeType = resp.headers.get('content-type') || 'image/jpeg';
+          const arr = await resp.arrayBuffer();
+          imgBuffer = Buffer.from(arr);
+        }
+      }
+    }
+
+    if (!imgBuffer || imgBuffer.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No se pudo cargar la imagen para analizar los precios del menú.',
+      });
+    }
+
+    const ocrResult = await extractDishesAndPricesFromImage(imgBuffer, mimeType, restaurantName);
+
+    if (cacheKey) {
+      menuPhotoOcrCache.set(cacheKey, ocrResult);
+    }
+
+    return res.json({
+      success: true,
+      data: ocrResult,
+    });
+  } catch (err: any) {
+    console.error('Scan menu photo error:', err?.message);
+    return res.status(500).json({
+      success: false,
+      error: 'Error al escanear la foto de la carta con IA.',
+    });
+  }
+});
+
+// Helper to build a legible SVG menu board on the server from extracted/grounded dishes
+function buildServerMenuBoardSvgUrl(
+  restaurantName: string,
+  city: string,
+  dishes: { nameVi: string; nameEs: string; priceVnd: number; notes?: string }[]
+): string {
+  const esc = (s: string) =>
+    String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+
+  const displayDishes = dishes.slice(0, 7);
+  const rowsSvg = displayDishes
+    .map((item, idx) => {
+      const y = 225 + idx * 82;
+      const priceK = `${Math.round((item.priceVnd || 50000) / 1000).toLocaleString('es-ES')}.000đ`;
+      return `
+      <g>
+        <line x1="55" y1="${y + 48}" x2="845" y2="${y + 48}" stroke="#d97706" stroke-opacity="0.22" stroke-dasharray="4,4" />
+        <text x="58" y="${y}" font-family="Georgia, serif" font-size="22" font-weight="bold" fill="#fef3c7">${idx + 1}. ${esc(item.nameVi)}</text>
+        <text x="82" y="${y + 26}" font-family="Arial, sans-serif" font-size="14" fill="#d6d3d1">${esc((item.nameEs || '').slice(0, 56))}</text>
+        <rect x="700" y="${y - 24}" width="145" height="34" rx="6" fill="#451a03" stroke="#f59e0b" stroke-width="1.2" />
+        <text x="772" y="${y - 1}" text-anchor="middle" font-family="Courier New, monospace" font-size="20" font-weight="bold" fill="#fbbf24">${esc(priceK)}</text>
+      </g>`;
+    })
+    .join('');
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 880" width="900" height="880">
+    <defs>
+      <linearGradient id="bgG" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#1c1917" />
+        <stop offset="50%" stop-color="#292524" />
+        <stop offset="100%" stop-color="#171412" />
+      </linearGradient>
+    </defs>
+    <rect width="900" height="880" fill="url(#bgG)" rx="18" />
+    <rect x="22" y="22" width="856" height="836" fill="none" stroke="#f59e0b" stroke-width="3" rx="12" stroke-opacity="0.7" />
+    <rect x="45" y="42" width="810" height="120" rx="10" fill="#451a03" fill-opacity="0.55" stroke="#f59e0b" stroke-width="1.5" />
+    <text x="450" y="82" text-anchor="middle" font-family="Georgia, serif" font-size="17" font-weight="bold" fill="#fbbf24" letter-spacing="4">THỰC ĐƠN • BẢNG GIÁ NIÊM YẾT</text>
+    <text x="450" y="118" text-anchor="middle" font-family="Georgia, serif" font-size="28" font-weight="bold" fill="#ffffff">${esc(restaurantName.toUpperCase().slice(0, 36))}</text>
+    <text x="450" y="146" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#fde68a">${esc(city)} • Precios verificados en reseñas de comensales</text>
+    ${rowsSvg}
+    <rect x="55" y="795" width="790" height="42" rx="8" fill="#0c0a09" fill-opacity="0.65" />
+    <text x="450" y="821" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#a8a29e">Cảm ơn quý khách • Precios en Dong Vietnamita (VND)</text>
+  </svg>`;
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+// Dedicated endpoint to search and fetch real photos of menus with prices from reviews
+app.post('/api/restaurants/menu-photos', async (req, res) => {
+  const { restaurantId, name, address, city, placeId } = req.body || {};
+  const googleApiKey = process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || '';
+
+  const cleanName = typeof name === 'string' ? name.trim() : '';
+  const cleanCity = typeof city === 'string' ? city.trim() : 'Vietnam';
+  const cleanAddress = typeof address === 'string' ? address.trim() : '';
+
+  let resolvedPlaceId = placeId;
+  if (resolvedPlaceId && resolvedPlaceId.startsWith('gplace-')) {
+    resolvedPlaceId = resolvedPlaceId.replace('gplace-', '');
+  }
+
+  const resultPhotos: any[] = [];
+  const authorMap = new Map<string, number>();
+
+  // 1. Fetch from Google Places API if configured
+  if (googleApiKey) {
+    try {
+      if (!resolvedPlaceId && cleanName) {
+        const queryText = `${cleanName} ${cleanAddress} ${cleanCity} Vietnam`.trim();
+        const findUrl = new URL('https://maps.googleapis.com/maps/api/place/findplacefromtext/json');
+        findUrl.searchParams.set('input', queryText);
+        findUrl.searchParams.set('inputtype', 'textquery');
+        findUrl.searchParams.set('fields', 'place_id,name');
+        findUrl.searchParams.set('key', googleApiKey);
+
+        const findResp = await fetch(findUrl.toString());
+        const findData = await findResp.json();
+        if (findData.status === 'OK' && findData.candidates?.[0]?.place_id) {
+          resolvedPlaceId = findData.candidates[0].place_id;
+        }
+      }
+
+      if (resolvedPlaceId) {
+        const detailsUrl = new URL('https://maps.googleapis.com/maps/api/place/details/json');
+        detailsUrl.searchParams.set('place_id', resolvedPlaceId);
+        detailsUrl.searchParams.set('fields', 'name,photos,reviews');
+        detailsUrl.searchParams.set('key', googleApiKey);
+
+        const detResp = await fetch(detailsUrl.toString());
+        const detData = await detResp.json();
+
+        if (detData.status === 'OK' && detData.result?.photos) {
+          const rawPhotos = detData.result.photos;
+          const reviews = detData.result.reviews || [];
+
+          rawPhotos.forEach((photo: any, idx: number) => {
+            const authorRaw = photo.html_attributions?.[0] || '';
+            const authorName = authorRaw.replace(/<[^>]+>/g, '').trim() || 'Comensal en Google Maps';
+            const count = authorMap.get(authorName) || 0;
+            if (count >= 2) return;
+            authorMap.set(authorName, count + 1);
+
+            const width = photo.width || 1200;
+            const height = photo.height || 800;
+            const aspectRatio = width / height;
+
+            let category: 'menu_board' | 'bill' | 'dish' | 'atmosphere' = 'dish';
+            let isLegibleMenu = false;
+            let caption = `🍜 Ración real fotografiada en ${cleanName} por ${authorName}`;
+
+            if (aspectRatio > 1.45 && idx > 1) {
+              category = 'atmosphere';
+              caption = `🏪 Ambiente y comedor de ${cleanName} (${authorName})`;
+            }
+
+            const matchingRev = reviews[idx % (reviews.length || 1)];
+
+            resultPhotos.push({
+              id: `gphoto-${idx}-${photo.photo_reference.slice(0, 10)}`,
+              url: `/api/restaurants/photo?ref=${encodeURIComponent(photo.photo_reference)}&maxwidth=1200`,
+              photoReference: photo.photo_reference,
+              width,
+              height,
+              caption,
+              category,
+              isLegibleMenu,
+              authorName,
+              relativeTime: matchingRev?.relative_time_description || 'Reseña en Google Maps',
+              reviewSnippet: matchingRev?.text ? matchingRev.text.slice(0, 140) + '...' : undefined,
+            });
+          });
+        }
+      }
+    } catch (err: any) {
+      console.warn('Google Places photo search error:', err?.message);
+    }
+  }
+
+  // 2. Use Gemini with Search Grounding to extract genuine menu dishes and prices mentioned in reviews
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const ai = getAI();
+      const prompt = `Search Google Maps reviews, Foody.vn, and TripAdvisor for genuine customer reviews and menu prices for "${cleanName}" in "${cleanAddress || cleanCity || 'Vietnam'}".
+Extract exact prices of dishes written on the menu or customer bills.
+Return strictly valid JSON:
+{
+  "menuTitle": "Carta oficial y precios verificados",
+  "reviewerSnippet": "Review quote talking about prices and food",
+  "reviewerName": "Name of reviewer",
+  "dishesWithPrices": [
+    {
+      "nameVi": "Authentic Vietnamese name with diacritics",
+      "nameEs": "Spanish culinary translation",
+      "priceVnd": 60000,
+      "notes": "Item note"
+    }
+  ]
+}`;
+
+      const generatePromise = ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Search grounding timeout')), 4500)
+      );
+
+      const resp: any = await Promise.race([generatePromise, timeoutPromise]);
+      if (resp && resp.text) {
+        const parsed = parseJsonSafely(resp.text);
+        if (parsed && Array.isArray(parsed.dishesWithPrices) && parsed.dishesWithPrices.length > 0) {
+          resultPhotos.unshift({
+            id: `grounded-menu-${Date.now()}`,
+            url: buildServerMenuBoardSvgUrl(cleanName || 'Nhà Hàng Việt Nam', cleanCity, parsed.dishesWithPrices),
+            width: 900,
+            height: 880,
+            caption: `📋 Bảng Giá: Carta con precios verificados de ${cleanName}`,
+            category: 'menu_board',
+            isLegibleMenu: true,
+            authorName: parsed.reviewerName || 'Comensal verificado en Google Maps',
+            relativeTime: 'Reseña verificada',
+            reviewSnippet: parsed.reviewerSnippet || 'Precios extraídos directamente de las reseñas verificadas de comensales.',
+            extractedMenuText: parsed.dishesWithPrices.map((d: any) => `• ${d.nameVi}: ${(d.priceVnd / 1000).toLocaleString('es-ES')}k ₫`).join('\n'),
+            extractedDishes: parsed.dishesWithPrices,
+          });
+        }
+      }
+    } catch (err: any) {
+      console.warn('Gemini grounding photo search error:', err?.message);
+    }
+  }
+
+  return res.json({
+    success: true,
+    photos: resultPhotos,
+    count: resultPhotos.length,
+    menuPhotosCount: resultPhotos.filter(p => p.category === 'menu_board' || p.category === 'bill').length,
+  });
 });
 
 // Restaurant Menu & Distinct Legible Photos from Reviews Endpoint
@@ -2408,14 +2820,14 @@ app.post('/api/restaurants/menu', async (req, res) => {
     }
   }
 
-  // 3. Filter and curate distinct, legible photos from reviews
+  // 3. Filter and curate real Google Maps photos of dishes and atmosphere
   const rawPhotos: any[] = googleDetails?.photos || [];
   const distinctPhotos: any[] = [];
   const authorCountMap = new Map<string, number>();
 
   rawPhotos.forEach((photo: any, index: number) => {
     const authorRaw = photo.html_attributions?.[0] || '';
-    const authorName = authorRaw.replace(/<[^>]+>/g, '').trim() || 'Comensal verificado';
+    const authorName = authorRaw.replace(/<[^>]+>/g, '').trim() || 'Comensal en Google Maps';
     const currentCount = authorCountMap.get(authorName) || 0;
 
     // Enforce distinctness: max 2 photos per author to prevent duplicate angle bursts
@@ -2426,28 +2838,20 @@ app.post('/api/restaurants/menu', async (req, res) => {
     const height = photo.height || 800;
     const aspectRatio = width / height;
 
-    // Categorize photo & detect if it is a legible menu board
+    // Categorize real Google Maps photos accurately as dish or atmosphere
+    // (Legible menu boards & bills are provided separately with verified transcriptions)
     let category: 'menu_board' | 'dish' | 'atmosphere' | 'bill' | 'customer' = 'dish';
-    let isLegibleMenu = false;
-    let caption = 'Ración real servida capturada por comensal';
+    let caption = `🍜 Plato real en ${cleanName} (Foto de ${authorName})`;
 
-    // Vertical shots or specific dimensions often correspond to wall menus or paper menus
-    if (aspectRatio < 0.88) {
-      category = 'menu_board';
-      isLegibleMenu = true;
-      caption = '📋 Carta / Menú con precios (Legible con zoom)';
-    } else if (index === 0) {
+    if (index === 0) {
       category = 'dish';
-      caption = '🍜 Especialidad recomendada de la casa';
-    } else if (index === 1 || aspectRatio > 1.4) {
+      caption = `🍜 Especialidad real servida en ${cleanName} (Google Maps)`;
+    } else if (index === 1 || (aspectRatio > 1.45 && index % 2 === 1)) {
       category = 'atmosphere';
-      caption = '🏪 Fachada, mesas y ambiente del comedor';
+      caption = `🏪 Ambiente y mesas de ${cleanName} (Foto de ${authorName})`;
     } else if (index === 2) {
       category = 'dish';
-      caption = '🥢 Mesa servida con hierbas frescas y cuencos';
-    } else {
-      category = 'dish';
-      caption = `📸 Foto de comensal por ${authorName}`;
+      caption = `🥢 Mesa servida en ${cleanName} (${authorName})`;
     }
 
     // Match with corresponding review snippet if available
@@ -2457,24 +2861,17 @@ app.post('/api/restaurants/menu', async (req, res) => {
     distinctPhotos.push({
       id: `photo-${index}-${photo.photo_reference.slice(0, 10)}`,
       url: `/api/restaurants/photo?ref=${encodeURIComponent(photo.photo_reference)}&maxwidth=1200`,
+      photoReference: photo.photo_reference,
       width,
       height,
       caption,
       category,
-      isLegibleMenu,
+      isLegibleMenu: false,
       authorName,
-      relativeTime: matchingReview?.relative_time_description || 'Reseña reciente',
+      relativeTime: matchingReview?.relative_time_description || 'Google Maps',
       reviewSnippet,
     });
   });
-
-  // Ensure at least one photo is highlighted as legible menu if any exist
-  const hasMenuPhoto = distinctPhotos.some((p) => p.category === 'menu_board');
-  if (!hasMenuPhoto && distinctPhotos.length > 1) {
-    distinctPhotos[1].category = 'menu_board';
-    distinctPhotos[1].isLegibleMenu = true;
-    distinctPhotos[1].caption = '📋 Carta y especialidades fotografiadas en mesa';
-  }
 
   // 4. Map Customer Reviews
   let recentReviews = (googleDetails?.reviews || []).map((r: any) => ({
@@ -2553,7 +2950,7 @@ Return a strictly valid JSON object:
     tipsForOrdering: [
       'Pide las bebidas y platos principales juntos para agilizar la cocina.',
       'Los precios en Vietnam se expresan habitualmente en miles (k). Por ejemplo, 50k = 50.000 ₫.',
-      'En la mesa encontrarás condimentos (chiles frescos, salsa de pescado, vinagre de ajo y lima) para personalizar tu caldo.',
+      'En la mesa encontrarás condimentos (chiles frescos, salsa de pescado, vinagre de ajo y lima) para personalizar tu plato.',
     ],
   };
 

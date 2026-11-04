@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
-  Volume2,
   UtensilsCrossed,
   AlertCircle,
   Check,
@@ -17,11 +16,9 @@ import {
   Trash2,
   X,
   Sliders,
-  Sparkles,
-  MessageCircle,
   Zap,
 } from 'lucide-react';
-import { PhraseItem, DishItem } from '../types';
+import { PhraseItem } from '../types';
 import { TRAVEL_PHRASES } from '../data/phrases';
 import { VIETNAMESE_DISHES } from '../data/dishes';
 import {
@@ -168,12 +165,11 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Filter phrases with custom cards sorted first (searches globally when user types in search bar)
+  // Filter phrases with custom cards sorted first
   const filteredPhrases = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     const isSearching = Boolean(q);
 
-    // Map custom card category to phrase category
     const catMap: Record<string, string> = {
       precios: 'compras',
       comida: 'comida',
@@ -182,7 +178,6 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
       emergencia: 'emergencias',
     };
 
-    // Custom cards
     const matchedCustomCards: (PhraseItem & { isCustom?: boolean })[] = customCards
       .filter((c) => {
         const targetCat = catMap[c.category] || 'cortesia';
@@ -206,7 +201,6 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
         isCustom: true,
       }));
 
-    // Standard static phrases
     const matchedStaticPhrases = (selectedCategory === 'guardadas' && !isSearching)
       ? []
       : TRAVEL_PHRASES.filter((p) => {
@@ -220,7 +214,6 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
           return matchesCat && matchesQuery;
         });
 
-    // Custom cards always appear FIRST!
     return [...matchedCustomCards, ...matchedStaticPhrases];
   }, [searchQuery, selectedCategory, customCards]);
 
@@ -254,63 +247,63 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-4xl w-full mx-auto min-w-0">
-      {/* SUB-TABS NAVIGATION */}
-      <div className="w-full space-y-2.5">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-stone-200/60 p-1.5 rounded-2xl border border-stone-300/70 shadow-2xs">
+    <div className="space-y-4 max-w-4xl w-full mx-auto min-w-0 animate-fade-in">
+      {/* SUB-TABS NAVIGATION - Clean Segmented Bar */}
+      <div className="w-full">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-stone-200/70 p-1.5 rounded-2xl border border-stone-200/90">
           <button
             id="subtab-conversation"
             onClick={() => setSubTab('conversation')}
-            className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+            className={`py-2.5 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer ${
               subTab === 'conversation'
-                ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
+                ? 'bg-white text-stone-950 font-bold shadow-xs border border-stone-200/80'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
             title="Traducción bidireccional y diálogo en vivo"
           >
-            <Languages className="w-4 h-4 shrink-0" />
+            <Languages className={`w-4 h-4 shrink-0 ${subTab === 'conversation' ? 'text-amber-600' : 'text-stone-500'}`} />
             <span className="truncate">Diálogo en Vivo</span>
           </button>
 
           <button
             id="subtab-phrases"
             onClick={() => setSubTab('phrases')}
-            className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+            className={`py-2.5 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer ${
               subTab === 'phrases'
-                ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
+                ? 'bg-white text-stone-950 font-bold shadow-xs border border-stone-200/80'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
             title="Frases útiles y pronunciación offline"
           >
-            <BookOpen className="w-4 h-4 shrink-0" />
+            <BookOpen className={`w-4 h-4 shrink-0 ${subTab === 'phrases' ? 'text-amber-600' : 'text-stone-500'}`} />
             <span className="truncate">Frases Útiles</span>
           </button>
 
           <button
             id="subtab-food"
             onClick={() => setSubTab('food')}
-            className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+            className={`py-2.5 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer ${
               subTab === 'food'
-                ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
+                ? 'bg-white text-stone-950 font-bold shadow-xs border border-stone-200/80'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
             title="Platos típicos e ingredientes"
           >
-            <UtensilsCrossed className="w-4 h-4 shrink-0" />
+            <UtensilsCrossed className={`w-4 h-4 shrink-0 ${subTab === 'food' ? 'text-amber-600' : 'text-stone-500'}`} />
             <span className="truncate">Platos & Menú</span>
           </button>
 
           <button
             id="subtab-allergy"
             onClick={() => setSubTab('allergy')}
-            className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+            className={`py-2.5 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer ${
               subTab === 'allergy'
-                ? 'bg-[#181614] text-amber-300 shadow-xs border border-stone-800'
+                ? 'bg-white text-stone-950 font-bold shadow-xs border border-stone-200/80'
                 : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
             }`}
             title="Tarjetas médicas y alergias"
           >
-            <ShieldAlert className="w-4 h-4 shrink-0" />
+            <ShieldAlert className={`w-4 h-4 shrink-0 ${subTab === 'allergy' ? 'text-rose-600' : 'text-stone-500'}`} />
             <span className="truncate">Alergias & Dietas</span>
           </button>
         </div>
@@ -329,92 +322,96 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
 
       {/* 1. GUÍA & DICCIONARIO TAB */}
       {subTab === 'phrases' && (
-        <div className="space-y-3.5 w-full min-w-0">
-          {/* Header context badge */}
-          <div className="bg-gradient-to-r from-[#181614] via-[#201d19] to-[#181614] text-stone-100 rounded-2xl p-3.5 sm:px-5 sm:py-4 border border-amber-500/20 shadow-[0_4px_20px_rgba(0,0,0,0.25)] flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
-                <BookOpen className="w-4 h-4" />
+        <div className="space-y-4 w-full min-w-0">
+          {/* Clean Header & Search Box Card */}
+          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-stone-200/90 shadow-[0_2px_20px_rgba(28,25,23,0.03)] space-y-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-700 shrink-0">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base sm:text-lg text-stone-900 tracking-tight">
+                    Diccionario de Frases
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    Pronunciación fonética y audio 100% offline para el viaje
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-serif font-bold text-sm sm:text-base text-white tracking-tight">Diccionario de Frases</h3>
-                <p className="text-[11px] sm:text-xs text-stone-400 mt-0.5">
-                  Pronunciación fonética y consejos prácticos para viajar por Vietnam
-                </p>
+
+              <div className="flex items-center gap-2">
+                {onOpenVoiceSettings && (
+                  <button
+                    type="button"
+                    onClick={onOpenVoiceSettings}
+                    className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                    title="Ajuste de voz y pronunciación"
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
+                  </button>
+                )}
+                <span className="bg-stone-100 px-2.5 py-1.5 rounded-xl border border-stone-200/80 font-medium text-xs text-stone-600 font-mono tabular-nums hidden sm:inline-flex items-center">
+                  {filteredPhrases.length} frases
+                </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {onOpenVoiceSettings && (
+            {/* Search Bar */}
+            <div className="relative w-full min-w-0">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+              <input
+                type="text"
+                placeholder="Buscar frase (ej. cuenta, cuánto vale, gracias, baño)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+              />
+              {searchQuery && (
                 <button
                   type="button"
-                  onClick={onOpenVoiceSettings}
-                  className="px-3 py-1.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
-                  title="Ajuste de voz y pronunciación"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
+                  title="Borrar búsqueda"
                 >
-                  <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
+                  <X className="w-4 h-4" />
                 </button>
               )}
-              <span className="bg-stone-900/90 px-2.5 py-1.5 rounded-xl border border-stone-800 font-medium text-xs text-stone-300 font-mono hidden sm:inline-flex items-center shadow-2xs">
-                {filteredPhrases.length} frases
-              </span>
             </div>
-          </div>
 
-          {/* Search Bar placed directly under dark header */}
-          <div className="relative w-full min-w-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-            <input
-              type="text"
-              placeholder="Buscar frase (ej. cuenta, cuánto vale, gracias, baño)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-stone-300/80 bg-white text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs transition"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
-                title="Borrar búsqueda"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Categories bar */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs no-scrollbar w-full max-w-full overscroll-x-contain touch-pan-x">
-            {[
-              { id: 'frecuentes', label: '⚡ Más Usadas', icon: Zap },
-              { id: 'compras', label: '💰 Regateo & Compras', icon: ShoppingBag },
-              { id: 'comida', label: '🍜 Comida & Restaurante', icon: UtensilsCrossed },
-              { id: 'transporte', label: '🚗 Transporte & Grab', icon: Car },
-              { id: 'cortesia', label: '💬 Cortesía & Saludos', icon: HeartHandshake },
-              { id: 'emergencias', label: '🚨 Emergencias & Salud', icon: ShieldAlert },
-              { id: 'numeros', label: '🔢 Números', icon: MessageSquareText },
-              ...(customCards.length > 0
-                ? [{ id: 'guardadas', label: `⭐ Guardadas (${customCards.length})`, icon: Star }]
-                : []),
-            ].map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3.5 py-2 rounded-xl whitespace-nowrap text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                  selectedCategory === cat.id
-                    ? 'bg-[#181614] text-amber-300 font-bold shadow-xs border border-stone-800'
-                    : 'bg-white hover:bg-stone-100 text-stone-700 border border-stone-200/90'
-                }`}
-              >
-                <span>{cat.label}</span>
-              </button>
-            ))}
+            {/* Categories bar */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-xs no-scrollbar w-full max-w-full overscroll-x-contain touch-pan-x">
+              {[
+                { id: 'frecuentes', label: '⚡ Más Usadas', icon: Zap },
+                { id: 'compras', label: '💰 Regateo & Compras', icon: ShoppingBag },
+                { id: 'comida', label: '🍜 Comida & Restaurante', icon: UtensilsCrossed },
+                { id: 'transporte', label: '🚗 Transporte & Grab', icon: Car },
+                { id: 'cortesia', label: '💬 Cortesía & Saludos', icon: HeartHandshake },
+                { id: 'emergencias', label: '🚨 Emergencias & Salud', icon: ShieldAlert },
+                { id: 'numeros', label: '🔢 Números', icon: MessageSquareText },
+                ...(customCards.length > 0
+                  ? [{ id: 'guardadas', label: `⭐ Guardadas (${customCards.length})`, icon: Star }]
+                  : []),
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-3.5 py-2 rounded-xl whitespace-nowrap text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                    selectedCategory === cat.id
+                      ? 'bg-stone-900 text-white font-bold shadow-xs'
+                      : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/70'
+                  }`}
+                >
+                  <span>{cat.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Active Search Result Bar */}
           {searchQuery.trim() && (
-            <div className="flex items-center justify-between bg-amber-50/80 border border-amber-200/80 rounded-xl px-3 py-1.5 text-xs">
+            <div className="flex items-center justify-between bg-amber-50/80 border border-amber-200/80 rounded-xl px-3.5 py-2 text-xs">
               <span className="text-amber-950 font-medium">
                 {filteredPhrases.length} {filteredPhrases.length === 1 ? 'resultado' : 'resultados'} para <strong className="text-stone-900 font-semibold">"{searchQuery}"</strong>
               </span>
@@ -429,7 +426,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
           )}
 
           {/* Phrases list */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full min-w-0">
             {filteredPhrases.map((phrase) => {
               const isSaved = customCards.some(
                 (c) =>
@@ -440,17 +437,17 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
               return (
                 <div
                   key={phrase.id}
-                  className={`rounded-3xl p-5 sm:p-6 border transition-all flex flex-col justify-between min-w-0 break-words ${
+                  className={`rounded-3xl p-4 sm:p-5 border transition-all flex flex-col justify-between min-w-0 break-words ${
                     phrase.isCustom
-                      ? 'bg-amber-50/40 border-amber-300 shadow-sm hover:border-amber-400 hover:shadow-md'
-                      : 'bg-white border-stone-200/90 shadow-[0_2px_16px_rgba(28,25,23,0.03)] hover:border-amber-400/80 hover:shadow-md'
+                      ? 'bg-amber-50/40 border-amber-300 shadow-xs hover:border-amber-400'
+                      : 'bg-white border-stone-200/90 shadow-[0_2px_16px_rgba(28,25,23,0.03)] hover:border-amber-400/80'
                   }`}
                 >
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         {phrase.isCustom ? (
-                          <span className="text-[10px] text-amber-900 font-bold bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                          <span className="text-[10px] text-amber-900 font-bold bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
                             <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
                             <span>Tarjeta personal</span>
                           </span>
@@ -463,12 +460,11 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
 
                       <div className="flex items-center gap-1.5">
                         {phrase.priority && !phrase.isCustom && (
-                          <span className="text-[10px] text-amber-800 font-bold bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full shadow-2xs">
+                          <span className="text-[10px] text-amber-800 font-bold bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-lg">
                             ★ Imprescindible
                           </span>
                         )}
 
-                        {/* Favorite star toggle button */}
                         <button
                           type="button"
                           onClick={() => handleToggleFavoritePhrase(phrase)}
@@ -488,8 +484,8 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
                       {phrase.spanish}
                     </h4>
 
-                    <div className="bg-gradient-to-br from-amber-500/[0.08] to-amber-500/[0.02] rounded-2xl p-3.5 border border-amber-200/70 min-w-0 space-y-1.5 shadow-2xs">
-                      <div className="text-xl font-black text-amber-950 font-sans tracking-wide break-words">
+                    <div className="bg-amber-50/60 rounded-2xl p-3 border border-amber-200/70 min-w-0 space-y-1">
+                      <div className="text-lg sm:text-xl font-black text-amber-950 font-sans tracking-wide break-words">
                         {phrase.vietnamese}
                       </div>
                       <div className="text-xs text-stone-600 font-mono break-words flex items-center gap-1.5">
@@ -499,14 +495,13 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
                     </div>
 
                     {phrase.toneTip && (
-                      <p className="text-[11px] text-stone-500 leading-relaxed bg-stone-50/70 p-2.5 rounded-xl border border-stone-100">
+                      <p className="text-xs text-stone-500 leading-relaxed bg-stone-50 p-2.5 rounded-xl border border-stone-100">
                         💡 {phrase.toneTip}
                       </p>
                     )}
                   </div>
 
                   <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-stone-100 flex-wrap">
-                    {/* Bridge action: Send to live conversation */}
                     <button
                       type="button"
                       onClick={() => handleSendToConversation(phrase)}
@@ -530,12 +525,12 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
 
                       <button
                         onClick={() => handleSpeak(phrase.vietnamese, `phrase-${phrase.id}`)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border shadow-2xs ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border ${
                           speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`
                             ? 'bg-amber-400 text-stone-950 font-bold border-amber-300 ring-2 ring-amber-400/30'
                             : 'bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-950 border-amber-200/70'
                         }`}
-                        title="Reproducir pronunciación en vietnamita (Voz natural suave)"
+                        title="Reproducir pronunciación en vietnamita"
                       >
                         <AudioWaveIndicator
                           isPlaying={speakingState.isSpeaking && speakingState.speakingId === `phrase-${phrase.id}`}
@@ -579,7 +574,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
                 No se encontraron frases que coincidan con "{searchQuery}".
               </p>
               <p className="text-xs text-stone-500 max-w-md mx-auto">
-                Puedes escribir la frase libremente en el <strong>Traductor en Vivo</strong> para traducirla al instante con IA y escuchar la voz nativa.
+                Puedes escribir la frase libremente en el <strong>Diálogo en Vivo</strong> para traducirla al instante y escuchar la voz nativa.
               </p>
               <div className="flex items-center justify-center gap-2 pt-1">
                 <button
@@ -592,9 +587,9 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
                 <button
                   type="button"
                   onClick={() => setSubTab('conversation')}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 text-xs font-bold transition cursor-pointer shadow-xs"
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition cursor-pointer shadow-xs"
                 >
-                  Ir al Traductor en Vivo ➔
+                  Ir al Diálogo en Vivo ➔
                 </button>
               </div>
             </div>
@@ -605,65 +600,69 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
       {/* 2. FOOD MENU DECODER TAB */}
       {subTab === 'food' && (
         <div className="space-y-4">
-          {/* Top Status Bar: Dark Noir with Gold Trim */}
-          <div className="bg-gradient-to-r from-[#181614] via-[#201d19] to-[#181614] text-stone-100 rounded-2xl p-3.5 sm:px-5 sm:py-4 border border-amber-500/20 shadow-[0_4px_20px_rgba(0,0,0,0.25)] flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
-                <UtensilsCrossed className="w-4 h-4" />
+          {/* Clean Header & Search Box Card */}
+          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-stone-200/90 shadow-[0_2px_20px_rgba(28,25,23,0.03)] space-y-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-700 shrink-0">
+                  <UtensilsCrossed className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base sm:text-lg text-stone-900 tracking-tight">
+                    Platos & Comida Callejera
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    Ingredientes, pronunciación y cómo pedir cada plato como un local
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-serif font-bold text-sm sm:text-base text-white tracking-tight">Platos & Comida Callejera</h3>
-                <p className="text-[11px] sm:text-xs text-stone-400 mt-0.5">
-                  Ingredientes, pronunciación y cómo pedir cada plato como un local
-                </p>
+
+              <div className="flex items-center gap-2">
+                {onOpenVoiceSettings && (
+                  <button
+                    type="button"
+                    onClick={onOpenVoiceSettings}
+                    className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                    title="Ajuste de voz y pronunciación"
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
+                  </button>
+                )}
+                <span className="bg-stone-100 px-2.5 py-1.5 rounded-xl border border-stone-200/80 font-medium text-xs text-stone-600 font-mono tabular-nums hidden sm:inline-flex items-center">
+                  {filteredDishes.length} platos
+                </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {onOpenVoiceSettings && (
+            {/* Search Bar */}
+            <div className="relative w-full min-w-0">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+              <input
+                type="text"
+                placeholder="Buscar plato o ingrediente (ej. Phở, Bánh mì, café, ternera)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-stone-200 bg-stone-50 focus:bg-white text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+              />
+              {searchQuery && (
                 <button
                   type="button"
-                  onClick={onOpenVoiceSettings}
-                  className="px-3 py-1.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 text-amber-300 hover:text-amber-200 border border-stone-700/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
-                  title="Ajuste de voz y pronunciación"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
+                  title="Borrar búsqueda"
                 >
-                  <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Voz {speechSettings.gender === 'female' ? '👩' : '👨'} · {speechSettings.speedPreset === 'slow' ? '0.8x' : speechSettings.speedPreset === 'fast' ? '1.1x' : '0.95x'}</span>
+                  <X className="w-4 h-4" />
                 </button>
               )}
-              <span className="bg-stone-900/90 px-2.5 py-1.5 rounded-xl border border-stone-800 font-medium text-xs text-stone-300 font-mono hidden sm:inline-flex items-center shadow-2xs">
-                {filteredDishes.length} platos
-              </span>
             </div>
           </div>
 
-          {/* Search Bar placed directly under dark header */}
-          <div className="relative w-full min-w-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-            <input
-              type="text"
-              placeholder="Buscar plato o ingrediente (ej. Phở, Bánh mì, café, ternera)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-stone-300/80 bg-white text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 shadow-2xs transition"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
-                title="Borrar búsqueda"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full min-w-0">
             {filteredDishes.map((dish) => (
               <div
                 key={dish.id}
-                className="bg-white rounded-3xl p-5 sm:p-6 border border-stone-200/90 shadow-[0_2px_16px_rgba(28,25,23,0.03)] hover:border-amber-400/80 hover:shadow-md transition-all flex flex-col justify-between min-w-0 break-words"
+                className="bg-white rounded-3xl p-4 sm:p-5 border border-stone-200/90 shadow-[0_2px_16px_rgba(28,25,23,0.03)] hover:border-amber-400/80 transition-all flex flex-col justify-between min-w-0 break-words"
               >
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
@@ -671,7 +670,7 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
                       <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
                         {dish.category} · {dish.region}
                       </div>
-                      <h3 className="text-xl font-black text-stone-900 mt-1 font-serif">
+                      <h3 className="text-xl font-black text-stone-900 mt-0.5 font-serif">
                         {dish.nameVi}
                       </h3>
                       <p className="text-xs font-semibold text-stone-600 mt-0.5">
@@ -681,12 +680,12 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
 
                     <button
                       onClick={() => handleSpeak(dish.nameVi, `dish-${dish.id}`)}
-                      className={`p-2.5 rounded-xl border transition cursor-pointer shrink-0 active:scale-95 shadow-2xs flex items-center justify-center ${
+                      className={`p-2.5 rounded-xl border transition cursor-pointer shrink-0 active:scale-95 flex items-center justify-center ${
                         speakingState.isSpeaking && speakingState.speakingId === `dish-${dish.id}`
                           ? 'bg-amber-400 text-stone-950 border-amber-300 ring-2 ring-amber-400/30'
                           : 'bg-amber-50 hover:bg-amber-100 border-amber-200/70 text-amber-900'
                       }`}
-                      title="Escuchar pronunciación suave del plato"
+                      title="Escuchar pronunciación del plato"
                     >
                       <AudioWaveIndicator
                         isPlaying={speakingState.isSpeaking && speakingState.speakingId === `dish-${dish.id}`}
@@ -705,23 +704,20 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
                     {dish.description}
                   </p>
 
-                  {/* Ingredients: Clean unboxed typographic list with middle dots */}
-                  <div className="text-xs text-stone-500 pt-1">
+                  <div className="text-xs text-stone-500 pt-0.5">
                     <strong className="text-stone-700 font-semibold">Ingredientes: </strong>
                     <span>{dish.ingredients.join(' · ')}</span>
                   </div>
 
-                  {/* How to order */}
-                  <div className="bg-amber-50/50 rounded-2xl p-3.5 border border-amber-200/60 text-xs space-y-1 shadow-2xs">
+                  <div className="bg-amber-50/50 rounded-2xl p-3 border border-amber-200/60 text-xs space-y-1">
                     <div className="font-bold text-amber-950 text-[11px]">
                       🍜 Cómo pedirlo:
                     </div>
-                    <p className="text-[11px] text-stone-700 leading-relaxed">{dish.howToOrderTip}</p>
+                    <p className="text-xs text-stone-700 leading-relaxed">{dish.howToOrderTip}</p>
                   </div>
                 </div>
 
-                {/* Dietary Warning */}
-                <div className="mt-3.5 pt-3 border-t border-stone-100 text-[11px] text-stone-500 flex items-center gap-1.5">
+                <div className="mt-3 pt-2.5 border-t border-stone-100 text-[11px] text-stone-500 flex items-center gap-1.5">
                   <AlertCircle className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                   <span>{dish.dietaryNotes}</span>
                 </div>
@@ -730,14 +726,14 @@ export const VietnameseTranslator: React.FC<VietnameseTranslatorProps> = ({
           </div>
 
           {filteredDishes.length === 0 && (
-            <div className="text-center py-10 bg-white rounded-2xl border border-stone-200 text-stone-500 text-sm">
+            <div className="text-center py-10 bg-white rounded-3xl border border-stone-200 text-stone-500 text-sm">
               No se encontraron platos con "{searchQuery}". Prueba buscando "phở", "café", "arroz" o "cerdo".
             </div>
           )}
         </div>
       )}
 
-      {/* 4. DIETARY / ALLERGY CARD GENERATOR */}
+      {/* 3. DIETARY / ALLERGY CARD GENERATOR */}
       {subTab === 'allergy' && (
         <AllergyCardsSection isOnline={isOnline} />
       )}

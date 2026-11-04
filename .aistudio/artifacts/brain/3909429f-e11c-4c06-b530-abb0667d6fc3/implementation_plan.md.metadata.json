@@ -1,0 +1,6 @@
+{
+  "summary": "Plan de arquitectura y diseño para corregir la repetición de guiones en la Audioguía Free Tour e implementar un catálogo ampliado de monumentos verificados, reproductor avanzado con barra de progreso y salto de segundos, reproducción continua automática entre paradas, mapa interactivo del recorrido y lectura por voz en el chat del guía Nguyễn.",
+  "updatedAt": "2026-10-18T12:29:28.888703065Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

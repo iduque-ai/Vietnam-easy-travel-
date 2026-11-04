@@ -326,38 +326,35 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-12 animate-fade-in text-stone-100">
+    <div className="space-y-4 pb-12 animate-fade-in text-stone-900">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 right-4 z-50 max-w-sm bg-stone-900 text-stone-100 px-4 py-3 rounded-2xl shadow-2xl border border-amber-500/40 text-xs flex items-center gap-2.5 backdrop-blur-md animate-slide-in">
+        <div className="fixed top-20 right-4 z-50 max-w-sm bg-stone-900 text-white px-4 py-3 rounded-2xl shadow-2xl border border-stone-700 text-xs flex items-center gap-2.5 animate-fade-in">
           <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
           <span className="font-medium">{toastMessage}</span>
         </div>
       )}
 
       {/* Top Trip Header Card */}
-      <section className="bg-stone-900/90 border border-stone-800 rounded-3xl p-4 sm:p-5 shadow-xl relative overflow-hidden backdrop-blur-sm">
-        {/* Subtle decorative background gradient */}
-        <div className="absolute -top-12 -right-12 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+      <section className="bg-white border border-stone-200/90 rounded-3xl p-4 sm:p-5 shadow-[0_4px_24px_rgba(28,25,23,0.04)]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
-                Mi Viaje a Vietnam
+              <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
+                Planificador de Ruta · Vietnam
               </span>
               <button
                 onClick={() => {
                   setNewTripTitleInput(activePlan?.title || 'Mi Viaje');
                   setIsEditTripTitleOpen(true);
                 }}
-                className="text-stone-400 hover:text-stone-200 transition cursor-pointer p-1"
+                className="text-stone-400 hover:text-stone-700 transition cursor-pointer p-1 rounded-lg hover:bg-stone-100"
                 title="Editar nombre del viaje"
               >
                 <Edit2 className="w-3.5 h-3.5" />
               </button>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white font-serif mt-1 tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-stone-900 font-serif mt-0.5 tracking-tight">
               {activePlan?.title || 'Mi Viaje Personalizado'}
             </h1>
           </div>
@@ -366,19 +363,19 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <button
               onClick={handleExportTripToText}
-              className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700/80 border border-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-xs"
+              className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 border border-stone-200/80 text-stone-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
               title="Copiar resumen del viaje en texto para notas o WhatsApp"
             >
-              <Share2 className="w-3.5 h-3.5 text-amber-400" />
+              <Share2 className="w-3.5 h-3.5 text-amber-600" />
               <span>Compartir</span>
             </button>
 
             <button
               onClick={() => setIsInspirationModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-stone-800/80 hover:bg-stone-700 border border-stone-700 text-stone-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+              className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 border border-stone-200/80 text-stone-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
               title="Ver sugerencias de rutas clásicas"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
               <span>Plantillas</span>
             </button>
 
@@ -389,7 +386,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                   showToast('✓ Nuevo viaje en blanco creado.');
                 }
               }}
-              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-sm"
+              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-xs"
               title="Comenzar una nueva ruta"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -399,34 +396,34 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
         </div>
 
         {/* Trip Stats Bar */}
-        <div className="grid grid-cols-3 gap-2 mt-4 pt-3.5 border-t border-stone-800/80 text-center">
-          <div className="bg-stone-950/60 rounded-2xl py-2 px-3 border border-stone-800/60">
-            <span className="text-[10px] uppercase font-bold text-stone-400 block tracking-wider font-mono">
+        <div className="grid grid-cols-3 gap-2.5 mt-4 pt-3.5 border-t border-stone-100 text-center">
+          <div className="bg-stone-50 rounded-2xl py-2.5 px-3 border border-stone-200/70">
+            <span className="text-[10px] uppercase font-bold text-stone-500 block tracking-wider">
               Duración
             </span>
-            <span className="text-base sm:text-lg font-black text-white font-mono">
+            <span className="text-base sm:text-lg font-black text-stone-900 font-mono tabular-nums">
               {tripStats.totalDays} {tripStats.totalDays === 1 ? 'Día' : 'Días'}
             </span>
           </div>
 
-          <div className="bg-stone-950/60 rounded-2xl py-2 px-3 border border-stone-800/60">
-            <span className="text-[10px] uppercase font-bold text-stone-400 block tracking-wider font-mono">
+          <div className="bg-stone-50 rounded-2xl py-2.5 px-3 border border-stone-200/70">
+            <span className="text-[10px] uppercase font-bold text-stone-500 block tracking-wider">
               Progreso
             </span>
-            <span className="text-base sm:text-lg font-black text-emerald-400 font-mono">
+            <span className="text-base sm:text-lg font-black text-emerald-700 font-mono tabular-nums">
               {tripStats.visitedStops} / {tripStats.totalStops}
             </span>
-            <span className="text-[9px] text-stone-400 block font-medium">visitadas</span>
+            <span className="text-[10px] text-stone-500 block font-medium">visitadas</span>
           </div>
 
-          <div className="bg-stone-950/60 rounded-2xl py-2 px-3 border border-stone-800/60">
-            <span className="text-[10px] uppercase font-bold text-stone-400 block tracking-wider font-mono">
+          <div className="bg-stone-50 rounded-2xl py-2.5 px-3 border border-stone-200/70">
+            <span className="text-[10px] uppercase font-bold text-stone-500 block tracking-wider">
               Entradas Est.
             </span>
-            <span className="text-base sm:text-lg font-black text-amber-300 font-mono">
+            <span className="text-base sm:text-lg font-black text-amber-800 font-mono tabular-nums">
               {(tripStats.totalTicketsVnd / 1000).toLocaleString('es-ES')}k ₫
             </span>
-            <span className="text-[9px] text-stone-400 block font-mono">
+            <span className="text-[10px] text-stone-500 block font-mono tabular-nums">
               ≈ {formatVndToForeign(tripStats.totalTicketsVnd)}
             </span>
           </div>
@@ -436,8 +433,8 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
       {/* Days Horizontal Timeline Selector */}
       <section className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <span className="text-xs font-bold text-stone-400 uppercase tracking-wider font-mono flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-amber-400" />
+          <span className="text-xs font-bold text-stone-600 uppercase tracking-wider flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-amber-600" />
             Días de tu viaje
           </span>
 
@@ -447,7 +444,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
               addDay(lastCity);
               showToast(`✓ Día añadido a tu viaje`);
             }}
-            className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition cursor-pointer active:scale-95"
+            className="text-xs font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1 transition cursor-pointer active:scale-95"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Añadir Día</span>
@@ -455,7 +452,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
         </div>
 
         {/* Scrollable Day Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-stone-800 -mx-1 px-1">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 no-scrollbar -mx-1 px-1">
           {activePlan?.days.map((d) => {
             const isSelected = d.id === day?.id;
             const stopsCount = d.stops.length;
@@ -465,20 +462,20 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
               <button
                 key={d.id}
                 onClick={() => setSelectedDayId(d.id)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-medium whitespace-nowrap transition cursor-pointer active:scale-95 border shrink-0 ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-semibold whitespace-nowrap transition cursor-pointer active:scale-95 border shrink-0 ${
                   isSelected
-                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-stone-950 font-bold border-amber-400 shadow-md shadow-amber-500/20'
-                    : 'bg-stone-900/90 text-stone-300 hover:text-white hover:bg-stone-800 border-stone-800'
+                    ? 'bg-stone-900 text-white font-bold border-stone-900 shadow-xs'
+                    : 'bg-white text-stone-700 hover:text-stone-900 hover:bg-stone-100 border-stone-200/90'
                 }`}
               >
                 <span>Día {d.dayNumber}: {d.destinationCity}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                  className={`text-[10px] px-1.5 py-0.5 rounded-lg font-mono font-bold tabular-nums ${
                     isSelected
-                      ? 'bg-stone-950/30 text-stone-950'
+                      ? 'bg-amber-500 text-stone-950'
                       : isCompleted
-                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40'
-                      : 'bg-stone-800 text-stone-400'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-stone-100 text-stone-600'
                   }`}
                 >
                   {isCompleted ? '✓' : stopsCount}
@@ -493,9 +490,9 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
               addDay(lastCity);
               showToast(`✓ Día añadido a tu viaje`);
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-semibold text-stone-400 hover:text-amber-400 bg-stone-900/50 hover:bg-stone-900 border border-dashed border-stone-800 hover:border-amber-500/40 transition cursor-pointer whitespace-nowrap shrink-0"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-semibold text-stone-600 hover:text-amber-900 bg-white hover:bg-amber-50/50 border border-dashed border-stone-300 hover:border-amber-400 transition cursor-pointer whitespace-nowrap shrink-0"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5 text-amber-600" />
             <span>Nuevo día</span>
           </button>
         </div>
@@ -505,35 +502,35 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
       {day && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* Left Column: Interactive Map of the Day (5 cols on lg) */}
-          <div className={`space-y-2 ${mapExpanded ? 'lg:col-span-12' : 'lg:col-span-5'}`}>
-            <div className="bg-stone-900/90 border border-stone-800 rounded-3xl overflow-hidden shadow-xl">
+          <div className={`space-y-2.5 ${mapExpanded ? 'lg:col-span-12' : 'lg:col-span-5'}`}>
+            <div className="bg-white border border-stone-200/90 rounded-3xl overflow-hidden shadow-[0_4px_24px_rgba(28,25,23,0.04)]">
               {/* Map Header with City changer, Engine selector & expand toggle */}
-              <div className="px-3.5 py-2 bg-stone-950/80 border-b border-stone-800 flex items-center justify-between gap-2">
+              <div className="px-4 py-2.5 bg-stone-50 border-b border-stone-200/80 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                   <button
                     onClick={() => setIsCitySelectorOpen(true)}
-                    className="font-bold text-xs text-stone-100 hover:text-amber-300 flex items-center gap-1 truncate cursor-pointer transition"
+                    className="font-bold text-xs text-stone-900 hover:text-amber-800 flex items-center gap-1 truncate cursor-pointer transition"
                     title="Cambiar la ciudad o destino de este día"
                   >
                     <span>{day.destinationCity}</span>
-                    <ChevronDown className="w-3 h-3 text-stone-400" />
+                    <ChevronDown className="w-3 h-3 text-stone-500" />
                   </button>
-                  <span className="text-[10px] text-stone-500 font-mono">
+                  <span className="text-[10px] text-stone-500 font-mono tabular-nums">
                     ({dayStopsWithPois.length})
                   </span>
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {/* Map Engine Selector (Google vs OSM) placed cleanly in header - takes ZERO space from map! */}
-                  <div className="bg-stone-900/90 rounded-lg p-0.5 border border-stone-800 flex items-center gap-0.5 select-none">
+                  {/* Map Engine Selector (Google vs OSM) */}
+                  <div className="bg-stone-200/70 rounded-lg p-0.5 flex items-center gap-0.5 select-none">
                     <button
                       type="button"
                       onClick={() => setMapEngine('google')}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer leading-tight ${
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition cursor-pointer leading-tight ${
                         mapEngine === 'google'
-                          ? 'bg-amber-500 text-stone-950 shadow-xs'
-                          : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800'
+                          ? 'bg-white text-stone-900 shadow-2xs'
+                          : 'text-stone-600 hover:text-stone-900'
                       }`}
                       title="Usar Google Maps (Modo Online)"
                     >
@@ -542,10 +539,10 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                     <button
                       type="button"
                       onClick={() => setMapEngine('osm')}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer leading-tight ${
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition cursor-pointer leading-tight ${
                         mapEngine === 'osm'
-                          ? 'bg-amber-500 text-stone-950 shadow-xs'
-                          : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800'
+                          ? 'bg-white text-stone-900 shadow-2xs'
+                          : 'text-stone-600 hover:text-stone-900'
                       }`}
                       title="Usar OpenStreetMap / MapLibre"
                     >
@@ -555,7 +552,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
 
                   <button
                     onClick={() => setMapExpanded(!mapExpanded)}
-                    className="p-1.5 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition cursor-pointer"
+                    className="p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-200/60 transition cursor-pointer"
                     title={mapExpanded ? 'Vista dividida' : 'Ampliar mapa'}
                   >
                     {mapExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
@@ -589,19 +586,19 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
             </div>
 
             {/* Quick City Highlights Card */}
-            <div className="bg-stone-900/60 border border-stone-800/80 rounded-2xl p-3 text-xs text-stone-300 flex items-start gap-2.5">
+            <div className="bg-white border border-stone-200/90 rounded-2xl p-3.5 text-xs text-stone-600 flex items-start gap-2.5 shadow-2xs">
               <span className="text-xl shrink-0">{currentCityConfig.icon}</span>
               <div className="min-w-0">
-                <span className="font-bold text-stone-200 block text-xs">
+                <span className="font-bold text-stone-900 block text-xs">
                   {currentCityConfig.nameEs}
                 </span>
-                <p className="text-[11px] text-stone-400 line-clamp-2 mt-0.5 leading-relaxed">
+                <p className="text-[11px] text-stone-500 line-clamp-2 mt-0.5 leading-relaxed">
                   {currentCityConfig.description}
                 </p>
                 <div className="mt-2 flex items-center gap-2">
                   <button
                     onClick={() => setIsAddPoiModalOpen(true)}
-                    className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition cursor-pointer"
+                    className="text-[11px] font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1 transition cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
                     <span>Ver imprescindibles de {day.destinationCity}</span>
@@ -614,10 +611,10 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
           {/* Right Column: Stops of the Day List (7 cols on lg) */}
           <div className={`space-y-3 ${mapExpanded ? 'lg:col-span-12' : 'lg:col-span-7'}`}>
             {/* Day Header Card */}
-            <div className="bg-stone-900/90 border border-stone-800 rounded-3xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="bg-white border border-stone-200/90 rounded-3xl p-4 shadow-[0_4px_24px_rgba(28,25,23,0.04)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-amber-400 uppercase font-mono">
+                  <span className="text-xs font-bold text-amber-700 uppercase font-mono">
                     Día {day.dayNumber} en {day.destinationCity}
                   </span>
                   {activePlan.days.length > 1 && (
@@ -628,14 +625,14 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                           showToast('Día eliminado');
                         }
                       }}
-                      className="text-stone-500 hover:text-rose-400 p-1 transition cursor-pointer"
+                      className="text-stone-400 hover:text-rose-600 p-1 transition cursor-pointer rounded-lg hover:bg-rose-50"
                       title="Eliminar este día"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
-                <h2 className="text-base sm:text-lg font-bold text-white mt-0.5">
+                <h2 className="text-base sm:text-lg font-bold text-stone-900 mt-0.5">
                   {day.title}
                 </h2>
               </div>
@@ -645,10 +642,10 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                 {day.stops.length >= 2 && (
                   <button
                     onClick={handleOptimizeRoute}
-                    className="px-2.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                    className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
                     title="Ordenar paradas automáticamente para recorrerlas en el orden más corto"
                   >
-                    <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+                    <Wand2 className="w-3.5 h-3.5 text-amber-600" />
                     <span>Optimizar</span>
                   </button>
                 )}
@@ -656,10 +653,10 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                 {day.stops.length > 0 && (
                   <button
                     onClick={handleOpenGoogleMapsRoute}
-                    className="px-2.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                    className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/80 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
                     title="Abrir la ruta de hoy en Google Maps"
                   >
-                    <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+                    <ExternalLink className="w-3.5 h-3.5 text-sky-600" />
                     <span>En Maps</span>
                   </button>
                 )}
@@ -669,15 +666,15 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
             {/* Stops List */}
             {day.stops.length === 0 ? (
               /* Empty State for Day: Welcoming and simple */
-              <div className="bg-stone-900/50 border border-dashed border-stone-800 rounded-3xl p-6 sm:p-8 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-2xl">
+              <div className="bg-white border border-dashed border-stone-300 rounded-3xl p-6 sm:p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-2xl">
                   {currentCityConfig.icon}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">
+                  <h3 className="text-base font-bold text-stone-900">
                     Aún no tienes paradas en {day.destinationCity}
                   </h3>
-                  <p className="text-xs text-stone-400 max-w-sm mx-auto mt-1 leading-relaxed">
+                  <p className="text-xs text-stone-500 max-w-sm mx-auto mt-1 leading-relaxed">
                     Crea tu día personalizado. Elige entre los monumentos y templos imprescindibles o añade tus propios planes (hotel, café, tren, etc.).
                   </p>
                 </div>
@@ -685,7 +682,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
                   <button
                     onClick={() => setIsAddPoiModalOpen(true)}
-                    className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95 shadow-md shadow-amber-500/15"
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95 shadow-xs"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Elegir imprescindibles de {day.destinationCity}</span>
@@ -693,9 +690,9 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
 
                   <button
                     onClick={() => setIsCustomStopModalOpen(true)}
-                    className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 font-semibold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95"
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 font-semibold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-95"
                   >
-                    <Edit2 className="w-3.5 h-3.5 text-stone-400" />
+                    <Edit2 className="w-3.5 h-3.5 text-stone-500" />
                     <span>Añadir parada personalizada</span>
                   </button>
                 </div>
@@ -710,28 +707,28 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                   return (
                     <div
                       key={stop.id}
-                      className={`bg-stone-900/90 border rounded-2xl p-3.5 transition-all shadow-md ${
+                      className={`bg-white border rounded-2xl p-4 transition-all shadow-2xs ${
                         stop.isVisited
-                          ? 'border-stone-800/60 bg-stone-950/40 opacity-70'
-                          : 'border-stone-800 hover:border-stone-700'
+                          ? 'border-stone-200/70 bg-stone-50/70 opacity-75'
+                          : 'border-stone-200/90 hover:border-amber-400'
                       }`}
                     >
                       <div className="flex items-start gap-3">
                         {/* Checkbox & Order Index */}
                         <button
                           onClick={() => toggleStopVisited(activePlan.id, day.id, stop.id)}
-                          className="mt-0.5 text-stone-400 hover:text-emerald-400 transition cursor-pointer shrink-0"
+                          className="mt-0.5 text-stone-400 hover:text-emerald-600 transition cursor-pointer shrink-0"
                           title={stop.isVisited ? 'Marcar como pendiente' : 'Marcar como visitado'}
                         >
                           {stop.isVisited ? (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                           ) : (
-                            <Circle className="w-5 h-5 text-stone-500 hover:text-amber-400" />
+                            <Circle className="w-5 h-5 text-stone-400 hover:text-amber-600" />
                           )}
                         </button>
 
                         {/* Order badge */}
-                        <span className="w-5 h-5 rounded-full bg-stone-800 text-amber-300 font-mono text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-900 font-mono text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5 tabular-nums">
                           {index}
                         </span>
 
@@ -739,14 +736,14 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-baseline gap-2 flex-wrap">
                             <h4
-                              className={`text-sm font-bold text-white truncate ${
+                              className={`text-sm font-bold text-stone-900 truncate ${
                                 stop.isVisited ? 'line-through text-stone-400' : ''
                               }`}
                             >
                               {title}
                             </h4>
                             {stop.timeSlot && (
-                              <span className="text-[10px] text-amber-400/90 font-mono bg-amber-500/10 px-1.5 py-0.2 rounded-md">
+                              <span className="text-[10px] text-amber-800 font-mono bg-amber-50 border border-amber-200/70 px-1.5 py-0.5 rounded-md">
                                 {stop.timeSlot}
                               </span>
                             )}
@@ -755,12 +752,12 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                           {/* Vietnamese Name + Speaker button */}
                           {vietnameseTitle && (
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-xs text-stone-400 font-serif italic">
+                              <span className="text-xs text-stone-500 font-serif italic">
                                 {vietnameseTitle}
                               </span>
                               <button
                                 onClick={() => speakVietnamese(vietnameseTitle)}
-                                className="text-stone-400 hover:text-amber-400 transition cursor-pointer p-0.5"
+                                className="text-stone-400 hover:text-amber-600 transition cursor-pointer p-0.5"
                                 title="Escuchar pronunciación en vietnamita"
                               >
                                 <Volume2 className="w-3.5 h-3.5" />
@@ -769,36 +766,36 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                           )}
 
                           {/* Ticket Price & Notes */}
-                          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-stone-400 flex-wrap">
+                          <div className="flex items-center gap-3 mt-1.5 text-[11px] text-stone-500 flex-wrap">
                             {ticketVnd > 0 ? (
-                              <span className="font-mono text-stone-300 flex items-center gap-1 font-semibold">
-                                <Ticket className="w-3 h-3 text-amber-400" />
+                              <span className="font-mono text-stone-700 flex items-center gap-1 font-semibold tabular-nums">
+                                <Ticket className="w-3 h-3 text-amber-600" />
                                 {ticketVnd.toLocaleString('es-ES')} ₫ ({formatVndToForeign(ticketVnd)})
                               </span>
                             ) : (
-                              <span className="text-emerald-400 font-medium">Entrada libre</span>
+                              <span className="text-emerald-700 font-semibold">Entrada libre</span>
                             )}
 
                             {stop.notes && (
-                              <span className="text-stone-400 truncate max-w-xs">
+                              <span className="text-stone-500 truncate max-w-xs">
                                 • {stop.notes}
                               </span>
                             )}
                           </div>
 
                           {/* Quick action buttons on stop */}
-                          <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-stone-800/60 flex-wrap">
+                          <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-stone-100 flex-wrap">
                             {/* Copy Grab */}
                             <button
                               onClick={() => handleCopyGrabAddress(item)}
-                              className={`px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer active:scale-95 ${
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer active:scale-95 ${
                                 isCopied
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
-                                  : 'bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/80'
                               }`}
                               title="Copiar nombre y dirección en vietnamita para Grab / Taxi"
                             >
-                              {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3 text-amber-400" />}
+                              {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3 text-amber-600" />}
                               <span>{isCopied ? '¡Copiado!' : 'Copiar para Grab'}</span>
                             </button>
 
@@ -806,10 +803,10 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                             {poi && (
                               <button
                                 onClick={() => setSelectedPoiDetail(poi)}
-                                className="px-2 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                                className="px-2.5 py-1 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/80 text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
                               >
-                                <Info className="w-3 h-3 text-blue-400" />
-                                <span>Detalles & Consejos</span>
+                                <Info className="w-3 h-3 text-sky-600" />
+                                <span>Detalles y Consejos</span>
                               </button>
                             )}
 
@@ -817,18 +814,18 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                             {poi && onStartFreeTour && (
                               <button
                                 onClick={() => onStartFreeTour(poi)}
-                                className="px-2 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
-                                title="Escuchar audioguía completa con IA de este lugar"
+                                className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                                title="Escuchar audioguía completa de este lugar"
                               >
-                                <Sparkles className="w-3 h-3 text-amber-400" />
-                                <span>Audioguía IA</span>
+                                <Sparkles className="w-3 h-3 text-amber-600" />
+                                <span>Audioguía</span>
                               </button>
                             )}
 
                             {/* Delete */}
                             <button
                               onClick={() => removeStopFromDay(activePlan.id, day.id, stop.id)}
-                              className="ml-auto text-stone-500 hover:text-rose-400 p-1 transition cursor-pointer"
+                              className="ml-auto text-stone-400 hover:text-rose-600 p-1 transition cursor-pointer rounded-lg hover:bg-rose-50"
                               title="Eliminar parada de este día"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -844,7 +841,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     onClick={() => setIsAddPoiModalOpen(true)}
-                    className="flex-1 py-2.5 px-3 rounded-2xl bg-stone-900 hover:bg-stone-800 border border-amber-500/30 hover:border-amber-400 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 shadow-xs"
+                    className="flex-1 py-2.5 px-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Añadir lugar recomendado</span>
@@ -852,9 +849,9 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
 
                   <button
                     onClick={() => setIsCustomStopModalOpen(true)}
-                    className="py-2.5 px-3 rounded-2xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                    className="py-2.5 px-3.5 rounded-2xl bg-white hover:bg-stone-100 border border-stone-200/90 text-stone-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
                   >
-                    <Edit2 className="w-3.5 h-3.5 text-stone-400" />
+                    <Edit2 className="w-3.5 h-3.5 text-stone-500" />
                     <span>Parada propia</span>
                   </button>
                 </div>
@@ -870,34 +867,34 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
       {isAddPoiModalOpen && day && (
         <div
           onClick={() => setIsAddPoiModalOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/50 backdrop-blur-xs animate-fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-up"
+            className="bg-white border border-stone-200 rounded-3xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
           >
             {/* Modal Header */}
-            <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-white text-base">
+                <h3 className="font-bold text-stone-900 text-base">
                   Lugares imprescindibles de {day.destinationCity}
                 </h3>
-                <p className="text-xs text-stone-400 mt-0.5">
+                <p className="text-xs text-stone-500 mt-0.5">
                   Toca en «+ Añadir» para incluirlo en el Día {day.dayNumber}.
                 </p>
               </div>
               <button
                 onClick={() => setIsAddPoiModalOpen(false)}
-                className="p-1.5 rounded-xl bg-stone-800 text-stone-400 hover:text-white transition cursor-pointer"
+                className="p-1.5 rounded-xl bg-stone-100 text-stone-500 hover:text-stone-900 transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Modal Body: List of POIs */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
               {cityRecommendedPois.length === 0 ? (
-                <div className="text-center py-8 text-stone-400 text-xs">
+                <div className="text-center py-8 text-stone-500 text-xs">
                   No hay lugares catalogados para esta ciudad específica. Puedes añadir cualquier parada propia.
                 </div>
               ) : (
@@ -907,22 +904,22 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                   return (
                     <div
                       key={poi.id}
-                      className="bg-stone-950/70 border border-stone-800 rounded-2xl p-3 flex items-center justify-between gap-3 hover:border-stone-700 transition"
+                      className="bg-stone-50 border border-stone-200/80 rounded-2xl p-3.5 flex items-center justify-between gap-3 hover:border-amber-400 transition"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-white truncate">
+                          <span className="font-bold text-sm text-stone-900 truncate">
                             {poi.nameEs}
                           </span>
-                          <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-stone-800 text-amber-400 font-mono">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-100/80 text-amber-900 font-semibold">
                             {poi.category}
                           </span>
                         </div>
-                        <span className="text-xs text-stone-400 block font-serif italic">
+                        <span className="text-xs text-stone-500 block font-serif italic">
                           {poi.nameVi}
                         </span>
-                        <div className="flex items-center gap-2 mt-1 text-[11px] text-stone-400">
-                          <span>
+                        <div className="flex items-center gap-2 mt-1 text-[11px] text-stone-500">
+                          <span className="font-medium text-stone-700">
                             {poi.ticketVnd > 0
                               ? `${poi.ticketVnd.toLocaleString('es-ES')} ₫ (${formatVndToForeign(poi.ticketVnd)})`
                               : 'Gratis'}
@@ -933,7 +930,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
 
                       <div className="flex items-center gap-1.5 shrink-0">
                         {alreadyInDay ? (
-                          <span className="px-3 py-1.5 rounded-xl bg-stone-800 text-stone-400 text-xs font-semibold">
+                          <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
                             ✓ Añadido
                           </span>
                         ) : (
@@ -942,7 +939,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                               addPoiToDay(activePlan.id, day.id, poi.id);
                               showToast(`✓ "${poi.nameEs}" añadido al Día ${day.dayNumber}`);
                             }}
-                            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1 transition cursor-pointer active:scale-95 shadow-sm"
+                            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1 transition cursor-pointer active:scale-95 shadow-2xs"
                           >
                             <Plus className="w-3.5 h-3.5" />
                             <span>Añadir</span>
@@ -951,7 +948,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
 
                         <button
                           onClick={() => setSelectedPoiDetail(poi)}
-                          className="p-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white transition cursor-pointer"
+                          className="p-2 rounded-xl bg-white hover:bg-stone-100 text-stone-500 hover:text-stone-900 border border-stone-200 transition cursor-pointer"
                           title="Ver consejos y detalles"
                         >
                           <Info className="w-3.5 h-3.5" />
@@ -970,19 +967,19 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
       {isCustomStopModalOpen && day && (
         <div
           onClick={() => setIsCustomStopModalOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/50 backdrop-blur-xs animate-fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-md p-5 shadow-2xl animate-scale-up"
+            className="bg-white border border-stone-200 rounded-3xl w-full max-w-md p-5 shadow-2xl"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-stone-800">
-              <h3 className="font-bold text-white text-base">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <h3 className="font-bold text-stone-900 text-base">
                 Añadir parada propia al Día {day.dayNumber}
               </h3>
               <button
                 onClick={() => setIsCustomStopModalOpen(false)}
-                className="p-1 rounded-xl text-stone-400 hover:text-white transition cursor-pointer"
+                className="p-1.5 rounded-xl text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -990,7 +987,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
 
             <form onSubmit={handleSaveCustomStop} className="space-y-3.5 mt-4">
               <div>
-                <label className="text-xs font-semibold text-stone-300 block mb-1">
+                <label className="text-xs font-semibold text-stone-700 block mb-1">
                   Nombre del lugar o plan:
                 </label>
                 <input
@@ -999,13 +996,13 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                   placeholder="Ej: Café Giang (Huevo), Hotel Metropole, Tren nocturno..."
                   value={customStopName}
                   onChange={(e) => setCustomStopName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-xs text-white placeholder-stone-500 focus:outline-none focus:border-amber-400"
+                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500 focus:bg-white"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-stone-300 block mb-1">
+                  <label className="text-xs font-semibold text-stone-700 block mb-1">
                     Horario / Bloque:
                   </label>
                   <input
@@ -1013,12 +1010,12 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                     placeholder="Ej: Mañana 09:30 o Noche"
                     value={customStopTimeSlot}
                     onChange={(e) => setCustomStopTimeSlot(e.target.value)}
-                    className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-xl text-xs text-white placeholder-stone-500 focus:outline-none focus:border-amber-400"
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500 focus:bg-white"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-stone-300 block mb-1">
+                  <label className="text-xs font-semibold text-stone-700 block mb-1">
                     Coste estimado (VND):
                   </label>
                   <input
@@ -1027,10 +1024,10 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                     placeholder="0"
                     value={customStopCostVnd || ''}
                     onChange={(e) => setCustomStopCostVnd(Number(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-xl text-xs font-mono text-white placeholder-stone-500 focus:outline-none focus:border-amber-400"
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-mono text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500 focus:bg-white"
                   />
                   {customStopCostVnd > 0 && (
-                    <span className="text-[10px] text-stone-400 font-mono mt-0.5 block">
+                    <span className="text-[10px] text-stone-500 font-mono mt-0.5 block">
                       ≈ {formatVndToForeign(customStopCostVnd)}
                     </span>
                   )}
@@ -1038,7 +1035,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-stone-300 block mb-1">
+                <label className="text-xs font-semibold text-stone-700 block mb-1">
                   Notas personales (reserva, vestimenta, tips):
                 </label>
                 <textarea
@@ -1046,7 +1043,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                   placeholder="Ej: Código de vestimenta con hombros cubiertos, llegar antes de las 17:00..."
                   value={customStopNotes}
                   onChange={(e) => setCustomStopNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-xl text-xs text-white placeholder-stone-500 focus:outline-none focus:border-amber-400"
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500 focus:bg-white"
                 />
               </div>
 
@@ -1054,13 +1051,13 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsCustomStopModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs text-stone-400 hover:text-white transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-900 transition cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition cursor-pointer active:scale-95 shadow-md shadow-amber-500/20"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition cursor-pointer active:scale-95 shadow-xs"
                 >
                   Guardar Parada
                 </button>
@@ -1074,24 +1071,24 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
       {isCitySelectorOpen && day && (
         <div
           onClick={() => setIsCitySelectorOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/50 backdrop-blur-xs animate-fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl animate-scale-up overflow-hidden"
+            className="bg-white border border-stone-200 rounded-3xl w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl overflow-hidden"
           >
-            <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-white text-base">
+                <h3 className="font-bold text-stone-900 text-base">
                   Destino para el Día {day.dayNumber}
                 </h3>
-                <p className="text-xs text-stone-400 mt-0.5">
+                <p className="text-xs text-stone-500 mt-0.5">
                   Elige la ciudad en la que transcurre esta jornada.
                 </p>
               </div>
               <button
                 onClick={() => setIsCitySelectorOpen(false)}
-                className="p-1 rounded-xl text-stone-400 hover:text-white transition cursor-pointer"
+                className="p-1.5 rounded-xl text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1106,18 +1103,18 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                     onClick={() => handleChangeDayCity(city)}
                     className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between gap-3 transition cursor-pointer ${
                       isSelected
-                        ? 'bg-amber-500/15 border-amber-500 text-white font-bold'
-                        : 'bg-stone-950/70 border-stone-800 hover:border-stone-700 text-stone-300'
+                        ? 'bg-amber-50 border-amber-400 text-stone-900 font-bold'
+                        : 'bg-stone-50 border-stone-200/80 hover:border-stone-300 text-stone-700'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
                       <span className="text-xl">{city.icon}</span>
                       <div>
-                        <span className="font-bold text-xs block text-white">{city.nameEs}</span>
-                        <span className="text-[10px] text-stone-400 block">{city.region}</span>
+                        <span className="font-bold text-xs block text-stone-900">{city.nameEs}</span>
+                        <span className="text-[10px] text-stone-500 block">{city.region}</span>
                       </div>
                     </div>
-                    {isSelected && <Check className="w-4 h-4 text-amber-400" />}
+                    {isSelected && <Check className="w-4 h-4 text-amber-600" />}
                   </button>
                 );
               })}
@@ -1130,38 +1127,38 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
       {selectedPoiDetail && (
         <div
           onClick={() => setSelectedPoiDetail(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/50 backdrop-blur-xs animate-fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl animate-scale-up overflow-hidden"
+            className="bg-white border border-stone-200 rounded-3xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
           >
-            {/* Header with image/gradient */}
-            <div className="relative p-5 bg-gradient-to-b from-stone-800 to-stone-900 border-b border-stone-800">
+            {/* Header */}
+            <div className="relative p-5 bg-stone-50 border-b border-stone-200/80">
               <button
                 onClick={() => setSelectedPoiDetail(null)}
-                className="absolute top-4 right-4 p-1.5 rounded-full bg-stone-950/80 text-stone-300 hover:text-white transition cursor-pointer"
+                className="absolute top-4 right-4 p-1.5 rounded-full bg-white text-stone-500 hover:text-stone-900 border border-stone-200 transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
 
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold uppercase tracking-wider font-mono">
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-bold uppercase tracking-wider">
                   {selectedPoiDetail.category}
                 </span>
-                <span className="text-xs text-stone-400">★ {selectedPoiDetail.rating}</span>
+                <span className="text-xs font-semibold text-amber-700">★ {selectedPoiDetail.rating}</span>
               </div>
 
-              <h3 className="text-lg sm:text-xl font-black text-white font-serif">
+              <h3 className="text-lg sm:text-xl font-bold text-stone-900 font-serif">
                 {selectedPoiDetail.nameEs}
               </h3>
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-stone-400 font-serif italic">
+                <span className="text-xs text-stone-500 font-serif italic">
                   {selectedPoiDetail.nameVi}
                 </span>
                 <button
                   onClick={() => speakVietnamese(selectedPoiDetail.nameVi)}
-                  className="text-amber-400 hover:text-amber-300 transition cursor-pointer p-0.5"
+                  className="text-amber-700 hover:text-amber-900 transition cursor-pointer p-0.5"
                   title="Escuchar pronunciación"
                 >
                   <Volume2 className="w-3.5 h-3.5" />
@@ -1170,49 +1167,49 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-3.5 text-xs text-stone-300">
+            <div className="flex-1 overflow-y-auto p-5 space-y-3.5 text-xs text-stone-700">
               {/* Practical details grid */}
               <div className="grid grid-cols-2 gap-2.5">
-                <div className="bg-stone-950/80 p-3 rounded-2xl border border-stone-800/80">
-                  <span className="text-[10px] text-stone-400 block font-semibold uppercase tracking-wider">
+                <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                  <span className="text-[10px] text-stone-500 block font-semibold uppercase tracking-wider">
                     🎟️ Entrada
                   </span>
-                  <span className="font-bold text-amber-300 text-sm font-mono mt-0.5 block">
+                  <span className="font-bold text-amber-800 text-sm font-mono mt-0.5 block">
                     {selectedPoiDetail.ticketVnd > 0
                       ? `${selectedPoiDetail.ticketVnd.toLocaleString('es-ES')} ₫`
                       : 'Gratis'}
                   </span>
                   {selectedPoiDetail.ticketVnd > 0 && (
-                    <span className="text-[10px] text-stone-400 font-mono">
+                    <span className="text-[10px] text-stone-500 font-mono">
                       ≈ {formatVndToForeign(selectedPoiDetail.ticketVnd)}
                     </span>
                   )}
                 </div>
 
-                <div className="bg-stone-950/80 p-3 rounded-2xl border border-stone-800/80">
-                  <span className="text-[10px] text-stone-400 block font-semibold uppercase tracking-wider">
+                <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                  <span className="text-[10px] text-stone-500 block font-semibold uppercase tracking-wider">
                     ⏰ Horario
                   </span>
-                  <span className="font-medium text-stone-200 text-xs mt-0.5 block">
+                  <span className="font-semibold text-stone-900 text-xs mt-0.5 block">
                     {selectedPoiDetail.openingHours}
                   </span>
                 </div>
               </div>
 
               {/* Tips & Recommendations */}
-              <div className="bg-stone-950/60 p-3.5 rounded-2xl border border-stone-800/80 space-y-2">
+              <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80 space-y-2">
                 <div>
-                  <span className="font-bold text-stone-200 block text-xs mb-1">
+                  <span className="font-bold text-stone-900 block text-xs mb-1">
                     💡 Consejos para la visita:
                   </span>
-                  <p className="text-stone-300 leading-relaxed text-xs">
+                  <p className="text-stone-600 leading-relaxed text-xs">
                     {selectedPoiDetail.travelerTips}
                   </p>
                 </div>
 
                 {selectedPoiDetail.scamAlert && (
-                  <div className="mt-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-[11px] flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-[11px] flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold block">Alerta común:</span>
                       <span>{selectedPoiDetail.scamAlert}</span>
@@ -1222,27 +1219,27 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
               </div>
 
               {/* How to get there */}
-              <div className="bg-stone-950/60 p-3 rounded-2xl border border-stone-800/80">
-                <span className="font-bold text-stone-200 block text-xs mb-1">
+              <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200/80">
+                <span className="font-bold text-stone-900 block text-xs mb-1">
                   🚕 Cómo llegar en taxi o Grab:
                 </span>
-                <p className="text-stone-300 text-xs">
+                <p className="text-stone-600 text-xs">
                   {selectedPoiDetail.howToGet}
                 </p>
               </div>
             </div>
 
             {/* Footer with action button */}
-            <div className="p-4 border-t border-stone-800 bg-stone-950/80 flex items-center justify-between gap-2">
+            <div className="p-4 border-t border-stone-100 bg-stone-50 flex items-center justify-between gap-2">
               <button
                 onClick={() => {
                   const text = `${selectedPoiDetail.nameVi}, ${selectedPoiDetail.city}`;
                   if (navigator.clipboard) navigator.clipboard.writeText(text);
                   showToast(`🚕 Copiado para Grab: "${text}"`);
                 }}
-                className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
               >
-                <Copy className="w-3.5 h-3.5 text-amber-400" />
+                <Copy className="w-3.5 h-3.5 text-amber-600" />
                 <span>Copiar para Grab</span>
               </button>
 
@@ -1253,7 +1250,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                     setSelectedPoiDetail(null);
                     showToast(`✓ "${selectedPoiDetail.nameEs}" añadido al Día ${day.dayNumber}`);
                   }}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-md shadow-amber-500/20"
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-xs"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Añadir al Día {day.dayNumber}</span>
@@ -1268,24 +1265,24 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
       {isInspirationModalOpen && (
         <div
           onClick={() => setIsInspirationModalOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/50 backdrop-blur-xs animate-fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl animate-scale-up overflow-hidden"
+            className="bg-white border border-stone-200 rounded-3xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
           >
-            <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-white text-base">
+                <h3 className="font-bold text-stone-900 text-base">
                   Plantillas de ruta recomendadas
                 </h3>
-                <p className="text-xs text-stone-400 mt-0.5">
+                <p className="text-xs text-stone-500 mt-0.5">
                   Si deseas una estructura de referencia, puedes cargar una plantilla clásica.
                 </p>
               </div>
               <button
                 onClick={() => setIsInspirationModalOpen(false)}
-                className="p-1 rounded-xl text-stone-400 hover:text-white transition cursor-pointer"
+                className="p-1.5 rounded-xl text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1295,23 +1292,23 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
               {DEFAULT_ITINERARIES.map((template) => (
                 <div
                   key={template.id}
-                  className="bg-stone-950/70 border border-stone-800 rounded-2xl p-4 space-y-2 hover:border-amber-500/40 transition"
+                  className="bg-stone-50 border border-stone-200/80 rounded-2xl p-4 space-y-2 hover:border-amber-400 transition"
                 >
                   <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-white text-sm">
+                    <h4 className="font-bold text-stone-900 text-sm">
                       {template.title}
                     </h4>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono font-bold">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-mono font-bold">
                       {template.days.length} días
                     </span>
                   </div>
-                  <p className="text-xs text-stone-400 leading-relaxed">
+                  <p className="text-xs text-stone-600 leading-relaxed">
                     {template.description}
                   </p>
-                  <div className="text-[11px] text-stone-400 flex items-center gap-1.5 flex-wrap">
+                  <div className="text-[11px] text-stone-500 flex items-center gap-1.5 flex-wrap">
                     <span>Ciudades:</span>
                     {template.destinations.map((city, idx) => (
-                      <span key={idx} className="bg-stone-800 px-1.5 py-0.2 rounded text-stone-300 text-[10px]">
+                      <span key={idx} className="bg-white border border-stone-200 px-1.5 py-0.5 rounded-md text-stone-700 text-[10px] font-medium">
                         {city}
                       </span>
                     ))}
@@ -1338,7 +1335,7 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
                           showToast(`✓ Plantilla "${template.title}" cargada.`);
                         }
                       }}
-                      className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition cursor-pointer active:scale-95 shadow-sm"
+                      className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition cursor-pointer active:scale-95 shadow-2xs"
                     >
                       Cargar esta plantilla
                     </button>
@@ -1354,13 +1351,13 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
       {isEditTripTitleOpen && (
         <div
           onClick={() => setIsEditTripTitleOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/50 backdrop-blur-xs animate-fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl animate-scale-up"
+            className="bg-white border border-stone-200 rounded-3xl w-full max-w-sm p-5 shadow-2xl"
           >
-            <h3 className="font-bold text-white text-base mb-3">
+            <h3 className="font-bold text-stone-900 text-base mb-3">
               Nombre de tu viaje
             </h3>
             <input
@@ -1368,12 +1365,12 @@ export const TripPlanner: React.FC<TripPlannerProps> = ({
               value={newTripTitleInput}
               onChange={(e) => setNewTripTitleInput(e.target.value)}
               placeholder="Ej: Vietnam 2026 con Amigos"
-              className="w-full px-3.5 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-sm text-white focus:outline-none focus:border-amber-400"
+              className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-sm text-stone-900 focus:outline-none focus:border-amber-500 focus:bg-white"
             />
             <div className="flex items-center justify-end gap-2 mt-4">
               <button
                 onClick={() => setIsEditTripTitleOpen(false)}
-                className="px-3 py-1.5 rounded-xl text-xs text-stone-400 hover:text-white transition cursor-pointer"
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-900 transition cursor-pointer"
               >
                 Cancelar
               </button>

@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Compass,
   Headphones,
   Volume2,
-  VolumeX,
   Play,
   Pause,
   Square,
   RotateCcw,
+  RotateCw,
+  SkipBack,
+  SkipForward,
   Sparkles,
   MapPin,
-  Clock,
   Camera,
   AlertTriangle,
   Utensils,
@@ -19,30 +20,20 @@ import {
   Bookmark,
   BookmarkCheck,
   Share2,
-  ChevronRight,
   Search,
   Navigation,
-  CheckCircle2,
   Sparkle,
   Eye,
   Info,
   Layers,
-  ArrowRight,
-  History,
-  Trash2,
   RefreshCw,
-  BookOpen,
-  ExternalLink,
   Loader2,
+  Map as MapIcon,
+  ListMusic,
+  Repeat,
 } from 'lucide-react';
-import { FreeTourData, FreeTourStop, PointOfInterest, TourChatMessage } from '../types';
-import { POINTS_OF_INTEREST } from '../data/pois';
+import { FreeTourData, PointOfInterest, TourChatMessage } from '../types';
 import { CURATED_CLIENT_TOURS, findClientCuratedTour } from '../data/curatedTours';
-import {
-  VibeType,
-  VIBE_CONFIGS,
-  adaptTourForVibe,
-} from '../utils/tourVibeAdapter';
 import {
   getSavedFreeTours,
   saveFreeTour,
@@ -57,14 +48,13 @@ import {
   seekSpeech,
   subscribeSpeechState,
   speakVietnameseNatural,
-  preprocessTextForNaturalSpeech,
   GlobalSpeakingState,
 } from '../utils/speechSynthesis';
 import { AudioWaveIndicator } from './AudioWaveIndicator';
+import { InteractiveOpenStreetMap } from './InteractiveOpenStreetMap';
 import {
   getSmartGeolocation,
   createSimulatedResult,
-  VIETNAM_SIMULATION_PRESETS,
   SmartGeoResult,
   SmartGeoError,
 } from '../utils/geolocation';
@@ -75,13 +65,21 @@ interface FreeTourGuideProps {
   isOnline: boolean;
 }
 
-const VIBE_OPTIONS = Object.values(VIBE_CONFIGS);
+interface TourAudioTrack {
+  index: number; // 0 = Intro, 1..N = Stop 1..N
+  id: string;
+  label: string;
+  shortLabel: string;
+  text: string;
+  stopIndex: number | null; // null for Intro, 0..N-1 for stops
+}
 
 const POPULAR_CITIES = [
   {
     name: 'Hà Nội',
+    center: { lat: 21.0285, lng: 105.8542 },
     samplePois: [
-      'Templo de la Literatura',
+      'Templo de la Literatura (Văn Miếu - Quốc Tử Giám)',
       'Lago Hoàn Kiếm y Templo Ngọc Sơn',
       'Calle del Tren (Train Street)',
       'Catedral de San José',
@@ -90,6 +88,7 @@ const POPULAR_CITIES = [
   },
   {
     name: 'Huế',
+    center: { lat: 16.4637, lng: 107.5909 },
     samplePois: [
       'Ciudadela Imperial de Huế (Đại Nội)',
       'Pagoda Thiên Mụ',
@@ -98,6 +97,7 @@ const POPULAR_CITIES = [
   },
   {
     name: 'Hội An',
+    center: { lat: 15.8801, lng: 108.3380 },
     samplePois: [
       'Puente Japonés Cubierto (Chùa Cầu)',
       'Casa Antigua Tan Ky',
@@ -106,6 +106,7 @@ const POPULAR_CITIES = [
   },
   {
     name: 'Đà Nẵng',
+    center: { lat: 16.0544, lng: 108.2022 },
     samplePois: [
       'Puente del Dragón (Cầu Rồng)',
       'Montañas de Mármol (Ngũ Hành Sơn)',
@@ -114,6 +115,7 @@ const POPULAR_CITIES = [
   },
   {
     name: 'Ninh Bình',
+    center: { lat: 20.2506, lng: 105.9745 },
     samplePois: [
       'Complejo Paisajístico de Tràng An',
       'Cueva y Mirador de Hang Múa',
@@ -122,10 +124,18 @@ const POPULAR_CITIES = [
   },
   {
     name: 'TP. Hồ Chí Minh',
+    center: { lat: 10.7769, lng: 106.7009 },
     samplePois: [
       'Túneles de Củ Chi',
       'Mercado Bến Thành',
       'Basílica de Notre-Dame y Correos',
+    ],
+  },
+  {
+    name: 'Quảng Ninh / Hạ Long',
+    center: { lat: 20.9101, lng: 107.1839 },
+    samplePois: [
+      'Bahía de Hạ Long (Vịnh Hạ Long)',
     ],
   },
 ];
@@ -135,27 +145,29 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
   onClearInitialPoi,
   isOnline,
 }) => {
-  // Input state (starts in blank by default)
+  // Input state
   const [placeQuery, setPlaceQuery] = useState<string>(initialPoi?.nameEs || '');
   const [selectedCity, setSelectedCity] = useState<string>(initialPoi?.city || 'Hà Nội');
-  const [selectedVibe, setSelectedVibe] = useState<VibeType>('curiosidades');
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
   const [gpsNotice, setGpsNotice] = useState<string | null>(null);
   const [showGpsHelper, setShowGpsHelper] = useState<boolean>(false);
   const [gpsError, setGpsError] = useState<SmartGeoError | null>(null);
   const [gpsDetails, setGpsDetails] = useState<SmartGeoResult | null>(null);
 
-  // Active tour state - start empty so user chooses or searches
+  // Active tour state — preserves the monument's authentic script without overwriting
   const [activeTour, setActiveTour] = useState<FreeTourData | null>(() => {
     if (initialPoi) {
       const match = findClientCuratedTour(initialPoi.nameEs, initialPoi.city);
-      if (match) return adaptTourForVibe(match, 'curiosidades');
+      if (match) return JSON.parse(JSON.stringify(match));
     }
     return null;
   });
   const [isLoadingTour, setIsLoadingTour] = useState<boolean>(false);
   const [tourError, setTourError] = useState<string | null>(null);
   const [activeStopIndex, setActiveStopIndex] = useState<number>(0);
+  const [activeTrackIndex, setActiveTrackIndex] = useState<number>(0); // 0 = Intro, 1..N = Stops
+  const [autoAdvance, setAutoAdvance] = useState<boolean>(true);
+  const [showRouteMap, setShowRouteMap] = useState<boolean>(true);
 
   // Saved tours
   const [savedTours, setSavedTours] = useState<FreeTourData[]>(getSavedFreeTours);
@@ -176,8 +188,11 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     progress: 0,
   });
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
-  const [speakingTextTitle, setSpeakingTextTitle] = useState<string>('');
   const lastAudioClickTimeRef = useRef<number>(0);
+  const autoAdvanceRef = useRef<boolean>(autoAdvance);
+  useEffect(() => {
+    autoAdvanceRef.current = autoAdvance;
+  }, [autoAdvance]);
 
   useEffect(() => {
     return subscribeSpeechState((st) => {
@@ -198,12 +213,13 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     {
       id: 'welcome',
       role: 'assistant',
-      text: `¡Xin chào! Soy Nguyễn, tu guía local aquí en ${CURATED_CLIENT_TOURS[0].placeName}. Disfruta de la audioguía y si tienes cualquier duda sobre lo que estás viendo, pregúntame aquí en directo.`,
+      text: `¡Xin chào! Soy Nguyễn, tu guía local. Elige un monumento para comenzar la audioguía y pregúntame cualquier duda en directo; también puedes escuchar mis respuestas en voz alta.`,
       timestamp: Date.now(),
     },
   ]);
   const [chatInput, setChatInput] = useState<string>('');
   const [isSendingChat, setIsSendingChat] = useState<boolean>(false);
+  const [autoSpeakChatReplies, setAutoSpeakChatReplies] = useState<boolean>(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const showToast = useCallback((msg: string) => {
@@ -211,23 +227,38 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   }, []);
 
-  // Handle switching tour vibe with instant active tour adaptation
-  const handleSelectVibe = useCallback(
-    (newVibe: VibeType) => {
-      setSelectedVibe(newVibe);
-      if (activeTour) {
-        stopAllSpeech();
-        setSpeakingTextTitle('');
+  // Build ordered playlist of tracks for the active tour (0: Intro, 1..N: Stops)
+  const tourTracks = useMemo<TourAudioTrack[]>(() => {
+    if (!activeTour) return [];
+    const list: TourAudioTrack[] = [
+      {
+        index: 0,
+        id: `tour-main-${activeTour.placeName}`,
+        label: `Introducción: ${activeTour.placeName}`,
+        shortLabel: 'Introducción',
+        text: activeTour.audioGuideScript,
+        stopIndex: null,
+      },
+    ];
+    activeTour.stops.forEach((stop, idx) => {
+      list.push({
+        index: idx + 1,
+        id: `tour-stop-${stop.number}-${activeTour.placeName}`,
+        label: `Parada ${stop.number}: ${stop.title}`,
+        shortLabel: `Parada ${stop.number}`,
+        text: `Parada ${stop.number}: ${stop.title}. Qué mirar con los ojos: ${stop.whatToLookAt}. Historia y secretos: ${stop.story}. ${
+          stop.insiderTip ? `Consejo de guía local: ${stop.insiderTip}` : ''
+        }`,
+        stopIndex: idx,
+      });
+    });
+    return list;
+  }, [activeTour]);
 
-        const baseMatch = findClientCuratedTour(activeTour.placeName, activeTour.cityName);
-        const adapted = adaptTourForVibe(baseMatch || activeTour, newVibe);
-        setActiveTour(adapted);
-        setActiveStopIndex(0);
-        showToast(`Enfoque ${VIBE_CONFIGS[newVibe].icon} ${VIBE_CONFIGS[newVibe].label} aplicado`);
-      }
-    },
-    [activeTour, showToast]
-  );
+  const tourTracksRef = useRef<TourAudioTrack[]>(tourTracks);
+  useEffect(() => {
+    tourTracksRef.current = tourTracks;
+  }, [tourTracks]);
 
   // Stop any playing speech safely
   const stopAudio = useCallback(() => {
@@ -235,20 +266,28 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     if (now - lastAudioClickTimeRef.current < 150) return;
     lastAudioClickTimeRef.current = now;
     stopAllSpeech();
-    setSpeakingTextTitle('');
   }, []);
 
-  // Natural Voice Audioguide playback
-  const playAudio = useCallback(
-    (text: string, title: string, customId?: string) => {
-      const now = Date.now();
-      if (now - lastAudioClickTimeRef.current < 200) return;
-      lastAudioClickTimeRef.current = now;
+  // Play a specific track by index with automatic sequential queue support
+  const playTrackByIndex = useCallback(
+    (trackIdx: number, isAutoTriggered = false) => {
+      const tracks = tourTracksRef.current;
+      if (!tracks || trackIdx < 0 || trackIdx >= tracks.length) return;
 
-      const playId = customId || `tour-narrative-${activeTour?.placeName || 'audio'}`;
+      if (!isAutoTriggered) {
+        const now = Date.now();
+        if (now - lastAudioClickTimeRef.current < 200) return;
+        lastAudioClickTimeRef.current = now;
+      }
 
-      // Toggle pause/resume if this exact item is active
-      if (speechState.isSpeaking && speechState.speakingId === playId) {
+      const track = tracks[trackIdx];
+      setActiveTrackIndex(trackIdx);
+      if (track.stopIndex !== null) {
+        setActiveStopIndex(track.stopIndex);
+      }
+
+      // Toggle pause/resume if this exact track is already active (and clicked manually)
+      if (!isAutoTriggered && speechState.isSpeaking && speechState.speakingId === track.id) {
         if (speechState.isPaused) {
           resumeSpeech();
         } else {
@@ -257,31 +296,71 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
         return;
       }
 
-      setSpeakingTextTitle(title);
+      playNaturalSpeech({
+        text: track.text,
+        lang: 'es-ES',
+        speed: playbackSpeed,
+        id: track.id,
+        onStart: () => {
+          setActiveTrackIndex(trackIdx);
+          if (track.stopIndex !== null) {
+            setActiveStopIndex(track.stopIndex);
+          }
+        },
+        onEnd: () => {
+          // If auto-advance is enabled, automatically launch the next track in the monument tour
+          const currentTracks = tourTracksRef.current;
+          if (autoAdvanceRef.current && trackIdx + 1 < currentTracks.length) {
+            const nextTrack = currentTracks[trackIdx + 1];
+            showToast(`Reproduciendo siguiente: ${nextTrack.shortLabel}`);
+            setTimeout(() => {
+              playTrackByIndex(trackIdx + 1, true);
+            }, 450);
+          }
+        },
+      });
+    },
+    [playbackSpeed, showToast, speechState.isPaused, speechState.isSpeaking, speechState.speakingId]
+  );
+
+  // Play any standalone text (e.g. Guía Nguyễn chat messages)
+  const playCustomAudio = useCallback(
+    (text: string, customId: string) => {
+      const now = Date.now();
+      if (now - lastAudioClickTimeRef.current < 200) return;
+      lastAudioClickTimeRef.current = now;
+
+      if (speechState.isSpeaking && speechState.speakingId === customId) {
+        if (speechState.isPaused) {
+          resumeSpeech();
+        } else {
+          pauseSpeech();
+        }
+        return;
+      }
+
       playNaturalSpeech({
         text,
         lang: 'es-ES',
         speed: playbackSpeed,
-        id: playId,
-        onStart: () => {
-          setSpeakingTextTitle(title);
-        },
-        onEnd: () => {
-          setSpeakingTextTitle('');
-        },
-        onError: () => {
-          setSpeakingTextTitle('');
-        },
+        id: customId,
       });
     },
-    [activeTour?.placeName, playbackSpeed, speechState.isPaused, speechState.isSpeaking, speechState.speakingId]
+    [playbackSpeed, speechState.isPaused, speechState.isSpeaking, speechState.speakingId]
   );
 
   const toggleSpeed = () => {
-    const nextSpeed = playbackSpeed === 1.0 ? 1.2 : playbackSpeed === 1.2 ? 1.5 : playbackSpeed === 1.5 ? 0.9 : 1.0;
+    const nextSpeed =
+      playbackSpeed === 1.0 ? 1.2 : playbackSpeed === 1.2 ? 1.5 : playbackSpeed === 1.5 ? 0.9 : 1.0;
     setPlaybackSpeed(nextSpeed);
     setSpeechPlaybackRate(nextSpeed);
     showToast(`Velocidad de narración: ${nextSpeed}x`);
+  };
+
+  const handleSkipSeconds = (deltaSeconds: number) => {
+    if (!speechState.isSpeaking && !speechState.isPaused) return;
+    const target = Math.max(0, Math.min(speechState.duration || 120, speechState.currentTime + deltaSeconds));
+    seekSpeech(target);
   };
 
   // Pronounce Vietnamese term using high-definition natural engine
@@ -289,77 +368,93 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     speakVietnameseNatural(text, `tour-vi-${text.slice(0, 20)}`);
   };
 
-  // Helper to construct a reliable fallback tour client-side
+  // Helper to construct a contextual fallback tour client-side ONLY when offline and searching an unlisted monument
   const createClientFallbackTour = (place: string, city: string): FreeTourData => {
+    const cityMeta = POPULAR_CITIES.find((c) => c.name === city) || POPULAR_CITIES[0];
+    const baseLat = cityMeta.center.lat;
+    const baseLng = cityMeta.center.lng;
+
     return {
       placeName: place,
       cityName: city || 'Vietnam',
       vietnameseName: place,
-      tagline: `Un viaje fascinante por la memoria, la arquitectura y los secretos de ${place}.`,
+      centerLat: baseLat,
+      centerLng: baseLng,
+      tagline: `Recorrido cultural, arquitectura tradicional y memoria histórica de ${place} en ${city}.`,
       durationMinutes: 35,
-      audioGuideScript: `¡Xin chào y bienvenido a ${place}! Te encuentras en uno de los enclaves más especiales de ${city}. Al observar a tu alrededor, notarás el equilibrio armónico entre la tradición vietnamita, las influencias orientales y el latido cotidiano de sus habitantes.\n\nTómate un momento para respirar el ambiente local. A lo largo de esta audioguía exploraremos las tres paradas fundamentales para comprender su historia, el simbolismo de sus detalles y las leyendas que han perdurado a través de los siglos.`,
+      audioGuideScript: `¡Xin chào y bienvenido a ${place}! Te encuentras en uno de los enclaves patrimoniales de ${city}. Al observar tu entorno, notarás cómo la arquitectura tradicional vietnamita busca siempre la armonía geomántica entre la orientación del viento, la presencia del agua y las maderas nobles talladas por los antiguos gremios de artesanos.\n\nA lo largo de este recorrido guiado exploraremos sus tres paradas principales: desde el pórtico ceremonial de acceso y el significado de sus guardianes protectores, hasta el santuario interior y el patio de calma donde los habitantes locales depositan sus ofrendas de flores de loto e incienso.`,
       stops: [
         {
           number: 1,
-          title: `Entrada y primer vistazo a ${place}`,
-          whatToLookAt: 'La fachada principal, los aleros del tejado y la orientación tradicional del edificio.',
-          story: 'Las construcciones vietnamitas tradicionales se erigen respetando la energía del entorno, buscando siempre la armonía entre el viento y el agua.',
-          insiderTip: 'Observa la madera y los colores decorativos antes de que lleguen grupos grandes.',
+          title: `Pórtico Principal y Acceso a ${place}`,
+          whatToLookAt: 'La puerta de tres vanos (Tam Quan), los aleros curvados y el umbral elevado de madera.',
+          story: 'Las puertas tradicionales vietnamitas cuentan con tres accesos que simbolizan las tres visiones budistas de la existencia, obligando a dar un paso por encima del umbral en señal de respeto.',
+          insiderTip: 'Nunca pises directamente sobre el listón de madera inferior de la puerta al cruzar.',
+          lat: baseLat + 0.0004,
+          lng: baseLng - 0.0004,
         },
         {
           number: 2,
-          title: 'Detalles ornamentales y simbolismo sagrado',
-          whatToLookAt: 'Las figuras de dragones, fénix, carpas o lotos tallados en los aleros o altares.',
-          story: 'En la mitología vietnamita, el dragón representa la fuerza del cielo y la carpa simboliza la perseverancia del estudiante que nunca se rinde.',
-          insiderTip: 'Los artesanos locales solían emplear fragmentos de cerámica vidriada reciclada para dar vida a los mosaicos más brillantes.',
+          title: `Santuario Central y Simbolismo de ${place}`,
+          whatToLookAt: 'Las tallas de dragones, fénix y tortugas junto a las bandejas de ofrendas impares.',
+          story: 'Los artesanos empleaban madera de hierro (gỗ lim) y laca natural roja y dorada para preservar las columnas frente a la humedad monzónica durante siglos.',
+          insiderTip: 'Observa las espirales de incienso colgadas del techo, que arden lentamente durante semanas.',
+          lat: baseLat,
+          lng: baseLng,
         },
         {
           number: 3,
-          title: 'Patio interior y perspectiva de calma',
-          whatToLookAt: 'El patio interior, los bonsáis centenarios y las ofrendas frescas de frutas y flores.',
-          story: 'Los patios tradicionales actúan como pulmones de luz y sosiego, aislando el bullicio exterior de las motocicletas.',
-          insiderTip: 'Aprovecha este rincón tranquilo para contemplar los tejados superpuestos.',
+          title: 'Jardín Interior, Estelas y Rincón de Calma',
+          whatToLookAt: 'Los árboles centenarios, los bonsáis modelados sobre roca (Hòn Non Bộ) y las campanas de bronce.',
+          story: 'Los patios interiores reproducen en miniatura las montañas y los mares de Vietnam para atraer la serenidad espiritual.',
+          insiderTip: 'Es el mejor punto del recinto para disfrutar de la sombra antes de salir de nuevo al bullicio urbano.',
+          lat: baseLat - 0.0004,
+          lng: baseLng + 0.0004,
         },
       ],
       photoSpot: {
-        location: `Frente a la perspectiva principal de ${place}.`,
-        bestLight: 'A media tarde (16:00 - 17:30) con luz cálida.',
-        instruction: 'Busca un ángulo que enmarque los aleros del tejado con el cielo o vegetación.',
+        location: `En diagonal frente a la fachada principal de ${place}.`,
+        bestLight: 'A media mañana (08:30 - 10:00) o durante la hora dorada vespertina.',
+        instruction: 'Encuadra los tejados curvos con la vegetación tropical en primer plano.',
       },
       culturalEtiquette: {
-        dressCode: 'Hombros y rodillas cubiertos. Retirar gorras y gafas de sol en altares o templos.',
-        whatNotToDo: 'Evitar hablar en voz alta frente a los altares de culto o señalar con un solo dedo.',
-        scamWarning: 'Declina con cortesía si alguien te ofrece varitas de incienso no solicitadas diciendo "Không, cảm ơn".',
+        dressCode: 'Hombros y rodillas cubiertos. Retirar gorras y gafas de sol al entrar a los salones interiores.',
+        whatNotToDo: 'Evitar hablar en tono alto frente a los altares o señalar las estatuas con un solo dedo.',
+        scamWarning: 'Declina con una sonrisa ("Không, cảm ơn") si alguien intenta entregarte incienso o amuletos en la calle exterior.',
       },
       streetFoodReward: {
-        dishNameVi: 'Cà Phê Sữa Đá / Trà Chanh',
-        dishNameEs: 'Café vietnamita con leche condensada y hielo, o té verde helado con limón',
-        whereToFind: 'En las cafeterías o puestos con taburetes bajos de las calles contiguas.',
-        priceEstimate: '20.000 ₫ – 35.000 ₫',
+        dishNameVi: 'Cà Phê Sữa Đá & Bánh Mì Giòn',
+        dishNameEs: 'Café vietnamita helado con leche condensada y bocadillo crujiente tradicional',
+        whereToFind: `En las cafeterías locales de las calles adyacentes a ${place}.`,
+        priceEstimate: '25.000 ₫ – 45.000 ₫',
       },
       suggestedQuestions: [
-        `¿Cuál es la leyenda más fascinante de ${place}?`,
-        '¿Qué significado tienen los dragones y fénix en la decoración?',
-        '¿Qué plato típico de esta zona recomiendas probar hoy?',
+        `¿Cuál es la historia principal de ${place}?`,
+        '¿Qué significan los cuatro animales sagrados (Long, Lân, Quy, Phụng) en Vietnam?',
+        `¿Qué especialidad gastronómica de ${city} recomiendas probar cerca de aquí?`,
       ],
     };
   };
 
-  // Main tour loader & generator
+  // Main tour loader & generator — loads the unique deep script for each monument
   const handleGenerateTour = useCallback(
     async (customPlace?: string, customCity?: string) => {
-      const targetPlace = (customPlace || placeQuery).trim();
-      const targetCity = (customCity || selectedCity).trim();
+      const targetPlace = (customPlace ?? placeQuery).trim();
+      const targetCity = (customCity ?? selectedCity).trim();
 
       if (!targetPlace) {
-        setTourError('Por favor indica el lugar o monumento donde estás.');
+        setTourError('Por favor selecciona o escribe el monumento que deseas escuchar.');
         return;
       }
 
-      // Fast check for test words or gibberish
-      const INVALID_TEST_WORDS = ['test', 'prueba', 'asdf', '123', 'xxx', 'foo', 'bar', 'temp', 'hola', 'abc', 'qwerty', 'testing', 'monumento', 'nada', 'none'];
+      const INVALID_TEST_WORDS = [
+        'test', 'prueba', 'asdf', '123', 'xxx', 'foo', 'bar', 'temp',
+        'hola', 'abc', 'qwerty', 'testing', 'monumento', 'nada', 'none',
+      ];
       if (targetPlace.length < 3 || INVALID_TEST_WORDS.includes(targetPlace.toLowerCase())) {
-        setTourError(`No se encontró «${targetPlace}» como monumento o templo en Vietnam. Elige una de las sugerencias o escribe un lugar auténtico.`);
+        setTourError(
+          `No se encontró «${targetPlace}» como monumento o templo en Vietnam. Elige uno de los monumentos verificados o escribe un lugar real.`
+        );
         setIsLoadingTour(false);
         return;
       }
@@ -368,32 +463,33 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
       setIsLoadingTour(true);
       setTourError(null);
 
-      // 1. Instant check against curated tours for immediate 0-latency experience
+      // 1. Instant check against our 21 verified curated tours (0-latency, 100% unique deep script)
       const curatedMatch = findClientCuratedTour(targetPlace, targetCity);
       if (curatedMatch) {
-        const adapted = adaptTourForVibe(curatedMatch, selectedVibe);
-        setActiveTour(adapted);
+        const cleanCopy: FreeTourData = JSON.parse(JSON.stringify(curatedMatch));
+        setActiveTour(cleanCopy);
         setActiveStopIndex(0);
-        setPlaceQuery(curatedMatch.placeName);
-        setSelectedCity(curatedMatch.cityName);
+        setActiveTrackIndex(0);
+        setPlaceQuery(cleanCopy.placeName);
+        setSelectedCity(cleanCopy.cityName);
         setChatMessages([
           {
             id: `welcome-${Date.now()}`,
             role: 'assistant',
-            text: `¡Xin chào! Soy Nguyễn, tu guía local aquí en ${curatedMatch.placeName}. Tienes la audioguía con enfoque "${VIBE_CONFIGS[selectedVibe].label}" lista. ¡Pregúntame cualquier cosa que veas a tu alrededor!`,
+            text: `¡Xin chào! Soy Nguyễn, tu guía local en ${cleanCopy.placeName}. Tienes lista la audioguía completa con ${cleanCopy.stops.length} paradas geolocalizadas. ¡Pregúntame cualquier curiosidad que veas a tu alrededor!`,
             timestamp: Date.now(),
           },
         ]);
         setIsLoadingTour(false);
-        showToast(`¡Tour de ${curatedMatch.placeName} listo!`);
+        showToast(`Audioguía cargada: ${cleanCopy.placeName}`);
         return;
       }
 
-      // 2. Fetch from backend API if online
+      // 2. Fetch from backend AI generator if it's a custom monument not in the curated list
       if (isOnline) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 9000);
+          const timeoutId = setTimeout(() => controller.abort(), 9500);
 
           const response = await fetch('/api/free-tour', {
             method: 'POST',
@@ -401,7 +497,6 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
             body: JSON.stringify({
               placeName: targetPlace,
               cityName: targetCity,
-              userVibe: selectedVibe,
             }),
             signal: controller.signal,
           });
@@ -413,19 +508,19 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
           if (response.ok && data && data.success && data.tour) {
             setActiveTour(data.tour);
             setActiveStopIndex(0);
+            setActiveTrackIndex(0);
             setChatMessages([
               {
                 id: `welcome-${Date.now()}`,
                 role: 'assistant',
-                text: `¡Xin chào! Soy Nguyễn, tu guía local en ${data.tour.placeName}. Disfruta del recorrido y pregúntame lo que necesites.`,
+                text: `¡Xin chào! Soy Nguyễn, tu guía local en ${data.tour.placeName}. Disfruta del recorrido paso a paso y pregúntame lo que necesites.`,
                 timestamp: Date.now(),
               },
             ]);
             setIsLoadingTour(false);
-            showToast(`¡Free Tour (${VIBE_CONFIGS[selectedVibe].label}) generado!`);
+            showToast(`Audioguía de ${data.tour.placeName} generada`);
             return;
           } else if (data && data.error) {
-            // Server explicitly rejected as invalid or unknown place
             setTourError(data.error);
             setIsLoadingTour(false);
             return;
@@ -435,31 +530,26 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
         }
       }
 
-      // 3. Robust client-side fallback ONLY for legitimate named places if offline
-      if (targetPlace.length >= 3 && !INVALID_TEST_WORDS.includes(targetPlace.toLowerCase())) {
-        const fallbackTour = createClientFallbackTour(targetPlace, targetCity);
-        const adaptedFallback = adaptTourForVibe(fallbackTour, selectedVibe);
-        setActiveTour(adaptedFallback);
-        setActiveStopIndex(0);
-        setChatMessages([
-          {
-            id: `welcome-fb-${Date.now()}`,
-            role: 'assistant',
-            text: `¡Xin chào! Soy Nguyễn, tu guía local en ${fallbackTour.placeName}. He preparado esta audioguía para ti. ¡Pregúntame cualquier duda que tengas!`,
-            timestamp: Date.now(),
-          },
-        ]);
-        setIsLoadingTour(false);
-        showToast(`¡Tour cargado para ${targetPlace}!`);
-      } else {
-        setTourError(`No encontramos «${targetPlace}» en Vietnam. Elige una de las sugerencias.`);
-        setIsLoadingTour(false);
-      }
+      // 3. Offline fallback for uncatalogued places
+      const fallbackTour = createClientFallbackTour(targetPlace, targetCity);
+      setActiveTour(fallbackTour);
+      setActiveStopIndex(0);
+      setActiveTrackIndex(0);
+      setChatMessages([
+        {
+          id: `welcome-fb-${Date.now()}`,
+          role: 'assistant',
+          text: `¡Xin chào! Soy Nguyễn, tu guía local en ${fallbackTour.placeName}. He preparado esta audioguía offline para ti.`,
+          timestamp: Date.now(),
+        },
+      ]);
+      setIsLoadingTour(false);
+      showToast(`Audioguía cargada para ${targetPlace}`);
     },
-    [placeQuery, selectedCity, selectedVibe, isOnline, stopAudio, showToast]
+    [placeQuery, selectedCity, isOnline, stopAudio, showToast]
   );
 
-  // When opened with an initial POI, immediately start tour
+  // When opened with an initial POI from Map/Itinerary, immediately load its tour
   useEffect(() => {
     if (initialPoi) {
       setPlaceQuery(initialPoi.nameEs);
@@ -478,17 +568,17 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     };
   }, [stopAudio]);
 
-  // Scroll chat messages container internally when new messages arrive (without moving window position)
+  // Scroll chat messages container internally when new messages arrive
   useEffect(() => {
     if (chatContainerRef.current && chatMessages.length > 1) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [chatMessages]);
 
-  // Smart GPS detection with two-tier fallback and simulated testing
+  // Smart GPS detection
   const handleDetectGps = async () => {
     setIsLocatingGps(true);
-    setGpsNotice('Buscando satélites GPS y redes...');
+    setGpsNotice('Buscando satélites GPS y monumento más cercano...');
     setGpsError(null);
     setGpsDetails(null);
 
@@ -503,13 +593,15 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
 
       if (isInsideVietnam) {
         setGpsNotice(
-          `🎯 ¡Ubicación GPS en Vietnam! Estás a ~${
-            distanceToClosestPoiKm < 1 ? Math.round(distanceToClosestPoiKm * 1000) + ' m' : distanceToClosestPoiKm + ' km'
-          } de ${closestPoi.nameEs}. Cargando audioguía...`
+          `Ubicación GPS en Vietnam: estás a ~${
+            distanceToClosestPoiKm < 1
+              ? Math.round(distanceToClosestPoiKm * 1000) + ' m'
+              : distanceToClosestPoiKm + ' km'
+          } de ${closestPoi.nameEs}.`
         );
       } else {
         setGpsNotice(
-          `📍 Señal GPS detectada (${result.data.coords.latitude.toFixed(2)}, ${result.data.coords.longitude.toFixed(2)} - a ~${distanceToVietnamKm.toLocaleString()} km de Vietnam). Como estás preparando el viaje desde fuera, te hemos situado en ${closestPoi.nameEs} (${closestPoi.city}) para explorar su Free Tour.`
+          `Señal GPS detectada a ~${distanceToVietnamKm.toLocaleString()} km de Vietnam. Te hemos situado en ${closestPoi.nameEs} (${closestPoi.city}) para explorar su audioguía.`
         );
         setShowGpsHelper(true);
       }
@@ -528,7 +620,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     setShowGpsHelper(false);
     setPlaceQuery(sim.closestPoi.nameEs);
     setSelectedCity(sim.closestPoi.city);
-    setGpsNotice(`🧭 Ubicación situada en: ${sim.simulatedName}. ¡Audioguía lista!`);
+    setGpsNotice(`Ubicación situada en ${sim.simulatedName}.`);
     handleGenerateTour(sim.closestPoi.nameEs, sim.closestPoi.city);
     showToast(`Posicionado en ${sim.simulatedName}`);
   };
@@ -547,7 +639,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     } else {
       const updated = saveFreeTour(activeTour);
       setSavedTours(updated);
-      showToast('¡Tour guardado! Puedes acceder a él 100% sin conexión.');
+      showToast('Tour guardado para acceso 100% sin conexión.');
     }
   };
 
@@ -555,7 +647,59 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
     ? savedTours.some((t) => t.placeName.toLowerCase() === activeTour.placeName.toLowerCase())
     : false;
 
-  // Ask tour guide a question (Live Q&A with offline intelligence)
+  // Build map POIs and routePolyline from the active tour's stops
+  const tourMapData = useMemo(() => {
+    if (!activeTour) return null;
+    const cityFallback =
+      POPULAR_CITIES.find((c) => c.name === activeTour.cityName)?.center || {
+        lat: 21.0285,
+        lng: 105.8542,
+      };
+    const centerLat = activeTour.centerLat || cityFallback.lat;
+    const centerLng = activeTour.centerLng || cityFallback.lng;
+
+    const stopPois: PointOfInterest[] = activeTour.stops.map((s, idx) => {
+      const lat = s.lat ?? centerLat + (idx - 1) * 0.00045;
+      const lng = s.lng ?? centerLng + (idx - 1) * 0.00045;
+      return {
+        id: `tour-stop-poi-${s.number}`,
+        regionId: 'tour-active',
+        nameVi: `${s.number}. ${s.title}`,
+        nameEs: `${s.number}. ${s.title}`,
+        category: 'Monumento',
+        city: activeTour.cityName,
+        lat,
+        lng,
+        rating: 4.9,
+        ticketVnd: 0,
+        openingHours: 'Parada del recorrido',
+        bestTime: s.whatToLookAt,
+        description: s.story,
+        travelerTips: s.insiderTip,
+        howToGet: `Parada ${s.number} de ${activeTour.stops.length}`,
+        grabFriendly: true,
+        isIconic: idx === activeStopIndex,
+      };
+    });
+
+    const routePolyline = stopPois.map((p, idx) => ({
+      lat: p.lat,
+      lng: p.lng,
+      stopIndex: idx + 1,
+      title: activeTour.stops[idx]?.title || p.nameEs,
+    }));
+
+    const selectedStopPoi = stopPois[activeStopIndex] || stopPois[0];
+
+    return {
+      center: { lat: centerLat, lng: centerLng },
+      stopPois,
+      routePolyline,
+      selectedStopPoi,
+    };
+  }, [activeTour, activeStopIndex]);
+
+  // Ask tour guide a question (Live Q&A + voice playback support)
   const handleSendChatMessage = async (presetQuestion?: string) => {
     const questionText = (presetQuestion || chatInput).trim();
     if (!questionText || !activeTour || isSendingChat) return;
@@ -587,14 +731,23 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
         if (res.ok) {
           const data = await res.json();
           if (data && data.reply) {
+            const msgId = `guide-${Date.now()}`;
             const guideMsg: TourChatMessage = {
-              id: `guide-${Date.now()}`,
+              id: msgId,
               role: 'assistant',
               text: data.reply,
               timestamp: Date.now(),
             };
             setChatMessages((prev) => [...prev, guideMsg]);
             setIsSendingChat(false);
+            if (autoSpeakChatReplies) {
+              playNaturalSpeech({
+                text: data.reply,
+                lang: 'es-ES',
+                speed: playbackSpeed,
+                id: `chat-voice-${msgId}`,
+              });
+            }
             return;
           }
         }
@@ -603,29 +756,68 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
       }
     }
 
-    // Smart contextual reply if offline
-    let localAnswer = `¡Excelente pregunta sobre ${activeTour.placeName}! `;
+    // Smart monument-specific contextual reply if offline
+    let localAnswer = `Sobre ${activeTour.placeName}: `;
     const qLower = questionText.toLowerCase();
 
-    if (qLower.includes('leyenda') || qLower.includes('historia')) {
-      localAnswer += `La historia central de este monumento refleja la resiliencia de la cultura vietnamita. Durante siglos ha sido respetado por emperadores y monjes por igual. Si miras a los tejados, notarás cómo los artesanos usaban fragmentos de cerámica vidriada rota para crear dragones celestiales y fénix.`;
-    } else if (qLower.includes('color') || qLower.includes('amarillo') || qLower.includes('rojo')) {
-      localAnswer += `En Vietnam, el rojo simboliza la buena fortuna, la sangre vital y la alegría popular, mientras que el amarillo representa la tierra sagrada, la nobleza imperial y la prosperidad espiritual de Buda.`;
-    } else if (qLower.includes('plato') || qLower.includes('comer') || qLower.includes('comida')) {
-      localAnswer += `Te recomiendo probar ${activeTour.streetFoodReward?.dishNameVi || 'un buen Phở o Bún Chả'} en los puestos con taburetes bajos de las calles adyacentes. ¡El caldo fresco con hierbas aromáticas es insuperable!`;
+    if (qLower.includes('comida') || qLower.includes('plato') || qLower.includes('comer') || qLower.includes('probar')) {
+      localAnswer += `Al terminar la visita te recomiendo pedir ${
+        activeTour.streetFoodReward?.dishNameVi || 'Phở o Bún Chả'
+      } (${activeTour.streetFoodReward?.dishNameEs || 'especialidad local'}). Lo encontrarás en: ${
+        activeTour.streetFoodReward?.whereToFind || 'los puestos cercanos'
+      }, con un precio justo de ${activeTour.streetFoodReward?.priceEstimate || '35.000 ₫ – 55.000 ₫'}.`;
+    } else if (qLower.includes('foto') || qLower.includes('luz') || qLower.includes('hora')) {
+      localAnswer += `El mejor punto fotográfico es ${activeTour.photoSpot.location}. La luz ideal se da en este horario: ${activeTour.photoSpot.bestLight}. Truco de encuadre: ${activeTour.photoSpot.instruction}`;
+    } else if (qLower.includes('ropa') || qLower.includes('vestimenta') || qLower.includes('norma') || qLower.includes('timo')) {
+      localAnswer += `Recuerda la etiqueta del lugar: ${activeTour.culturalEtiquette.dressCode}. Evita siempre: ${
+        activeTour.culturalEtiquette.whatNotToDo
+      }. ${activeTour.culturalEtiquette.scamWarning || ''}`;
     } else {
-      localAnswer += `Aquí en ${activeTour.placeName}, los detalles que estás observando buscan la armonía entre el cielo, la tierra y el respeto a los antepasados. Tómate un minuto para contemplar el tallado de madera y respirar el aroma a incienso.`;
+      const relevantStop = activeTour.stops[activeStopIndex] || activeTour.stops[0];
+      localAnswer += `${relevantStop.story} Además, un detalle clave que pocos visitantes notan: ${relevantStop.insiderTip}`;
     }
 
+    const msgId = `guide-offline-${Date.now()}`;
     const offlineGuideMsg: TourChatMessage = {
-      id: `guide-offline-${Date.now()}`,
+      id: msgId,
       role: 'assistant',
       text: localAnswer,
       timestamp: Date.now(),
     };
     setChatMessages((prev) => [...prev, offlineGuideMsg]);
     setIsSendingChat(false);
+    if (autoSpeakChatReplies) {
+      playNaturalSpeech({
+        text: localAnswer,
+        lang: 'es-ES',
+        speed: playbackSpeed,
+        id: `chat-voice-${msgId}`,
+      });
+    }
   };
+
+  // Determine if any track from the current tour is currently active in speechSynthesis
+  const currentActiveTrack = useMemo(() => {
+    if (!activeTour || tourTracks.length === 0) return null;
+    const playingMatch = tourTracks.find((t) => t.id === speechState.speakingId);
+    if (playingMatch) return playingMatch;
+    return tourTracks[activeTrackIndex] || tourTracks[0];
+  }, [activeTour, tourTracks, speechState.speakingId, activeTrackIndex]);
+
+  const isTourAudioActive = Boolean(
+    currentActiveTrack &&
+      speechState.speakingId === currentActiveTrack.id &&
+      (speechState.isSpeaking || speechState.isLoading)
+  );
+
+  // Curated monuments for the currently selected city
+  const cityCuratedMonuments = useMemo(() => {
+    return CURATED_CLIENT_TOURS.filter(
+      (t) =>
+        t.cityName.toLowerCase().includes(selectedCity.toLowerCase()) ||
+        selectedCity.toLowerCase().includes(t.cityName.toLowerCase())
+    );
+  }, [selectedCity]);
 
   return (
     <div className="space-y-6" id="free-tour-container">
@@ -640,12 +832,12 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
         </div>
       )}
 
-      {/* Top Header & Tour Explorer Bar */}
+      {/* Top Header & Monument Explorer Bar */}
       <div className="bg-white rounded-3xl p-4 sm:p-6 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-4">
         {/* Row 1: Title & Action Buttons */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700 shrink-0">
+            <div className="w-11 h-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700 shrink-0">
               <Headphones className="w-5 h-5" />
             </div>
             <div>
@@ -653,12 +845,12 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                 Audioguía Free Tour
               </h2>
               <p className="text-xs text-stone-500 mt-0.5">
-                Narración en español, arquitectura, secretos y paradas guiadas
+                Guiones históricos verificados por monumento · Reproducción continua · Mapa de paradas
               </p>
             </div>
           </div>
 
-          {/* Right Action Buttons: GPS + Saved (vertically centered) */}
+          {/* Right Action Buttons: GPS + Saved */}
           <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
             <button
               type="button"
@@ -666,56 +858,122 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
               onClick={handleDetectGps}
               disabled={isLocatingGps}
               title="Detectar monumento más cercano mediante GPS"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 text-xs font-semibold transition active:scale-95 cursor-pointer disabled:opacity-50"
+              className="min-h-[44px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 text-xs font-semibold transition active:scale-95 cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
             >
-              <Navigation className={`w-3.5 h-3.5 ${isLocatingGps ? 'animate-spin text-amber-600' : 'text-stone-500'}`} />
+              <Navigation
+                className={`w-3.5 h-3.5 ${isLocatingGps ? 'animate-spin text-amber-600' : 'text-stone-500'}`}
+              />
               <span>{isLocatingGps ? 'Buscando...' : 'Cerca de mí'}</span>
             </button>
 
             <button
+              type="button"
               id="btn-saved-tours-toggle"
               onClick={() => setShowSavedList(!showSavedList)}
               title="Ver tours descargados para acceso sin conexión"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition active:scale-95 cursor-pointer ${
+              className={`min-h-[44px] flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition active:scale-95 cursor-pointer whitespace-nowrap shrink-0 ${
                 showSavedList
                   ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
                   : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200'
               }`}
             >
-              <Bookmark className="w-3.5 h-3.5 text-amber-500" />
-              <span>Guardados ({savedTours.length})</span>
+              <Bookmark className="w-3.5 h-3.5 text-amber-600" />
+              <span className="tabular-nums">Guardados ({savedTours.length})</span>
             </button>
           </div>
         </div>
 
-        {/* Row 2: Vibe Selector Chips, Search Controls & Suggestions */}
-        <div className="space-y-2.5">
-          {/* Vibe Selector Chips */}
+        {/* Saved Offline Tours Drawer */}
+        {showSavedList && (
+          <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-stone-800">
+                Tus Audioguías Guardadas Offline ({savedTours.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowSavedList(false)}
+                className="text-xs text-stone-500 hover:text-stone-800 font-medium"
+              >
+                Cerrar
+              </button>
+            </div>
+            {savedTours.length === 0 ? (
+              <p className="text-xs text-stone-500 py-2">
+                Aún no has guardado ninguna audioguía. Pulsa «Guardar» dentro de cualquier monumento para tenerlo disponible sin internet.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {savedTours.map((saved) => (
+                  <div
+                    key={saved.placeName}
+                    className="flex items-center justify-between gap-2 bg-white p-3 rounded-xl border border-stone-200 hover:border-amber-400 transition"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stopAudio();
+                        setActiveTour(saved);
+                        setActiveStopIndex(0);
+                        setActiveTrackIndex(0);
+                        setPlaceQuery(saved.placeName);
+                        setSelectedCity(saved.cityName);
+                        setShowSavedList(false);
+                        showToast(`Audioguía cargada: ${saved.placeName}`);
+                      }}
+                      className="text-left flex-1 min-w-0 cursor-pointer"
+                    >
+                      <div className="text-xs font-bold text-stone-900 truncate">{saved.placeName}</div>
+                      <div className="text-[11px] text-stone-500">
+                        {saved.cityName} · {saved.stops.length} paradas · {saved.durationMinutes} min
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = deleteSavedFreeTour(saved.placeName);
+                        setSavedTours(updated);
+                      }}
+                      className="p-2 text-stone-400 hover:text-red-600 transition cursor-pointer"
+                      title="Eliminar de guardados"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Row 2: City Tabs + Search Controls */}
+        <div className="space-y-3">
+          {/* City Filter Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-            <span className="text-[11px] font-semibold text-stone-400 mr-1 shrink-0">Enfoque:</span>
-            {VIBE_OPTIONS.map((vibe) => {
-              const isSelected = selectedVibe === vibe.id;
+            {POPULAR_CITIES.map((cityObj) => {
+              const isSelected = selectedCity === cityObj.name;
               return (
                 <button
-                  key={vibe.id}
+                  key={cityObj.name}
                   type="button"
-                  onClick={() => handleSelectVibe(vibe.id)}
-                  title={vibe.desc}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer shrink-0 flex items-center gap-1.5 active:scale-95 ${
+                  onClick={() => {
+                    setSelectedCity(cityObj.name);
+                  }}
+                  className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 flex items-center gap-1.5 active:scale-95 ${
                     isSelected
-                      ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
-                      : 'bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200/50'
+                      ? 'bg-stone-900 text-white shadow-xs'
+                      : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/70'
                   }`}
                 >
-                  <span>{vibe.icon}</span>
-                  <span>{vibe.label}</span>
+                  <MapPin className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{cityObj.name}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* Search bar & City Selector */}
-          <div className="pt-2 border-t border-stone-100 flex flex-col sm:flex-row gap-2">
+          {/* Search bar & Load Button */}
+          <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
@@ -728,70 +986,88 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                     handleGenerateTour();
                   }
                 }}
-                placeholder="Buscar templo o monumento"
-                className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:bg-white text-stone-900 transition-all placeholder:text-stone-400"
+                placeholder={`Buscar monumento o templo en ${selectedCity}...`}
+                className="w-full min-h-[44px] pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:bg-white text-stone-900 transition-all placeholder:text-stone-400"
               />
             </div>
 
-            <select
-              id="select-tour-city"
-              value={selectedCity}
-              onChange={(e) => setSelectedCity(e.target.value)}
-              aria-label="Seleccionar ciudad de Vietnam"
-              className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm font-medium text-stone-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shrink-0"
-            >
-              {POPULAR_CITIES.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-              <option value="Vietnam">Otra ciudad de Vietnam</option>
-            </select>
-          </div>
-
-          {/* Quick suggestions for active city */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {POPULAR_CITIES.find((c) => c.name === selectedCity)?.samplePois.map((poiName) => (
-              <button
-                key={poiName}
-                onClick={() => {
-                  setPlaceQuery(poiName);
-                  handleGenerateTour(poiName);
-                }}
-                className="px-2.5 py-1 bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-900 rounded-lg text-[11px] font-medium border border-stone-200/60 transition flex items-center gap-1 shrink-0 cursor-pointer active:scale-95"
-              >
-                <span>{poiName}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Cargar Tour button */}
-          <div className="pt-1 flex justify-end">
             <button
+              type="button"
               id="btn-start-tour"
               onClick={() => handleGenerateTour()}
               disabled={isLoadingTour || !placeQuery.trim()}
-              className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold rounded-xl text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="min-h-[44px] w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold rounded-xl text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap shrink-0"
             >
               {isLoadingTour ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin text-stone-950" />
-                  <span>Generando tour...</span>
+                  <span>Cargando...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4 text-stone-950" />
-                  <span>Cargar Tour</span>
+                  <Headphones className="w-4 h-4 text-stone-950" />
+                  <span>Cargar Audioguía</span>
                 </>
               )}
             </button>
           </div>
+
+          {/* Verified Monuments Selector Chips for Active City */}
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-medium text-stone-500">
+              Monumentos con guion verificado en {selectedCity} (pulsa uno para cargar al instante):
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              {cityCuratedMonuments.map((monument) => {
+                const isCurrent =
+                  activeTour?.placeName.toLowerCase() === monument.placeName.toLowerCase();
+                return (
+                  <button
+                    key={monument.placeName}
+                    type="button"
+                    onClick={() => {
+                      setPlaceQuery(monument.placeName);
+                      handleGenerateTour(monument.placeName, monument.cityName);
+                    }}
+                    className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-medium border transition flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 whitespace-nowrap ${
+                      isCurrent
+                        ? 'bg-amber-500 text-stone-950 font-bold border-amber-500 shadow-xs'
+                        : 'bg-stone-50 hover:bg-amber-50 text-stone-700 hover:text-amber-950 border-stone-200'
+                    }`}
+                  >
+                    <Headphones className="w-3.5 h-3.5 shrink-0" />
+                    <span>{monument.placeName}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
-        {gpsNotice && !showGpsHelper && (
-          <div className="bg-amber-50 text-amber-900 px-3.5 py-2 rounded-xl text-xs border border-amber-200 flex items-center gap-2">
-            <Info className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>{gpsNotice}</span>
+        {gpsNotice && (
+          <div className="bg-amber-50 text-amber-900 px-3.5 py-2.5 rounded-xl text-xs border border-amber-200 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{gpsNotice}</span>
+            </div>
+            {showGpsHelper && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSimulatePosition('hanoi-old-quarter')}
+                  className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 rounded-lg border border-amber-300 text-[11px] font-semibold cursor-pointer"
+                >
+                  Simular Hanói
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSimulatePosition('hoian-ancient-town')}
+                  className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 rounded-lg border border-amber-300 text-[11px] font-semibold cursor-pointer"
+                >
+                  Simular Hội An
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -803,18 +1079,76 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
         )}
       </div>
 
+      {/* Zero-State Catalog Grid when no monument is selected yet */}
+      {!activeTour && !isLoadingTour && (
+        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-stone-200/90 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-serif font-bold text-lg text-stone-900">
+                Catálogo de Audioguías en {selectedCity}
+              </h3>
+              <p className="text-xs text-stone-500">
+                Cada monumento incluye un guion histórico único, paradas paso a paso y mapa del recinto
+              </p>
+            </div>
+            <span className="text-xs text-stone-500 tabular-nums">
+              {cityCuratedMonuments.length} disponibles
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {cityCuratedMonuments.map((tour) => (
+              <button
+                key={tour.placeName}
+                type="button"
+                onClick={() => {
+                  setPlaceQuery(tour.placeName);
+                  handleGenerateTour(tour.placeName, tour.cityName);
+                }}
+                className="text-left p-4 rounded-2xl border border-stone-200 hover:border-amber-400 hover:bg-amber-50/20 transition group flex flex-col justify-between gap-3 cursor-pointer"
+              >
+                <div className="space-y-1">
+                  <div className="text-xs text-stone-500 flex items-center gap-1.5 tabular-nums">
+                    <span>{tour.cityName}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{tour.durationMinutes} min</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{tour.stops.length} paradas</span>
+                  </div>
+                  <h4 className="font-serif font-bold text-base text-stone-900 group-hover:text-amber-800 transition">
+                    {tour.placeName}
+                  </h4>
+                  {tour.vietnameseName && (
+                    <div className="text-xs font-medium text-stone-600">{tour.vietnameseName}</div>
+                  )}
+                  <p className="text-xs text-stone-600 line-clamp-2 pt-1">{tour.tagline}</p>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-stone-100 text-xs font-semibold text-amber-700">
+                  <span>Abrir audioguía y mapa</span>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Loading state indicator */}
       {isLoadingTour && (
-        <div id="tour-loading-card" className="bg-white rounded-2xl p-8 border border-stone-200 shadow-sm text-center space-y-4 animate-pulse">
+        <div
+          id="tour-loading-card"
+          className="bg-white rounded-2xl p-8 border border-stone-200 shadow-xs text-center space-y-4 animate-pulse"
+        >
           <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
             <Compass className="w-6 h-6 animate-spin" />
           </div>
           <div>
             <h3 className="text-base font-bold text-stone-900">
-              Conectando con tu guía local en {selectedCity}...
+              Preparando audioguía de {placeQuery} en {selectedCity}...
             </h3>
             <p className="text-xs text-stone-500 max-w-md mx-auto mt-1">
-              Recopilando las leyendas, el simbolismo de los altares, los mejores ángulos fotográficos y preparando el guion de audioguía para {placeQuery}.
+              Cargando narrativa histórica, paradas geolocalizadas y consejos del guía local.
             </p>
           </div>
         </div>
@@ -822,30 +1156,39 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
 
       {/* ACTIVE TOUR VIEW */}
       {activeTour && !isLoadingTour && (
-        <div id="active-tour-view" className="space-y-4 animate-fade-in">
-          {/* Unified Tour Card & Audioguide Player */}
-          <div className="bg-white rounded-3xl p-4 sm:p-6 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-3.5">
-            {/* Top row: Badges + Action Buttons */}
+        <div id="active-tour-view" className="space-y-5 animate-fade-in">
+          {/* Unified Tour Card & Pro Audioguide Player Console */}
+          <div className="bg-white rounded-3xl p-4 sm:p-6 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-4">
+            {/* Top row: Clean Unboxed Metadata + Save/Share Actions */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                <span className="font-semibold text-stone-700 bg-stone-100 px-2.5 py-1 rounded-lg border border-stone-200/60">
-                  📍 {activeTour.cityName}
-                </span>
-                <span className={`px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1 ${VIBE_CONFIGS[selectedVibe].badgeColor}`}>
-                  <span>{VIBE_CONFIGS[selectedVibe].icon}</span>
-                  <span>{VIBE_CONFIGS[selectedVibe].shortLabel}</span>
-                </span>
-                <span className="text-stone-500 font-medium hidden sm:inline text-xs">
-                  • ~{activeTour.durationMinutes} min • {activeTour.stops.length} paradas
-                </span>
+              <div className="flex items-center gap-2 text-xs text-stone-500 tabular-nums">
+                <span className="font-semibold text-stone-800">{activeTour.cityName}</span>
+                <span aria-hidden="true">·</span>
+                <span>{activeTour.durationMinutes} min</span>
+                <span aria-hidden="true">·</span>
+                <span>{activeTour.stops.length} paradas guiadas</span>
               </div>
 
-              {/* Action Buttons: Save & Share */}
+              {/* Action Buttons: Map Toggle, Save & Share */}
               <div className="flex items-center gap-1.5 ml-auto">
                 <button
+                  type="button"
+                  onClick={() => setShowRouteMap((prev) => !prev)}
+                  className={`min-h-[40px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition active:scale-95 cursor-pointer whitespace-nowrap shrink-0 ${
+                    showRouteMap
+                      ? 'bg-stone-900 text-white'
+                      : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/70'
+                  }`}
+                >
+                  <MapIcon className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{showRouteMap ? 'Ocultar Mapa' : 'Ver Mapa'}</span>
+                </button>
+
+                <button
+                  type="button"
                   id="btn-save-tour-toggle"
                   onClick={handleToggleSaveTour}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition active:scale-95 cursor-pointer ${
+                  className={`min-h-[40px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition active:scale-95 cursor-pointer whitespace-nowrap shrink-0 ${
                     isCurrentTourSaved
                       ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
                       : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200/70'
@@ -859,23 +1202,26 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                     </>
                   ) : (
                     <>
-                      <Bookmark className="w-3.5 h-3.5 text-amber-500" />
+                      <Bookmark className="w-3.5 h-3.5 text-amber-600" />
                       <span>Guardar</span>
                     </>
                   )}
                 </button>
 
                 <button
+                  type="button"
                   id="btn-copy-tour-text"
                   onClick={() => {
                     if (navigator.clipboard) {
                       navigator.clipboard.writeText(
-                        `Free Tour de ${activeTour.placeName} (${activeTour.cityName}):\n\n${activeTour.audioGuideScript}\n\nParadas:\n${activeTour.stops.map((s) => `${s.number}. ${s.title}: ${s.story}`).join('\n')}`
+                        `Audioguía de ${activeTour.placeName} (${activeTour.cityName}):\n\n${activeTour.audioGuideScript}\n\nParadas:\n${activeTour.stops
+                          .map((s) => `${s.number}. ${s.title}: ${s.story}`)
+                          .join('\n')}`
                       );
-                      showToast('¡Guía copiada al portapapeles!');
+                      showToast('Guía copiada al portapapeles');
                     }
                   }}
-                  className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-600 hover:text-stone-900 rounded-xl border border-stone-200/70 text-xs transition cursor-pointer active:scale-95"
+                  className="min-h-[40px] min-w-[40px] flex items-center justify-center p-2 bg-stone-100 hover:bg-stone-200 text-stone-600 hover:text-stone-900 rounded-xl border border-stone-200/70 text-xs transition cursor-pointer active:scale-95"
                   title="Copiar guía completa"
                 >
                   <Share2 className="w-3.5 h-3.5" />
@@ -885,216 +1231,422 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
 
             {/* Place Title & Subtitle */}
             <div>
-              <h2 className="text-xl sm:text-2xl font-serif font-bold text-stone-900 tracking-tight">
+              <h2 className="text-xl sm:text-2xl font-serif font-bold text-stone-900 tracking-tight text-balance">
                 {activeTour.placeName}
               </h2>
-              {activeTour.vietnameseName && activeTour.vietnameseName.trim().toLowerCase() !== activeTour.placeName.trim().toLowerCase() && (
-                <div className="flex items-center gap-1.5 text-xs text-stone-500 mt-0.5">
-                  <span className="font-semibold text-stone-700">🇻🇳 {activeTour.vietnameseName}</span>
-                  <button
-                    onClick={() => speakVietnamese(activeTour.vietnameseName || '')}
-                    title="Escuchar pronunciación nativa"
-                    className="p-0.5 text-amber-600 hover:text-amber-700 transition"
-                  >
-                    <Volume2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-              <p className="text-stone-600 text-xs sm:text-sm italic mt-1">
-                {activeTour.tagline.replace(/^["']|["']$/g, '')}
-              </p>
+              {activeTour.vietnameseName &&
+                activeTour.vietnameseName.trim().toLowerCase() !==
+                  activeTour.placeName.trim().toLowerCase() && (
+                  <div className="flex items-center gap-2 text-xs text-stone-600 mt-1">
+                    <span className="font-semibold text-stone-800">{activeTour.vietnameseName}</span>
+                    <button
+                      type="button"
+                      onClick={() => speakVietnamese(activeTour.vietnameseName || '')}
+                      title="Escuchar pronunciación nativa en vietnamita"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/70 text-[11px] font-semibold transition cursor-pointer"
+                    >
+                      <Volume2 className="w-3 h-3" />
+                      <span>Pronunciar en vietnamita</span>
+                    </button>
+                  </div>
+                )}
+              <p className="text-stone-600 text-xs sm:text-sm mt-1.5">{activeTour.tagline}</p>
             </div>
 
-            {/* Integrated Audioguide Player Toolbar */}
-            <div className="pt-2 border-t border-stone-100 flex items-center justify-between gap-2 flex-wrap bg-stone-50/90 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 rounded-xl">
-              <div className="flex items-center gap-2">
-                <button
-                  id="btn-toggle-audio-guide"
-                  onClick={() => {
-                    const mainId = `tour-main-${activeTour.placeName}`;
-                    if (speechState.isSpeaking && speechState.speakingId === mainId) {
-                      if (speechState.isPaused) {
-                        resumeSpeech();
-                      } else {
-                        pauseSpeech();
-                      }
-                    } else {
-                      playAudio(activeTour.audioGuideScript, `Audioguía: ${activeTour.placeName}`, mainId);
-                    }
-                  }}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer ${
-                    speechState.isLoading && speechState.speakingId === `tour-main-${activeTour.placeName}`
-                      ? 'bg-amber-300 text-stone-950 border border-amber-400'
-                      : speechState.isSpeaking && speechState.speakingId === `tour-main-${activeTour.placeName}` && !speechState.isPaused
-                      ? 'bg-amber-400 text-stone-950 border border-amber-500/40 ring-2 ring-amber-400/20'
-                      : speechState.isSpeaking && speechState.speakingId === `tour-main-${activeTour.placeName}` && speechState.isPaused
-                      ? 'bg-amber-300 text-stone-900 border border-amber-400'
-                      : 'bg-amber-500 hover:bg-amber-400 text-stone-950'
-                  }`}
-                >
-                  {speechState.isLoading && speechState.speakingId === `tour-main-${activeTour.placeName}` ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-900" />
-                      <span>Cargando audio...</span>
-                    </>
-                  ) : speechState.isSpeaking && speechState.speakingId === `tour-main-${activeTour.placeName}` && !speechState.isPaused ? (
-                    <>
-                      <Pause className="w-3.5 h-3.5 fill-current" />
-                      <span>Pausar</span>
-                    </>
-                  ) : speechState.isSpeaking && speechState.speakingId === `tour-main-${activeTour.placeName}` && speechState.isPaused ? (
-                    <>
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>Reanudar</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>Escuchar Guía</span>
-                    </>
+            {/* PRO AUDIO CONSOLE WITH INTERACTIVE PROGRESS BAR, +/-10s SEEK & AUTO-ADVANCE */}
+            <div className="bg-stone-900 text-white rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-sm">
+              {/* Top Track Header & Auto-Advance Toggle */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center font-bold text-xs shrink-0 tabular-nums">
+                    {currentActiveTrack?.index === 0 ? 'Intro' : `#${currentActiveTrack?.index || 1}`}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[11px] text-stone-400 font-medium">
+                      Pista { (currentActiveTrack?.index ?? 0) + 1 } de {tourTracks.length}
+                    </div>
+                    <div className="text-xs sm:text-sm font-bold text-white truncate">
+                      {currentActiveTrack?.label || `Introducción: ${activeTour.placeName}`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 ml-auto">
+                  {speechState.isSpeaking && (
+                    <AudioWaveIndicator
+                      isPlaying={!speechState.isPaused}
+                      size="sm"
+                      colorClass="text-amber-400"
+                    />
                   )}
-                </button>
-
-                {speechState.isSpeaking && speechState.speakingId === `tour-main-${activeTour.placeName}` && (
                   <button
-                    id="btn-stop-audio"
-                    onClick={stopAudio}
-                    className="flex items-center gap-1 px-3 py-2 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95"
-                    title="Detener audioguía"
+                    type="button"
+                    onClick={() => {
+                      const nextVal = !autoAdvance;
+                      setAutoAdvance(nextVal);
+                      showToast(
+                        nextVal
+                          ? 'Reproducción continua activada: avanzará sola por cada parada'
+                          : 'Reproducción continua desactivada'
+                      );
+                    }}
+                    title="Reproducir automáticamente la siguiente parada al terminar cada pista"
+                    className={`min-h-[36px] px-2.5 py-1 rounded-xl text-[11px] font-semibold flex items-center gap-1.5 border transition cursor-pointer whitespace-nowrap shrink-0 ${
+                      autoAdvance
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : 'bg-stone-800 text-stone-400 border-stone-700 hover:text-stone-200'
+                    }`}
                   >
-                    <Square className="w-3 h-3 fill-current text-stone-700" />
-                    <span>Parar</span>
+                    <Repeat className="w-3.5 h-3.5" />
+                    <span>Auto-avance: {autoAdvance ? 'Sí' : 'No'}</span>
                   </button>
-                )}
+                </div>
+              </div>
 
+              {/* Interactive Timeline Scrubbing Bar */}
+              <div className="space-y-1">
+                <input
+                  type="range"
+                  aria-label="Barra de progreso de la audioguía"
+                  min={0}
+                  max={Math.max(1, speechState.duration || 60)}
+                  step={0.5}
+                  value={isTourAudioActive ? speechState.currentTime : 0}
+                  disabled={!isTourAudioActive}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    seekSpeech(val);
+                  }}
+                  className="w-full h-2 bg-stone-700 rounded-lg appearance-none cursor-pointer accent-amber-500 disabled:opacity-50"
+                />
+                <div className="flex items-center justify-between text-[11px] text-stone-400 font-mono tabular-nums">
+                  <span>{isTourAudioActive ? formatTime(speechState.currentTime) : '0:00'}</span>
+                  <span>
+                    {isTourAudioActive && speechState.duration > 0
+                      ? formatTime(speechState.duration)
+                      : 'Listo para reproducir'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Main Transport Controls: Prev Track, -10s, Play/Pause, +10s, Next Track, Speed */}
+              <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  {/* Previous Track */}
+                  <button
+                    type="button"
+                    onClick={() => playTrackByIndex(Math.max(0, activeTrackIndex - 1))}
+                    disabled={activeTrackIndex <= 0}
+                    title="Pista anterior"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 disabled:opacity-35 transition cursor-pointer"
+                  >
+                    <SkipBack className="w-4 h-4" />
+                  </button>
+
+                  {/* -10 Seconds */}
+                  <button
+                    type="button"
+                    onClick={() => handleSkipSeconds(-10)}
+                    disabled={!isTourAudioActive}
+                    title="Retroceder 10 segundos"
+                    className="min-h-[44px] px-2.5 flex items-center justify-center gap-1 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold tabular-nums disabled:opacity-35 transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>-10s</span>
+                  </button>
+
+                  {/* Primary Play / Pause Button */}
+                  <button
+                    type="button"
+                    id="btn-toggle-audio-guide"
+                    onClick={() => playTrackByIndex(activeTrackIndex)}
+                    className="min-h-[44px] px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm transition active:scale-95 cursor-pointer whitespace-nowrap"
+                  >
+                    {isTourAudioActive && speechState.isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-stone-950" />
+                        <span>Cargando voz...</span>
+                      </>
+                    ) : isTourAudioActive && !speechState.isPaused ? (
+                      <>
+                        <Pause className="w-4 h-4 fill-current" />
+                        <span>Pausar</span>
+                      </>
+                    ) : isTourAudioActive && speechState.isPaused ? (
+                      <>
+                        <Play className="w-4 h-4 fill-current" />
+                        <span>Reanudar</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 fill-current" />
+                        <span>
+                          {activeTrackIndex === 0
+                            ? 'Escuchar Guía Completa'
+                            : `Escuchar Parada ${activeTrackIndex}`}
+                        </span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* +10 Seconds */}
+                  <button
+                    type="button"
+                    onClick={() => handleSkipSeconds(10)}
+                    disabled={!isTourAudioActive}
+                    title="Avanzar 10 segundos"
+                    className="min-h-[44px] px-2.5 flex items-center justify-center gap-1 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold tabular-nums disabled:opacity-35 transition cursor-pointer"
+                  >
+                    <span>+10s</span>
+                    <RotateCw className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Next Track */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      playTrackByIndex(Math.min(tourTracks.length - 1, activeTrackIndex + 1))
+                    }
+                    disabled={activeTrackIndex >= tourTracks.length - 1}
+                    title="Siguiente parada"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 disabled:opacity-35 transition cursor-pointer"
+                  >
+                    <SkipForward className="w-4 h-4" />
+                  </button>
+
+                  {/* Stop Audio */}
+                  {isTourAudioActive && (
+                    <button
+                      type="button"
+                      id="btn-stop-audio"
+                      onClick={stopAudio}
+                      className="min-h-[44px] px-3 rounded-xl bg-stone-800 hover:bg-red-900/60 text-stone-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                      title="Detener narración"
+                    >
+                      <Square className="w-3 h-3 fill-current" />
+                      <span>Parar</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Speed Control */}
                 <button
+                  type="button"
                   id="btn-toggle-audio-speed"
                   onClick={toggleSpeed}
-                  className="px-2.5 py-1.5 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-lg text-xs font-mono font-bold transition border border-stone-300/60 cursor-pointer"
+                  className="min-h-[44px] px-3 py-2 bg-stone-800 hover:bg-stone-700 text-amber-400 rounded-xl text-xs font-mono font-bold tabular-nums transition border border-stone-700 cursor-pointer"
                   title="Cambiar velocidad de narración"
                 >
                   {playbackSpeed.toFixed(1)}x
                 </button>
               </div>
 
-              {/* Minimal sound wave visualizer when speaking */}
-              {speechState.isSpeaking && (
-                <div className="flex items-center gap-1.5 text-xs ml-auto">
-                  <AudioWaveIndicator isPlaying={!speechState.isPaused} size="sm" colorClass="text-amber-600" />
-                </div>
-              )}
+              {/* Quick Chapter / Track Selector Strip */}
+              <div className="pt-2 border-t border-stone-800 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <ListMusic className="w-3.5 h-3.5 text-stone-400 shrink-0 mr-1" />
+                {tourTracks.map((track) => {
+                  const isSelected = activeTrackIndex === track.index;
+                  const isCurrentlyPlaying =
+                    speechState.speakingId === track.id && speechState.isSpeaking;
+                  return (
+                    <button
+                      key={track.id}
+                      type="button"
+                      onClick={() => playTrackByIndex(track.index)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer shrink-0 flex items-center gap-1.5 tabular-nums ${
+                        isCurrentlyPlaying
+                          ? 'bg-amber-500 text-stone-950 font-bold'
+                          : isSelected
+                          ? 'bg-stone-700 text-white font-semibold'
+                          : 'bg-stone-800/80 hover:bg-stone-800 text-stone-300'
+                      }`}
+                    >
+                      <span>{track.shortLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Narrative text */}
-            <div className="pt-1 text-stone-700 text-xs sm:text-sm leading-relaxed font-serif">
+            {/* Introduction Narrative Text */}
+            <div className="pt-1 text-stone-700 text-xs sm:text-sm leading-relaxed font-serif space-y-2">
+              <div className="text-[11px] font-sans font-bold uppercase tracking-wider text-amber-800">
+                Guion de Introducción General
+              </div>
               <p className="whitespace-pre-line">{activeTour.audioGuideScript}</p>
             </div>
           </div>
 
-          {/* PARADAS DEL TOUR (Interactive Stops) */}
+          {/* INTERACTIVE TOUR ROUTE MAP */}
+          {showRouteMap && tourMapData && (
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-stone-200/90 shadow-[0_4px_24px_rgba(28,25,23,0.04)] space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <MapIcon className="w-4 h-4 text-amber-600" />
+                  <div>
+                    <h3 className="text-sm font-bold text-stone-900">
+                      Mapa Interactivo del Recorrido ({activeTour.stops.length} paradas)
+                    </h3>
+                    <p className="text-[11px] text-stone-500">
+                      Toca cualquier marcador numerado para saltar a esa parada y escuchar su historia
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs text-stone-600 font-medium tabular-nums">
+                  Activa: Parada {activeStopIndex + 1} de {activeTour.stops.length}
+                </span>
+              </div>
+
+              <div className="rounded-2xl overflow-hidden border border-stone-200">
+                <InteractiveOpenStreetMap
+                  center={tourMapData.center}
+                  zoom={16}
+                  pois={tourMapData.stopPois}
+                  selectedPoiId={tourMapData.selectedStopPoi?.id || null}
+                  selectedLocationTarget={
+                    tourMapData.selectedStopPoi
+                      ? {
+                          lat: tourMapData.selectedStopPoi.lat,
+                          lng: tourMapData.selectedStopPoi.lng,
+                        }
+                      : null
+                  }
+                  routePolyline={tourMapData.routePolyline}
+                  onSelectPoi={(poi) => {
+                    const idx = tourMapData.stopPois.findIndex((p) => p.id === poi.id);
+                    if (idx !== -1) {
+                      setActiveStopIndex(idx);
+                      setActiveTrackIndex(idx + 1);
+                      const el = document.getElementById(`stop-card-${idx + 1}`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                  }}
+                  className="h-[260px] sm:h-[340px]"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* PARADAS DEL TOUR (Interactive Sequential Stops) */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-amber-600" />
-                <h3 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
+                <h3 className="text-sm font-bold text-stone-900">
                   Paradas del Recorrido ({activeTour.stops.length})
                 </h3>
               </div>
-              <span className="text-xs text-stone-500">Sigue este orden dentro del recinto</span>
+              <span className="text-xs text-stone-500">
+                {autoAdvance ? 'Auto-avance activado entre paradas' : 'Selecciona una parada para escuchar'}
+              </span>
             </div>
 
             <div className="space-y-3">
               {activeTour.stops.map((stop, idx) => {
                 const isSelected = activeStopIndex === idx;
+                const trackIdx = idx + 1;
                 const stopPlayId = `tour-stop-${stop.number}-${activeTour.placeName}`;
-                const isThisStopLoading = speechState.isLoading && speechState.speakingId === stopPlayId;
-                const isThisStopPlaying = speechState.isSpeaking && speechState.speakingId === stopPlayId && !speechState.isPaused;
-                const isThisStopPaused = speechState.isSpeaking && speechState.speakingId === stopPlayId && speechState.isPaused;
+                const isThisStopLoading =
+                  speechState.isLoading && speechState.speakingId === stopPlayId;
+                const isThisStopPlaying =
+                  speechState.isSpeaking &&
+                  speechState.speakingId === stopPlayId &&
+                  !speechState.isPaused;
+                const isThisStopPaused =
+                  speechState.isSpeaking &&
+                  speechState.speakingId === stopPlayId &&
+                  speechState.isPaused;
 
                 return (
                   <div
                     key={stop.number}
                     id={`stop-card-${stop.number}`}
-                    onClick={() => setActiveStopIndex(idx)}
+                    onClick={() => {
+                      setActiveStopIndex(idx);
+                      setActiveTrackIndex(trackIdx);
+                    }}
                     className={`rounded-2xl p-5 border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-amber-50/40 border-amber-300 shadow-xs'
+                      isThisStopPlaying || isSelected
+                        ? 'bg-amber-50/40 border-amber-400 shadow-xs'
                         : 'bg-white hover:bg-stone-50 border-stone-200'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3">
-                        <span className="w-7 h-7 rounded-xl bg-amber-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                        <span className="w-8 h-8 rounded-xl bg-amber-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-xs tabular-nums">
                           {stop.number}
                         </span>
                         <div>
                           <h4 className="text-base font-bold text-stone-900 leading-snug">
                             {stop.title}
                           </h4>
+                          {stop.lat && stop.lng && (
+                            <span className="text-[11px] text-stone-500 tabular-nums">
+                              Parada {stop.number} en el mapa del recinto
+                            </span>
+                          )}
                         </div>
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (isThisStopPlaying) {
-                              pauseSpeech();
-                            } else if (isThisStopPaused) {
-                              resumeSpeech();
-                            } else {
-                              playAudio(
-                                `Parada ${stop.number}: ${stop.title}. Qué mirar con los ojos: ${stop.whatToLookAt}. Historia y secretos: ${stop.story}. Consejo del guía: ${stop.insiderTip || ''}`,
-                                `Parada ${stop.number}: ${stop.title}`,
-                                stopPlayId
-                              );
-                            }
+                            playTrackByIndex(trackIdx);
                           }}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                          className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 whitespace-nowrap ${
                             isThisStopLoading
                               ? 'bg-amber-300 text-stone-950 border border-amber-400'
                               : isThisStopPlaying
-                              ? 'bg-amber-400 text-stone-950 shadow-xs border border-amber-500/40 ring-2 ring-amber-400/20'
+                              ? 'bg-amber-500 text-stone-950 shadow-xs'
                               : isThisStopPaused
                               ? 'bg-amber-300 text-stone-900 border border-amber-400'
                               : 'bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-stone-950 border border-stone-200/80'
                           }`}
-                          title={isThisStopPlaying ? 'Pausar narración' : isThisStopPaused ? 'Reanudar narración' : 'Escuchar narración de esta parada'}
+                          title={
+                            isThisStopPlaying
+                              ? 'Pausar narración'
+                              : isThisStopPaused
+                              ? 'Reanudar narración'
+                              : 'Escuchar narración de esta parada'
+                          }
                         >
                           {isThisStopLoading ? (
                             <>
                               <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-900" />
-                              <span className="text-[11px]">Cargando...</span>
+                              <span>Cargando...</span>
                             </>
                           ) : isThisStopPlaying ? (
                             <>
                               <Pause className="w-3.5 h-3.5 fill-current" />
-                              <span className="text-[11px]">Pausar</span>
+                              <span>Pausar</span>
                             </>
                           ) : isThisStopPaused ? (
                             <>
                               <Play className="w-3.5 h-3.5 fill-current" />
-                              <span className="text-[11px]">Reanudar</span>
+                              <span>Reanudar</span>
                             </>
                           ) : (
                             <>
                               <Play className="w-3.5 h-3.5 fill-current" />
-                              <span className="text-[11px]">Escuchar</span>
+                              <span>Escuchar Parada</span>
                             </>
                           )}
                         </button>
 
                         {(isThisStopPlaying || isThisStopPaused) && (
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               stopAudio();
                             }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95"
+                            className="min-h-[40px] flex items-center gap-1 px-2.5 py-1.5 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95"
                             title="Parar audio de la parada"
                           >
                             <Square className="w-3 h-3 fill-current text-stone-700" />
-                            <span className="text-[11px]">Parar</span>
+                            <span>Parar</span>
                           </button>
                         )}
                       </div>
@@ -1102,7 +1654,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
 
                     <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                       {/* What to look at */}
-                      <div className="bg-white/80 rounded-xl p-3 border border-stone-200/80">
+                      <div className="bg-white/90 rounded-xl p-3 border border-stone-200/80">
                         <div className="font-bold text-amber-800 flex items-center gap-1.5 mb-1">
                           <Eye className="w-3.5 h-3.5 text-amber-600" />
                           <span>Qué buscar con los ojos</span>
@@ -1111,10 +1663,10 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                       </div>
 
                       {/* Story */}
-                      <div className="bg-white/80 rounded-xl p-3 border border-stone-200/80 md:col-span-2">
+                      <div className="bg-white/90 rounded-xl p-3 border border-stone-200/80 md:col-span-2">
                         <div className="font-bold text-stone-800 flex items-center gap-1.5 mb-1">
                           <Sparkle className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Historia o Secreto</span>
+                          <span>Historia y Simbolismo</span>
                         </div>
                         <p className="text-stone-700 leading-relaxed">{stop.story}</p>
                       </div>
@@ -1123,7 +1675,7 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                     {/* Insider tip */}
                     {stop.insiderTip && (
                       <div className="mt-2.5 bg-amber-100/50 rounded-xl p-2.5 text-xs text-amber-950 border border-amber-200/60 flex items-start gap-2">
-                        <span className="text-amber-700 font-bold shrink-0">💡 Consejo de guía:</span>
+                        <span className="text-amber-800 font-bold shrink-0">Consejo de guía:</span>
                         <span>{stop.insiderTip}</span>
                       </div>
                     )}
@@ -1137,12 +1689,12 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Photo spot */}
             <div className="bg-white rounded-2xl p-5 border border-stone-200 shadow-xs space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-stone-900 font-bold text-sm">
                   <Camera className="w-4 h-4 text-sky-600" />
                   <span>El Rincón Fotográfico Secreto</span>
                 </div>
-                <span className="text-[11px] font-semibold bg-sky-50 text-sky-700 px-2 py-0.5 rounded-md border border-sky-200">
+                <span className="text-xs text-sky-700 font-medium">
                   {activeTour.photoSpot?.bestLight || 'Hora dorada'}
                 </span>
               </div>
@@ -1153,7 +1705,9 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                 </div>
                 <div>
                   <strong className="text-stone-900">Encuadre perfecto: </strong>
-                  <span>{activeTour.photoSpot?.instruction || 'Enfoca los aleros con luz diagonal.'}</span>
+                  <span>
+                    {activeTour.photoSpot?.instruction || 'Enfoca los aleros con luz diagonal.'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1162,20 +1716,25 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
             <div className="bg-white rounded-2xl p-5 border border-stone-200 shadow-xs space-y-2">
               <div className="flex items-center gap-2 text-stone-900 font-bold text-sm">
                 <AlertTriangle className="w-4 h-4 text-rose-600" />
-                <span>Etiqueta Cultural & Qué NO Hacer</span>
+                <span>Etiqueta Cultural y Qué Evitar</span>
               </div>
               <div className="text-xs text-stone-700 space-y-1.5 pt-1">
                 <div>
                   <strong className="text-stone-900">Vestimenta: </strong>
-                  <span>{activeTour.culturalEtiquette?.dressCode || 'Hombros y rodillas cubiertos.'}</span>
+                  <span>
+                    {activeTour.culturalEtiquette?.dressCode || 'Hombros y rodillas cubiertos.'}
+                  </span>
                 </div>
                 <div>
                   <strong className="text-stone-900">Evitar: </strong>
-                  <span>{activeTour.culturalEtiquette?.whatNotToDo || 'No tocar altares sagrados ni hablar en tono alto.'}</span>
+                  <span>
+                    {activeTour.culturalEtiquette?.whatNotToDo ||
+                      'No tocar altares sagrados ni hablar en tono alto.'}
+                  </span>
                 </div>
                 {activeTour.culturalEtiquette?.scamWarning && (
-                  <div className="text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200 mt-1">
-                    <strong>Picaresca local: </strong>
+                  <div className="text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200 mt-1">
+                    <strong>Consejo práctico: </strong>
                     <span>{activeTour.culturalEtiquette.scamWarning}</span>
                   </div>
                 )}
@@ -1187,12 +1746,12 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
           {activeTour.streetFoodReward && (
             <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-5 border border-amber-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center shrink-0">
                   <Utensils className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
-                    La Recompensa del Guía al Salir
+                  <div className="text-[11px] font-bold text-amber-800">
+                    La Recompensa Gastronómica al Salir
                   </div>
                   <h4 className="text-sm font-bold text-stone-900">
                     {activeTour.streetFoodReward.dishNameVi} ({activeTour.streetFoodReward.dishNameEs})
@@ -1202,47 +1761,70 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                   </p>
                 </div>
               </div>
-              <div className="bg-white px-3.5 py-1.5 rounded-xl border border-amber-200 text-xs font-bold text-amber-900 self-stretch sm:self-auto text-center shrink-0">
+              <div className="bg-white px-3.5 py-2 rounded-xl border border-amber-200 text-xs font-bold text-amber-900 self-stretch sm:self-auto text-center shrink-0 tabular-nums">
                 Precio justo: {activeTour.streetFoodReward.priceEstimate}
               </div>
             </div>
           )}
 
-          {/* INTERACTIVE GUIDE CHAT (Pregúntale a tu guía Nguyễn) */}
-          <div id="guide-chat-card" className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+          {/* INTERACTIVE GUIDE CHAT WITH VOICE PLAYBACK (Pregúntale a tu guía Nguyễn) */}
+          <div
+            id="guide-chat-card"
+            className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-xs space-y-4"
+          >
+            <div className="flex items-center justify-between gap-2 flex-wrap pb-3 border-b border-stone-200">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-xs">
+                <div className="w-9 h-9 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
                   N
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
-                    <span>Pregunta a tu Guía Nguyễn en Directo</span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <h4 className="text-sm font-bold text-stone-900">
+                    Pregunta a tu Guía Nguyễn en Directo
                   </h4>
                   <p className="text-[11px] text-stone-500">
-                    ¿Ves una estatua, un altar o un símbolo raro? Escríbelo o elige una pregunta rápida.
+                    Escribe tu duda o elige una pregunta rápida; puedes escuchar cada respuesta en voz alta.
                   </p>
                 </div>
               </div>
-              <MessageSquare className="w-4 h-4 text-amber-600" />
+
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !autoSpeakChatReplies;
+                  setAutoSpeakChatReplies(next);
+                  showToast(
+                    next
+                      ? 'Lectura automática de respuestas de Nguyễn activada'
+                      : 'Lectura automática de respuestas desactivada'
+                  );
+                }}
+                className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${
+                  autoSpeakChatReplies
+                    ? 'bg-amber-500 text-stone-950 border-amber-500 font-bold'
+                    : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-stone-200'
+                }`}
+              >
+                <Volume2 className="w-3.5 h-3.5" />
+                <span>{autoSpeakChatReplies ? 'Voz automática: Sí' : 'Voz automática: No'}</span>
+              </button>
             </div>
 
             {/* Suggested quick questions */}
             {activeTour.suggestedQuestions && activeTour.suggestedQuestions.length > 0 && (
               <div>
-                <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
-                  Preguntas curiosas para hacerle:
+                <div className="text-xs font-semibold text-stone-600 mb-2">
+                  Preguntas sugeridas sobre {activeTour.placeName}:
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {activeTour.suggestedQuestions.map((q) => (
                     <button
                       key={q}
+                      type="button"
                       onClick={() => handleSendChatMessage(q)}
                       disabled={isSendingChat}
-                      className="px-2.5 py-1 bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-900 rounded-lg text-xs font-medium border border-stone-200 transition-all text-left"
+                      className="min-h-[38px] px-3 py-1.5 bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-950 rounded-xl text-xs font-medium border border-stone-200 transition-all text-left cursor-pointer"
                     >
-                      💬 {q}
+                      {q}
                     </button>
                   ))}
                 </div>
@@ -1250,37 +1832,82 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
             )}
 
             {/* Conversation messages scroll area */}
-            <div ref={chatContainerRef} className="space-y-3 max-h-72 overflow-y-auto pr-1">
+            <div ref={chatContainerRef} className="space-y-3 max-h-80 overflow-y-auto pr-1">
               {chatMessages.map((msg) => {
                 const isUser = msg.role === 'user';
+                const msgVoiceId = `chat-voice-${msg.id}`;
+                const isSpeakingThisMsg =
+                  speechState.speakingId === msgVoiceId && speechState.isSpeaking && !speechState.isPaused;
+                const isPausedThisMsg =
+                  speechState.speakingId === msgVoiceId && speechState.isSpeaking && speechState.isPaused;
+                const isLoadingThisMsg =
+                  speechState.speakingId === msgVoiceId && speechState.isLoading;
+
                 return (
                   <div
                     key={msg.id}
                     className={`flex items-start gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}
                   >
                     {!isUser && (
-                      <div className="w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
+                      <div className="w-7 h-7 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
                         N
                       </div>
                     )}
                     <div
-                      className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
+                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-relaxed space-y-2 ${
                         isUser
                           ? 'bg-amber-600 text-white rounded-tr-xs'
                           : 'bg-stone-100 text-stone-800 rounded-tl-xs border border-stone-200'
                       }`}
                     >
-                      {msg.text}
+                      <p>{msg.text}</p>
+                      {!isUser && (
+                        <div className="pt-1 border-t border-stone-200/80 flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={() => playCustomAudio(msg.text, msgVoiceId)}
+                            className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1.5 transition cursor-pointer ${
+                              isSpeakingThisMsg
+                                ? 'bg-amber-500 text-stone-950 font-bold'
+                                : isPausedThisMsg
+                                ? 'bg-amber-300 text-stone-900'
+                                : 'bg-white hover:bg-amber-50 text-stone-700 border border-stone-200'
+                            }`}
+                          >
+                            {isLoadingThisMsg ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span>Cargando voz...</span>
+                              </>
+                            ) : isSpeakingThisMsg ? (
+                              <>
+                                <Pause className="w-3 h-3 fill-current" />
+                                <span>Pausar voz</span>
+                              </>
+                            ) : isPausedThisMsg ? (
+                              <>
+                                <Play className="w-3 h-3 fill-current" />
+                                <span>Reanudar voz</span>
+                              </>
+                            ) : (
+                              <>
+                                <Volume2 className="w-3 h-3 text-amber-600" />
+                                <span>Escuchar respuesta</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
               })}
               {isSendingChat && (
-                <div className="flex items-center gap-2 text-xs text-stone-400">
-                  <div className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-600 flex items-center justify-center text-[10px] animate-pulse">
+                <div className="flex items-center gap-2 text-xs text-stone-500">
+                  <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-700 flex items-center justify-center text-[10px] font-bold">
                     N
                   </div>
-                  <span className="italic">Nguyễn está respondiendo...</span>
+                  <span className="italic">Nguyễn está preparando tu respuesta...</span>
                 </div>
               )}
             </div>
@@ -1297,14 +1924,15 @@ export const FreeTourGuide: React.FC<FreeTourGuideProps> = ({
                     handleSendChatMessage();
                   }
                 }}
-                placeholder="Escribe una pregunta para tu guía (ej. ¿Qué significa la tortuga?)..."
-                className="flex-1 px-3.5 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:bg-white text-stone-900 placeholder:text-stone-400"
+                placeholder="Escribe una pregunta para tu guía Nguyễn..."
+                className="flex-1 min-h-[44px] px-3.5 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:bg-white text-stone-900 placeholder:text-stone-400"
               />
               <button
+                type="button"
                 id="btn-send-tour-chat"
                 onClick={() => handleSendChatMessage()}
                 disabled={!chatInput.trim() || isSendingChat}
-                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                className="min-h-[44px] px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer shrink-0"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Preguntar</span>

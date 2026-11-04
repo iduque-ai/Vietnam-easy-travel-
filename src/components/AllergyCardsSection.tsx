@@ -1300,16 +1300,16 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
   return (
     <div className="space-y-4 max-w-4xl w-full mx-auto min-w-0">
       {/* 1. Header Banner (100% Spanish) */}
-      <div className="bg-gradient-to-r from-[#181614] via-[#201d19] to-[#181614] text-stone-100 rounded-2xl p-4 sm:px-5 sm:py-4 border border-rose-500/20 shadow-[0_4px_20px_rgba(0,0,0,0.25)] flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white rounded-3xl p-4 sm:p-5 border border-stone-200/90 shadow-[0_2px_20px_rgba(28,25,23,0.03)] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0 shadow-inner">
+          <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200/80 flex items-center justify-center text-rose-600 shrink-0">
             <ShieldAlert className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-serif font-bold text-sm sm:text-base text-white tracking-tight">
+            <h3 className="font-serif font-bold text-base sm:text-lg text-stone-900 tracking-tight">
               Tarjetas de Alergias & Dietas
             </h3>
-            <p className="text-[11px] sm:text-xs text-stone-400 mt-0.5">
+            <p className="text-xs text-stone-500">
               Genera tarjetas médicas en vietnamita para enseñar a camareros y cocineros
             </p>
           </div>
@@ -1319,7 +1319,7 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
           <button
             type="button"
             onClick={handleStartNewCard}
-            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+            className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>Nueva Tarjeta</span>
@@ -1329,7 +1329,7 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
 
       {/* 2. Traveler Profiles / Saved Cards Switcher */}
       {savedCards.length > 0 && (
-        <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-stone-200/90 shadow-2xs space-y-2.5">
+        <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-stone-200/90 shadow-[0_2px_20px_rgba(28,25,23,0.03)] space-y-2.5">
           <div className="flex items-center justify-between text-xs text-stone-600">
             <div className="flex items-center gap-1.5 font-bold text-stone-900">
               <User className="w-4 h-4 text-rose-600" />
@@ -1353,7 +1353,7 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
                   onClick={() => handleSelectCard(card)}
                   className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer shrink-0 select-none ${
                     isActive
-                      ? 'bg-[#181614] text-white border-stone-900 font-bold shadow-xs'
+                      ? 'bg-stone-900 text-white border-stone-900 font-bold shadow-xs'
                       : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200'
                   }`}
                 >
@@ -1362,7 +1362,7 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
                     {card.personName || card.title}
                   </span>
                   <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                    className={`text-[10px] px-1.5 py-0.5 rounded-lg font-bold ${
                       isActive ? 'bg-stone-800 text-rose-300' : 'bg-stone-200 text-stone-600'
                     }`}
                   >
@@ -1373,7 +1373,7 @@ export const AllergyCardsSection: React.FC<AllergyCardsSectionProps> = ({ isOnli
             })}
 
             {activeCardId === 'new' && isEditing && (
-              <div className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-950 font-bold text-xs shrink-0 shadow-2xs">
+              <div className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-950 font-bold text-xs shrink-0">
                 <Sparkles className="w-3.5 h-3.5 text-rose-600 animate-pulse" />
                 <span>Creando nueva tarjeta...</span>
               </div>

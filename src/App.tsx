@@ -15,12 +15,12 @@ import { PermissionsModal } from './components/PermissionsModal';
 import { EmergencyModal } from './components/EmergencyModal';
 import { VoiceSettingsModal } from './components/VoiceSettingsModal';
 import { ExchangeRatesData, ActiveTabType, PointOfInterest, CurrencyCode } from './types';
-import { getSavedRates, saveRates, isRatesStale } from './utils/storage';
+import { getSavedRates, saveRates } from './utils/storage';
 import { fetchLiveExchangeRates } from './utils/currencyApi';
 import { useItineraryState } from './utils/useItineraryState';
 import { VIETNAM_SIMULATION_PRESETS } from './utils/geolocation';
 import { getCurrencyInfo } from './utils/currencyUtils';
-import { Compass, Wifi, WifiOff, Clock, ShieldCheck, HeartPulse, HelpCircle } from 'lucide-react';
+import { Wifi, WifiOff, Clock, ShieldCheck, HeartPulse } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTabType>('converter');
@@ -55,48 +55,7 @@ export default function App() {
 
   // Centralized shared itinerary state for Maps & Planner
   const itineraryState = useItineraryState();
-  const [targetMapRegionId, setTargetMapRegionId] = useState<string>('reg-hanoi-north');
-
-  const handleNavigateToMaps = useCallback(
-    (dayId?: string) => {
-      if (dayId) {
-        itineraryState.setSelectedDayId(dayId);
-        const activePlan = itineraryState.activePlan;
-        if (activePlan) {
-          const day = activePlan.days.find((d) => d.id === dayId);
-          if (day) {
-            const city = day.destinationCity.toLowerCase();
-            if (
-              city.includes('huế') ||
-              city.includes('hội an') ||
-              city.includes('đà nẵng') ||
-              city.includes('phong nha')
-            ) {
-              setTargetMapRegionId('reg-central');
-            } else if (
-              city.includes('hồ chí minh') ||
-              city.includes('saigon') ||
-              city.includes('mekong') ||
-              city.includes('cần thơ')
-            ) {
-              setTargetMapRegionId('reg-saigon-south');
-            } else if (
-              city.includes('hạ long') ||
-              city.includes('vịnh') ||
-              city.includes('ba bể') ||
-              city.includes('cát bà')
-            ) {
-              setTargetMapRegionId('reg-nature');
-            } else {
-              setTargetMapRegionId('reg-hanoi-north');
-            }
-          }
-        }
-      }
-      setActiveTab('maps');
-    },
-    [itineraryState]
-  );
+  const [, setTargetMapRegionId] = useState<string>('reg-hanoi-north');
 
   const handleStartFreeTour = useCallback((poi?: PointOfInterest | null) => {
     if (poi) {
@@ -187,7 +146,7 @@ export default function App() {
     setTimeout(() => setOfflineToast(null), 3500);
   }, []);
 
-  // Manual Online / Offline Mode Toggle (triggered by top banner green dot)
+  // Manual Online / Offline Mode Toggle
   const handleToggleOnlineMode = useCallback(() => {
     setIsOnline((prev) => {
       const next = !prev;
@@ -212,7 +171,6 @@ export default function App() {
   // Monitor online / offline state from browser network events
   useEffect(() => {
     const handleOnline = () => {
-      // Only auto-switch if no strict manual offline override was set
       try {
         const override = localStorage.getItem('vietnam_travel_online_manual_override');
         if (override === 'offline') return;
@@ -245,7 +203,6 @@ export default function App() {
     const current = getSavedRates();
     setRatesData(current);
 
-    // Automatically update the exchange rate upon entering the web if network is available
     if (navigator.onLine) {
       refreshRates(false, false);
     }
@@ -262,14 +219,12 @@ export default function App() {
         timeZone: 'Asia/Ho_Chi_Minh',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
         hour12: false,
       });
       const esFormatter = new Intl.DateTimeFormat('es-ES', {
         timeZone: 'Europe/Madrid',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
         hour12: false,
       });
       setVietnamTime(vnFormatter.format(now));
@@ -277,15 +232,15 @@ export default function App() {
     };
 
     updateTime();
-    const interval = setInterval(updateTime, 1000);
+    const interval = setInterval(updateTime, 10000);
     return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="min-h-[100dvh] bg-[#FAF8F5] text-stone-900 flex flex-col font-sans overflow-x-hidden w-full max-w-full">
+    <div className="min-h-[100dvh] bg-[#FAF8F5] text-stone-900 flex flex-col font-sans overflow-x-hidden w-full max-w-full selection:bg-amber-200 selection:text-stone-900">
       {/* Quota Exceeded Sticky Banner */}
       {isMapsQuotaExceeded && (
-        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2 text-xs md:text-sm text-center sticky top-0 z-50">
           <span>
             Google Maps Platform quota reached. If you are the app owner, visit{' '}
             <a
@@ -301,7 +256,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Header with Navigation & Rates Ticker */}
+      {/* Top Header with Navigation & Settings Drawer */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -328,7 +283,7 @@ export default function App() {
         isOnline={isOnline}
       />
 
-      {/* Permissions Modal (Contextual only when requested) */}
+      {/* Permissions Modal */}
       <PermissionsModal
         isOpen={isPermissionsModalOpen}
         onClose={() => setIsPermissionsModalOpen(false)}
@@ -350,20 +305,20 @@ export default function App() {
         spainTime={spainTime}
       />
 
-      {/* Floating Offline Notification Toast (positioned above mobile bottom nav) */}
+      {/* Floating Notification Toast */}
       {offlineToast && (
-        <div className="fixed bottom-20 md:bottom-4 right-4 z-50 max-w-sm bg-stone-900 text-white px-4 py-3 rounded-xl shadow-xl border border-stone-700 text-xs flex items-center gap-3 animate-fade-in">
+        <div className="fixed bottom-20 md:bottom-5 right-4 z-50 max-w-sm bg-stone-900 text-white px-4 py-3 rounded-2xl shadow-xl border border-stone-800 text-xs flex items-center gap-3 animate-fade-in">
           {isOnline ? (
             <Wifi className="w-4 h-4 text-emerald-400 shrink-0" />
           ) : (
             <WifiOff className="w-4 h-4 text-amber-400 shrink-0" />
           )}
-          <span>{offlineToast}</span>
+          <span className="font-medium leading-snug">{offlineToast}</span>
         </div>
       )}
 
-      {/* Main Content Area: with bottom padding for mobile navigation */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-2.5 sm:px-4 pt-2.5 sm:pt-4 min-w-0 overflow-x-hidden pb-20 md:pb-6">
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 pt-3 sm:pt-5 min-w-0 overflow-x-hidden pb-20 md:pb-8">
         {activeTab === 'converter' && (
           <CurrencyConverter
             ratesData={ratesData}
@@ -422,58 +377,48 @@ export default function App() {
       {/* Fixed Bottom Navigation for Mobile Devices */}
       <MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {/* Bottom Sticky Footer with Dual Time and Emergency Numbers */}
+      {/* Clean, Lightweight Utility Footer */}
       <footer
-        className="bg-[#141210] text-stone-400 border-t border-stone-800/80 pt-3.5 md:py-3.5 text-xs"
+        className="bg-white/80 backdrop-blur-md text-stone-600 border-t border-stone-200/80 py-3 text-xs"
         style={{ paddingBottom: 'calc(4.75rem + env(safe-area-inset-bottom, 0px))' }}
       >
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="grid grid-cols-2 gap-2 sm:gap-4 max-w-lg mx-auto sm:max-w-none sm:flex sm:items-center sm:justify-center">
-            {/* Row 1: Vietnam & Spain Dual Time */}
-            <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-3">
-              <div className="flex items-center justify-between sm:justify-start gap-2 bg-stone-900/90 px-3 py-1.5 rounded-xl border border-stone-800 text-[11px] text-stone-300 shadow-xs">
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="font-medium text-stone-300">Vietnam:</span>
-                </div>
-                <strong className="font-mono text-amber-300 ml-auto">{vietnamTime || '--:--:--'}</strong>
-              </div>
-
-              <div className="flex items-center justify-between sm:justify-start gap-2 bg-stone-900/90 px-3 py-1.5 rounded-xl border border-stone-800 text-[11px] text-stone-300 shadow-xs">
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span className="font-medium text-stone-300">España:</span>
-                </div>
-                <strong className="font-mono text-sky-300 ml-auto">{spainTime || '--:--:--'}</strong>
-              </div>
+        <div className="max-w-6xl mx-auto px-4 flex flex-wrap items-center justify-between gap-3">
+          {/* Dual Time */}
+          <div className="flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-1.5 bg-stone-100/90 px-2.5 py-1 rounded-lg border border-stone-200/70">
+              <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="text-stone-500">Vietnam:</span>
+              <strong className="font-mono text-stone-900 tabular-nums">{vietnamTime || '--:--'}</strong>
             </div>
 
-            {/* Row 2 / Col 2: Ambulancia & Policía */}
-            <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-3">
-              <a
-                href="tel:115"
-                className="flex items-center justify-between sm:justify-start gap-2 bg-stone-900/90 hover:bg-stone-800/90 px-3 py-1.5 rounded-xl border border-rose-900/40 text-[11px] text-stone-300 shadow-xs transition active:scale-95"
-                title="Llamar a Ambulancia / Emergencias médicas (115)"
-              >
-                <div className="flex items-center gap-1.5">
-                  <HeartPulse className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                  <span className="font-medium text-stone-300">Ambulancia:</span>
-                </div>
-                <strong className="font-mono text-rose-400 font-bold ml-auto">115</strong>
-              </a>
-
-              <a
-                href="tel:113"
-                className="flex items-center justify-between sm:justify-start gap-2 bg-stone-900/90 hover:bg-stone-800/90 px-3 py-1.5 rounded-xl border border-emerald-900/40 text-[11px] text-stone-300 shadow-xs transition active:scale-95"
-                title="Llamar a Policía de Vietnam (113)"
-              >
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="font-medium text-stone-300">Policía:</span>
-                </div>
-                <strong className="font-mono text-emerald-400 font-bold ml-auto">113</strong>
-              </a>
+            <div className="flex items-center gap-1.5 bg-stone-100/90 px-2.5 py-1 rounded-lg border border-stone-200/70">
+              <Clock className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+              <span className="text-stone-500">España:</span>
+              <strong className="font-mono text-stone-900 tabular-nums">{spainTime || '--:--'}</strong>
             </div>
+          </div>
+
+          {/* Emergency Quick Call Links */}
+          <div className="flex items-center gap-2 text-xs">
+            <a
+              href="tel:115"
+              className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100/80 text-rose-800 px-2.5 py-1 rounded-lg border border-rose-200/80 font-medium transition active:scale-95"
+              title="Llamar a Ambulancia / Emergencias médicas (115)"
+            >
+              <HeartPulse className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+              <span>Ambulancia:</span>
+              <strong className="font-mono font-bold">115</strong>
+            </a>
+
+            <a
+              href="tel:113"
+              className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 px-2.5 py-1 rounded-lg border border-emerald-200/80 font-medium transition active:scale-95"
+              title="Llamar a Policía de Vietnam (113)"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Policía:</span>
+              <strong className="font-mono font-bold">113</strong>
+            </a>
           </div>
         </div>
       </footer>

@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Calculator,
-  HelpCircle,
   AlertTriangle,
   TrendingDown,
-  RotateCcw,
   Sparkles,
+  RotateCcw,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { CurrencyCode, ExchangeRatesData } from '../types';
 import { BanknoteGuideModal } from './BanknoteGuideModal';
-import { CURRENCIES, getCurrencyInfo, calculateForeignToVndRate } from '../utils/currencyUtils';
+import { getCurrencyInfo, calculateForeignToVndRate } from '../utils/currencyUtils';
 
 interface CurrencyConverterProps {
   ratesData: ExchangeRatesData;
@@ -43,7 +42,7 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
       const converted = totalVnd / foreignToVndRate;
       setForeignAmount(converted ? converted.toFixed(2) : '');
     }
-  }, [selectedCurrency, foreignToVndRate]);
+  }, [selectedCurrency, foreignToVndRate, vndKAmount]);
 
   // Bargaining tool state (starts blank, auto-appends 3 zeros / calculates in k)
   const [quotedKInput, setQuotedKInput] = useState<string>('');
@@ -69,7 +68,6 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
   };
 
   const handleForeignChange = (valStr: string) => {
-    // Allow decimal input with period or comma for foreign currencies (euros, usd)
     const clean = valStr.replace(/,/g, '.').replace(/[^\d.]/g, '');
     setForeignAmount(clean);
     const num = parseFloat(clean) || 0;
@@ -105,7 +103,7 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
     setForeignAmount('');
   };
 
-  // Bargaining calculations: User enters e.g. "300" -> auto interprets as 300.000 VND (300k)
+  // Bargaining calculations
   const rawKValue = parseFloat(quotedKInput.replace(/\D/g, '')) || 0;
   const parsedQuote = rawKValue > 0 ? (rawKValue < 1000 ? rawKValue * 1000 : rawKValue) : 0;
   const initialCounterOffer = parsedQuote > 0 ? Math.round((parsedQuote * (100 - targetDiscount)) / 100) : 0;
@@ -114,21 +112,53 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
   const currentTotalVnd = (parseFloat(vndKAmount) || 0) * 1000;
 
   return (
-    <div className="space-y-3 sm:space-y-3.5 max-w-4xl mx-auto">
+    <div className="space-y-4 max-w-4xl mx-auto animate-fade-in">
       {/* Main Converter Card */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-4.5 border border-stone-200/90 shadow-[0_4px_20px_rgba(28,25,23,0.04)] space-y-2.5">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 border border-stone-200/90 shadow-[0_2px_20px_rgba(28,25,23,0.03)] space-y-4">
+        {/* Card Header */}
+        <div className="flex items-center justify-between gap-2 pb-3 border-b border-stone-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-700 shrink-0">
+              <ArrowRightLeft className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="font-serif font-bold text-lg sm:text-xl text-stone-900 leading-tight">
+                Conversor Rápido
+              </h2>
+              <p className="text-xs text-stone-500">
+                Los miles (<span className="font-mono">.000 ₫</span>) se añaden solos al escribir en VND
+              </p>
+            </div>
+          </div>
+
+          {(vndKAmount || foreignAmount) && (
+            <button
+              type="button"
+              onClick={clearAmount}
+              className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+              title="Poner a cero"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reiniciar</span>
+            </button>
+          )}
+        </div>
+
         {/* Big Dual Display / Input Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
           {/* VND Box (Auto 3k / .000 ₫) */}
-          <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl border-2 border-stone-200/90 bg-gradient-to-br from-amber-500/[0.04] to-transparent focus-within:border-amber-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-amber-500/10 transition-all shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between text-xs text-stone-500 mb-0.5">
-              <span className="flex items-center gap-1.5">
-                <span className="text-base sm:text-lg leading-none">🇻🇳</span>
+          <div className="p-4 rounded-2xl border-2 border-stone-200/90 bg-amber-50/30 focus-within:border-amber-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-amber-500/10 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-stone-500 mb-1">
+              <span className="flex items-center gap-2">
+                <span className="text-base leading-none">🇻🇳</span>
                 <span className="font-bold text-stone-800 text-xs sm:text-sm">Đồng Vietnamita (VND)</span>
+              </span>
+              <span className="text-[11px] text-amber-800 font-medium bg-amber-100/70 px-2 py-0.5 rounded-md">
+                × 1.000
               </span>
             </div>
 
-            <div className="relative my-1">
+            <div className="relative my-1.5">
               <input
                 id="input-vnd"
                 type="text"
@@ -136,43 +166,32 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
                 value={vndKAmount ? parseInt(vndKAmount, 10).toLocaleString('es-ES') : ''}
                 onChange={(e) => handleVndKChange(e.target.value)}
                 placeholder="0"
-                className="w-full text-2xl sm:text-3xl lg:text-4xl font-extrabold font-mono tabular-nums text-stone-900 bg-transparent border-none focus:outline-none pr-16 py-0.5 tracking-tight"
+                className="w-full text-3xl sm:text-4xl font-extrabold font-mono tabular-nums text-stone-900 bg-transparent border-none focus:outline-none pr-16 py-0.5 tracking-tight"
               />
               <span className="absolute right-0 top-1/2 -translate-y-1/2 text-base sm:text-lg font-bold font-mono text-amber-700 select-none">
                 .000 ₫
               </span>
             </div>
 
-            <div className="pt-1.5 border-t border-stone-100 flex items-center justify-between gap-2 flex-wrap">
-              <span className="font-mono text-xs text-stone-600 font-semibold">
-                {currentTotalVnd > 0 ? `${currentTotalVnd.toLocaleString('es-ES')} ₫` : '0 ₫'}
+            <div className="pt-2 border-t border-stone-200/60 flex items-center justify-between gap-2">
+              <span className="font-mono text-xs text-stone-600 font-semibold tabular-nums">
+                {currentTotalVnd > 0 ? `${currentTotalVnd.toLocaleString('es-ES')} ₫` : 'Escribe ej. 50 para 50.000 ₫'}
               </span>
-              {vndKAmount && (
-                <button
-                  onClick={clearAmount}
-                  className="text-stone-400 hover:text-rose-600 text-xs flex items-center gap-1 cursor-pointer transition font-medium"
-                  title="Borrar importe"
-                >
-                  <span>Borrar</span>
-                </button>
-              )}
             </div>
           </div>
 
           {/* Foreign Currency Box */}
-          <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl border-2 border-stone-200/90 bg-stone-50/60 focus-within:border-amber-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-amber-500/10 transition-all shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between text-xs text-stone-500 mb-0.5">
-              <span className="flex items-center gap-1.5">
-                <span className="text-base sm:text-lg leading-none">
-                  {currInfo.flag}
-                </span>
+          <div className="p-4 rounded-2xl border-2 border-stone-200/90 bg-stone-50/70 focus-within:border-amber-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-amber-500/10 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-stone-500 mb-1">
+              <span className="flex items-center gap-2">
+                <span className="text-base leading-none">{currInfo.flag}</span>
                 <span className="font-bold text-stone-800 text-xs sm:text-sm">
                   {currInfo.name} ({currInfo.code})
                 </span>
               </span>
             </div>
 
-            <div className="relative my-1">
+            <div className="relative my-1.5">
               <input
                 id="input-foreign"
                 type="text"
@@ -181,205 +200,108 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
                 onChange={(e) => handleForeignChange(e.target.value)}
                 onBlur={handleForeignBlur}
                 placeholder="0.00"
-                className="w-full text-2xl sm:text-3xl lg:text-4xl font-extrabold font-mono tabular-nums text-stone-900 bg-transparent border-none focus:outline-none pr-8 py-0.5 tracking-tight"
+                className="w-full text-3xl sm:text-4xl font-extrabold font-mono tabular-nums text-stone-900 bg-transparent border-none focus:outline-none pr-8 py-0.5 tracking-tight"
               />
               <span className="absolute right-0 top-1/2 -translate-y-1/2 text-lg sm:text-xl font-bold text-stone-400">
                 {currSymbol}
               </span>
             </div>
 
-            <div className="pt-1.5 border-t border-stone-100 flex items-center justify-between">
-              <span className="font-mono text-xs text-stone-600">
+            <div className="pt-2 border-t border-stone-200/60 flex items-center justify-between">
+              <span className="font-mono text-xs text-stone-600 tabular-nums">
                 1 {currSymbol} ≈ {Math.round(foreignToVndRate).toLocaleString('es-ES')} ₫
               </span>
-              {foreignAmount && (
-                <button
-                  onClick={clearAmount}
-                  className="text-stone-400 hover:text-rose-600 text-xs flex items-center gap-1 cursor-pointer transition font-medium"
-                  title="Borrar importe"
-                >
-                  <span>Borrar</span>
-                </button>
-              )}
             </div>
           </div>
         </div>
 
         {/* Banknote buttons that add to total */}
-        <div className="pt-0.5">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-stone-500">
-              Añadir billetes al cálculo:
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-stone-600">
+              Sumar billetes vietnamitas al cálculo:
             </span>
             {vndKAmount && parseFloat(vndKAmount) > 0 && (
               <button
                 onClick={clearAmount}
-                className="text-amber-700 hover:text-amber-900 font-semibold text-xs underline cursor-pointer transition"
+                className="text-amber-800 hover:text-amber-950 font-semibold text-xs underline cursor-pointer transition"
               >
-                Poner a cero (0 ₫)
+                Poner a cero
               </button>
             )}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
-            {/* 10.000 */}
-            <button
-              onClick={() => addVndK(10)}
-              className="p-2 sm:p-2.5 rounded-xl border border-amber-300/80 bg-amber-50/60 hover:bg-amber-100/80 active:scale-[0.98] text-left transition cursor-pointer shadow-2xs group"
-            >
-              <div className="font-bold text-xs sm:text-sm text-amber-950 font-mono tabular-nums group-hover:text-amber-800">
-                +10.000 ₫
-              </div>
-              <div className="text-[11px] sm:text-xs font-semibold text-stone-600 mt-0.5 font-mono tabular-nums">
-                ≈ {formatForeign(10000 / foreignToVndRate, currSymbol)}
-              </div>
-              <div className="text-[10px] text-amber-700/80 font-medium truncate mt-0.5">Petróleo offshore</div>
-            </button>
-
-            {/* 20.000 */}
-            <button
-              onClick={() => addVndK(20)}
-              className="p-2 sm:p-2.5 rounded-xl border border-blue-300/80 bg-blue-50/60 hover:bg-blue-100/80 active:scale-[0.98] text-left transition cursor-pointer shadow-2xs group"
-            >
-              <div className="font-bold text-xs sm:text-sm text-blue-950 font-mono tabular-nums group-hover:text-blue-800">
-                +20.000 ₫
-              </div>
-              <div className="text-[11px] sm:text-xs font-semibold text-stone-600 mt-0.5 font-mono tabular-nums">
-                ≈ {formatForeign(20000 / foreignToVndRate, currSymbol)}
-              </div>
-              <div className="text-[10px] text-blue-700/80 font-medium truncate mt-0.5">Puente Hoi An</div>
-            </button>
-
-            {/* 50.000 */}
-            <button
-              onClick={() => addVndK(50)}
-              className="p-2 sm:p-2.5 rounded-xl border border-fuchsia-300/80 bg-fuchsia-50/60 hover:bg-fuchsia-100/80 active:scale-[0.98] text-left transition cursor-pointer shadow-2xs group"
-            >
-              <div className="font-bold text-xs sm:text-sm text-fuchsia-950 font-mono tabular-nums group-hover:text-fuchsia-800">
-                +50.000 ₫
-              </div>
-              <div className="text-[11px] sm:text-xs font-semibold text-stone-600 mt-0.5 font-mono tabular-nums">
-                ≈ {formatForeign(50000 / foreignToVndRate, currSymbol)}
-              </div>
-              <div className="text-[10px] text-fuchsia-700/80 font-medium truncate mt-0.5">Pabellón de Huế</div>
-            </button>
-
-            {/* 100.000 */}
-            <button
-              onClick={() => addVndK(100)}
-              className="p-2 sm:p-2.5 rounded-xl border border-emerald-300/80 bg-emerald-50/60 hover:bg-emerald-100/80 active:scale-[0.98] text-left transition cursor-pointer shadow-2xs group"
-            >
-              <div className="font-bold text-xs sm:text-sm text-emerald-950 font-mono tabular-nums group-hover:text-emerald-800">
-                +100.000 ₫
-              </div>
-              <div className="text-[11px] sm:text-xs font-semibold text-stone-600 mt-0.5 font-mono tabular-nums">
-                ≈ {formatForeign(100000 / foreignToVndRate, currSymbol)}
-              </div>
-              <div className="text-[10px] text-emerald-700/80 font-medium truncate mt-0.5">Templo Literatura</div>
-            </button>
-
-            {/* 200.000 */}
-            <button
-              onClick={() => addVndK(200)}
-              className="p-2 sm:p-2.5 rounded-xl border border-rose-300/80 bg-rose-50/60 hover:bg-rose-100/80 active:scale-[0.98] text-left transition cursor-pointer shadow-2xs group"
-            >
-              <div className="font-bold text-xs sm:text-sm text-rose-950 font-mono tabular-nums group-hover:text-rose-800">
-                +200.000 ₫
-              </div>
-              <div className="text-[11px] sm:text-xs font-semibold text-stone-600 mt-0.5 font-mono tabular-nums">
-                ≈ {formatForeign(200000 / foreignToVndRate, currSymbol)}
-              </div>
-              <div className="text-[10px] text-rose-700/80 font-medium truncate mt-0.5">Bahía Ha Long</div>
-            </button>
-
-            {/* 500.000 */}
-            <button
-              onClick={() => addVndK(500)}
-              className="p-2 sm:p-2.5 rounded-xl border border-cyan-400/80 bg-cyan-50/70 hover:bg-cyan-100/90 active:scale-[0.98] text-left transition cursor-pointer shadow-2xs group ring-1 ring-cyan-400/30"
-            >
-              <div className="font-bold text-xs sm:text-sm text-cyan-950 font-mono tabular-nums group-hover:text-cyan-800 flex items-center justify-between">
-                <span>+500.000 ₫</span>
-                <span className="text-[9px] bg-cyan-200 text-cyan-950 px-1 py-0.2 rounded font-sans font-bold">Máx</span>
-              </div>
-              <div className="text-[11px] sm:text-xs font-semibold text-stone-600 mt-0.5 font-mono tabular-nums">
-                ≈ {formatForeign(50000 / foreignToVndRate, currSymbol)}
-              </div>
-              <div className="text-[10px] text-cyan-700 font-medium truncate mt-0.5">Kim Liên (Ho Chi Minh)</div>
-            </button>
-
-            {/* 1.000.000 */}
-            <button
-              onClick={() => addVndK(1000)}
-              className="p-2 sm:p-2.5 rounded-xl border border-stone-300/80 bg-stone-50 hover:bg-stone-100 active:scale-[0.98] text-left transition cursor-pointer shadow-2xs"
-            >
-              <div className="font-bold text-xs sm:text-sm text-stone-900 font-mono tabular-nums">
-                +1.000.000 ₫
-              </div>
-              <div className="text-[11px] sm:text-xs font-semibold text-stone-600 mt-0.5 font-mono tabular-nums">
-                ≈ {formatForeign(1000000 / foreignToVndRate, currSymbol)}
-              </div>
-              <div className="text-[10px] text-stone-400 font-medium truncate mt-0.5">1 millón</div>
-            </button>
-
-            {/* 2.000.000 */}
-            <button
-              onClick={() => addVndK(2000)}
-              className="p-2 sm:p-2.5 rounded-xl border border-stone-300/80 bg-stone-50 hover:bg-stone-100 active:scale-[0.98] text-left transition cursor-pointer shadow-2xs"
-            >
-              <div className="font-bold text-xs sm:text-sm text-stone-900 font-mono tabular-nums">
-                +2.000.000 ₫
-              </div>
-              <div className="text-[11px] sm:text-xs font-semibold text-stone-600 mt-0.5 font-mono tabular-nums">
-                ≈ {formatForeign(2000000 / foreignToVndRate, currSymbol)}
-              </div>
-              <div className="text-[10px] text-stone-400 font-medium truncate mt-0.5">2 millones</div>
-            </button>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { k: 10, label: '+10.000 ₫', note: 'Amarillo', classes: 'border-amber-200 bg-amber-50/50 hover:bg-amber-100/70 text-amber-950' },
+              { k: 20, label: '+20.000 ₫', note: 'Azul puente', classes: 'border-sky-200 bg-sky-50/50 hover:bg-sky-100/70 text-sky-950' },
+              { k: 50, label: '+50.000 ₫', note: 'Rosado Huế', classes: 'border-rose-200 bg-rose-50/50 hover:bg-rose-100/70 text-rose-950' },
+              { k: 100, label: '+100.000 ₫', note: 'Verde Templo', classes: 'border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/70 text-emerald-950' },
+              { k: 200, label: '+200.000 ₫', note: 'Rojo Ha Long', classes: 'border-orange-200 bg-orange-50/50 hover:bg-orange-100/70 text-orange-950' },
+              { k: 500, label: '+500.000 ₫', note: 'Azul cian (Máx)', classes: 'border-cyan-300 bg-cyan-50/60 hover:bg-cyan-100/80 text-cyan-950' },
+              { k: 1000, label: '+1.000.000 ₫', note: '1 millón', classes: 'border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-900' },
+              { k: 2000, label: '+2.000.000 ₫', note: '2 millones', classes: 'border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-900' },
+            ].map((item) => (
+              <button
+                key={item.k}
+                type="button"
+                onClick={() => addVndK(item.k)}
+                className={`p-2.5 rounded-2xl border text-left transition cursor-pointer active:scale-[0.98] ${item.classes}`}
+              >
+                <div className="font-bold text-xs sm:text-sm font-mono tabular-nums">
+                  {item.label}
+                </div>
+                <div className="text-xs font-semibold text-stone-700 mt-0.5 font-mono tabular-nums">
+                  ≈ {formatForeign((item.k * 1000) / foreignToVndRate, currSymbol)}
+                </div>
+                <div className="text-[10px] opacity-75 font-medium truncate mt-0.5">{item.note}</div>
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
       {/* Caution Banner: 20k vs 500k Polymer Alert */}
-      <div
+      <button
+        type="button"
         onClick={() => setIsBanknoteGuideOpen(true)}
-        className="px-3 py-1.5 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent hover:bg-amber-500/15 border border-amber-300/80 rounded-xl flex items-center justify-between gap-2 cursor-pointer transition group shadow-2xs"
+        className="w-full px-4 py-3 bg-amber-50/90 hover:bg-amber-100/80 border border-amber-200/90 rounded-2xl flex items-center justify-between gap-3 cursor-pointer transition group text-left"
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-5 h-5 rounded-md bg-amber-500/20 flex items-center justify-center text-amber-700 shrink-0">
-            <AlertTriangle className="w-3 h-3" />
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-800 shrink-0">
+            <AlertTriangle className="w-4 h-4" />
           </div>
           <p className="text-xs text-amber-950 leading-relaxed">
-            No confundir el billete azul de <strong className="font-mono">20.000 ₫</strong> con el de <strong className="font-mono">500.000 ₫</strong>.
+            <strong>Aviso importante:</strong> No confundas el billete azul de <strong className="font-mono">20.000 ₫</strong> con el de <strong className="font-mono">500.000 ₫</strong>.
           </p>
         </div>
-        <span className="text-xs font-bold text-amber-800 group-hover:text-amber-950 shrink-0 underline whitespace-nowrap">
-          Guía →
+        <span className="text-xs font-bold text-amber-900 group-hover:underline shrink-0 whitespace-nowrap">
+          Ver guía →
         </span>
-      </div>
+      </button>
 
-      {/* Bargaining Calculator for Street Markets (Compact with reduced bottom whitespace) */}
-      <div className="bg-white border border-stone-200/90 rounded-2xl sm:rounded-3xl p-3 sm:p-4 space-y-2.5 shadow-[0_4px_20px_rgba(28,25,23,0.03)]">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-700 shrink-0">
-            <TrendingDown className="w-3.5 h-3.5" />
+      {/* Bargaining Calculator for Street Markets */}
+      <div className="bg-white border border-stone-200/90 rounded-3xl p-4 sm:p-6 space-y-3.5 shadow-[0_2px_20px_rgba(28,25,23,0.03)]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-700 shrink-0">
+            <TrendingDown className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-serif font-bold text-xs sm:text-sm text-stone-900 leading-snug">
-              Asistente de Regateo Callejero
+            <h3 className="font-serif font-bold text-base sm:text-lg text-stone-900 leading-tight">
+              Calculadora de Regateo
             </h3>
-            <p className="text-[10px] sm:text-[11px] text-stone-500">
-              Contraofertas recomendadas (-40%) para puestos callejeros y mercados
+            <p className="text-xs text-stone-500">
+              Introduce lo que te piden en mercados para ver la contraoferta ideal
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-0.5">
-          {/* Quoted Price Input (Auto-appends .000 / k) */}
-          <div className="p-2 sm:p-2.5 rounded-xl bg-stone-50 border border-stone-200 flex flex-col justify-between">
-            <div className="mb-1">
-              <label htmlFor="input-quoted" className="block text-xs font-bold text-stone-700">
-                Precio que te piden:
-              </label>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* Quoted Price Input */}
+          <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200/90 flex flex-col justify-between">
+            <label htmlFor="input-quoted" className="block text-xs font-bold text-stone-700 mb-1.5">
+              Precio que te piden:
+            </label>
             <div className="relative">
               <input
                 id="input-quoted"
@@ -388,54 +310,54 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
                 value={quotedKInput}
                 onChange={(e) => setQuotedKInput(e.target.value.replace(/\D/g, ''))}
                 placeholder="Ej: 300"
-                className="w-full text-base font-bold font-mono tabular-nums text-stone-900 bg-white px-2 py-1 rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 pr-14"
+                className="w-full text-lg font-bold font-mono tabular-nums text-stone-900 bg-white px-3 py-1.5 rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 pr-14"
               />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold font-mono text-amber-700 select-none">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold font-mono text-amber-700 select-none">
                 .000 ₫
               </span>
             </div>
-            {parsedQuote > 0 && (
-              <span className="text-[10px] text-stone-500 mt-1 block font-mono">
-                Total: {parsedQuote.toLocaleString('es-ES')} ₫ ≈ {formatForeign(parsedQuote / foreignToVndRate, currSymbol)}
-              </span>
-            )}
+            <span className="text-[11px] text-stone-500 mt-1.5 block font-mono tabular-nums">
+              {parsedQuote > 0
+                ? `${parsedQuote.toLocaleString('es-ES')} ₫ ≈ ${formatForeign(parsedQuote / foreignToVndRate, currSymbol)}`
+                : 'Se multiplica × 1.000'}
+            </span>
           </div>
 
           {/* Recommended Counter-offer */}
-          <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-200 shadow-2xs flex flex-col justify-between">
+          <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/90 flex flex-col justify-between">
             <span className="text-xs font-bold text-emerald-900 block">
               1ª Contraoferta (-{targetDiscount}%):
             </span>
-            <div className="text-base sm:text-lg font-extrabold font-mono tabular-nums text-emerald-700 my-0.5">
+            <div className="text-xl font-extrabold font-mono tabular-nums text-emerald-800 my-1">
               {parsedQuote > 0 ? formatVND(initialCounterOffer) : '-- ₫'}
             </div>
-            {parsedQuote > 0 && (
-              <span className="text-[10px] text-emerald-800/80 font-mono">
-                ≈ {formatForeign(initialCounterOffer / foreignToVndRate, currSymbol)} ({Math.round(initialCounterOffer / 1000)}k ₫)
-              </span>
-            )}
+            <span className="text-[11px] text-emerald-800/80 font-mono tabular-nums">
+              {parsedQuote > 0
+                ? `≈ ${formatForeign(initialCounterOffer / foreignToVndRate, currSymbol)} (${Math.round(initialCounterOffer / 1000)}k ₫)`
+                : 'Tu oferta inicial'}
+            </span>
           </div>
 
           {/* Fair Deal Range */}
-          <div className="p-2 sm:p-2.5 rounded-xl bg-amber-50/60 border border-amber-200 shadow-2xs flex flex-col justify-between">
+          <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/90 flex flex-col justify-between">
             <span className="text-xs font-bold text-amber-900 block">
-              Punto de acuerdo estimado:
+              Precio justo de cierre:
             </span>
-            <div className="text-base sm:text-lg font-extrabold font-mono tabular-nums text-amber-800 my-0.5">
+            <div className="text-xl font-extrabold font-mono tabular-nums text-amber-900 my-1">
               {parsedQuote > 0 ? formatVND(fairDealMax) : '-- ₫'}
             </div>
-            {parsedQuote > 0 && (
-              <span className="text-[10px] text-amber-800/80 font-mono">
-                ≈ {formatForeign(fairDealMax / foreignToVndRate, currSymbol)} ({Math.round(fairDealMax / 1000)}k ₫)
-              </span>
-            )}
+            <span className="text-[11px] text-amber-800/80 font-mono tabular-nums">
+              {parsedQuote > 0
+                ? `≈ ${formatForeign(fairDealMax / foreignToVndRate, currSymbol)} (${Math.round(fairDealMax / 1000)}k ₫)`
+                : 'Acuerdo razonable'}
+            </span>
           </div>
         </div>
 
-        <div className="text-[11px] text-stone-600 bg-stone-50 px-2.5 py-1.5 rounded-lg border border-stone-200 flex items-center gap-1.5">
-          <Sparkles className="w-3 h-3 text-amber-600 shrink-0" />
+        <div className="text-xs text-stone-600 bg-stone-50 px-3.5 py-2.5 rounded-xl border border-stone-200/80 flex items-center gap-2">
+          <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
           <span>
-            <strong>Consejo cultural:</strong> Siempre con una sonrisa. Si no bajan, di <em>"Không, cảm ơn"</em> (No, gracias) y simula marcharte despacio.
+            <strong>Consejo local:</strong> Regatea siempre con una sonrisa. Si no aceptan, di <em>«Không, cảm ơn»</em> (No, gracias) y camina despacio.
           </span>
         </div>
       </div>

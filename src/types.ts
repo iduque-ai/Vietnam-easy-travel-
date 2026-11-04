@@ -91,6 +91,8 @@ export interface RestaurantReviewPhoto {
   reviewSnippet?: string;
   extractedMenuText?: string;
   extractedDishes?: ExtractedDishItem[];
+  photoReference?: string;
+  isAiScanned?: boolean;
 }
 
 export interface RestaurantReviewItem {
@@ -246,6 +248,9 @@ export interface FreeTourStop {
   whatToLookAt: string;
   story: string;
   insiderTip: string;
+  lat?: number;
+  lng?: number;
+  durationSeconds?: number;
 }
 
 export interface FreeTourData {
@@ -255,6 +260,8 @@ export interface FreeTourData {
   tagline: string;
   audioGuideScript: string;
   durationMinutes: number;
+  centerLat?: number;
+  centerLng?: number;
   stops: FreeTourStop[];
   photoSpot: {
     location: string;

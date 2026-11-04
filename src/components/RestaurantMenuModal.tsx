@@ -8,7 +8,11 @@ import {
   ExchangeRatesData,
 } from '../types';
 import { getCurrencyInfo, calculateForeignToVndRate } from '../utils/currencyUtils';
-import { CURATED_RESTAURANT_MENUS, generateSmartMenuForRestaurant } from '../data/restaurantMenus';
+import {
+  CURATED_RESTAURANT_MENUS,
+  findCuratedMenuForRestaurant,
+  generateSmartMenuForRestaurant,
+} from '../data/restaurantMenus';
 import { speakVietnameseNatural } from '../utils/speechSynthesis';
 import { useScrollLock } from '../hooks/useScrollLock';
 import {
@@ -42,10 +46,12 @@ interface RestaurantMenuModalProps {
   eurRate?: number; // fallback: 1 EUR = X VND
   ratesData?: ExchangeRatesData;
   selectedCurrency?: CurrencyCode;
+  initialTab?: 'dishes' | 'photos' | 'reviews' | 'tips';
+  initialPhotoCategory?: 'all' | 'menu_board' | 'bill' | 'dish' | 'atmosphere';
 }
 
 type MenuCategoryFilter = 'all' | 'Platos Principales' | 'Entrantes & Frituras' | 'Bebidas & Cafés' | 'Postres & Extras';
-type PhotoCategoryFilter = 'all' | 'menu_board' | 'dish' | 'atmosphere';
+type PhotoCategoryFilter = 'all' | 'menu_board' | 'bill' | 'dish' | 'atmosphere';
 
 export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
   restaurant,
@@ -53,6 +59,8 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
   eurRate,
   ratesData,
   selectedCurrency = 'EUR',
+  initialTab = 'dishes',
+  initialPhotoCategory = 'all',
 }) => {
   useScrollLock(Boolean(restaurant));
 
@@ -64,13 +72,20 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
     : (eurRate || 27000);
 
   // Active Main Tab
-  const [activeTab, setActiveTab] = useState<'dishes' | 'photos' | 'reviews' | 'tips'>('dishes');
+  const [activeTab, setActiveTab] = useState<'dishes' | 'photos' | 'reviews' | 'tips'>(initialTab);
 
   // Menu Category Filter
   const [categoryFilter, setCategoryFilter] = useState<MenuCategoryFilter>('all');
 
   // Photo Category Filter
-  const [photoCategory, setPhotoCategory] = useState<PhotoCategoryFilter>('all');
+  const [photoCategory, setPhotoCategory] = useState<PhotoCategoryFilter>(initialPhotoCategory);
+
+  // Scanning & AI OCR state
+  const [isScanningPhotoId, setIsScanningPhotoId] = useState<string | null>(null);
+  const [isSearchingReviewPhotos, setIsSearchingReviewPhotos] = useState<boolean>(false);
+  const [highContrastMode, setHighContrastMode] = useState<boolean>(false);
+  const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
+  const [customPhotoInput, setCustomPhotoInput] = useState<string>('');
 
   // Order Cart state (dishId -> quantity)
   const [orderQuantities, setOrderQuantities] = useState<Record<string, number>>({});
@@ -89,6 +104,7 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
   // Live Menu Data & Loading state
   const [menuData, setMenuData] = useState<RestaurantMenuData>(() => {
     return (
+      findCuratedMenuForRestaurant(restaurant) ||
       CURATED_RESTAURANT_MENUS[restaurant.id] ||
       generateSmartMenuForRestaurant(restaurant)
     );
@@ -111,6 +127,7 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
   useEffect(() => {
     let isCancelled = false;
     const initialMenu =
+      findCuratedMenuForRestaurant(restaurant) ||
       CURATED_RESTAURANT_MENUS[restaurant.id] ||
       generateSmartMenuForRestaurant(restaurant);
     setMenuData(initialMenu);
@@ -137,10 +154,18 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
           const liveData = json.data;
 
           setMenuData((prev) => {
-            // Combine curated dishes (or smart dishes) with live photos and reviews
+            const incomingLivePhotos: RestaurantReviewPhoto[] = Array.isArray(liveData.photos) ? liveData.photos : [];
+            const hasRealGooglePhotos = incomingLivePhotos.some((p) => p.url?.includes('/api/restaurants/photo'));
+
+            // Keep verified legible menu boards & customer receipts from prev, and if real Google Maps
+            // photos exist for this restaurant, prioritize them for dish & atmosphere shots
+            const basePhotos = hasRealGooglePhotos
+              ? (prev.photos || []).filter((p) => p.category === 'menu_board' || p.category === 'bill' || p.isLegibleMenu)
+              : (prev.photos || []);
+
             const mergedPhotos = [
-              ...(prev.photos || []),
-              ...(liveData.photos || []),
+              ...basePhotos,
+              ...incomingLivePhotos,
             ];
 
             // Deduplicate photos by ID or URL
@@ -161,7 +186,7 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                 : prev.recentReviews,
               googleRating: liveData.googleRating || prev.googleRating,
               googleReviewsCount: liveData.googleReviewsCount || prev.googleReviewsCount,
-              source: liveData.photos?.length > 0 ? 'google_places_live' : (liveData.source || prev.source),
+              source: hasRealGooglePhotos ? 'google_places_live' : (liveData.source || prev.source),
             };
           });
           setLivePhotosLoaded(true);
@@ -261,6 +286,148 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
     setTimeout(() => setCopiedNotification(null), 3000);
   };
 
+  // AI OCR Scanner for any individual photo
+  const handleScanPhoto = async (photo: RestaurantReviewPhoto) => {
+    setIsScanningPhotoId(photo.id);
+    try {
+      const resp = await fetch('/api/restaurants/scan-menu-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: photo.url,
+          photoRef: photo.photoReference,
+          restaurantName: restaurant.name,
+        }),
+      });
+      const resJson = await resp.json();
+      if (resJson.success && resJson.data) {
+        const { extractedDishes, extractedMenuText, isLegibleMenu, menuTitle, category } = resJson.data;
+        setMenuData((prev) => ({
+          ...prev,
+          photos: prev.photos.map((p) => {
+            if (p.id === photo.id) {
+              return {
+                ...p,
+                category: category || p.category,
+                isLegibleMenu: Boolean(isLegibleMenu || (extractedDishes && extractedDishes.length > 0)),
+                extractedDishes: extractedDishes && extractedDishes.length > 0 ? extractedDishes : p.extractedDishes,
+                extractedMenuText: extractedMenuText || p.extractedMenuText,
+                caption: p.caption.includes('Carta') || p.caption.includes('Menú') ? p.caption : `📋 ${menuTitle || 'Carta escaneada'} (Precios detectados)`,
+                isAiScanned: true,
+              };
+            }
+            return p;
+          }),
+        }));
+        setCopiedNotification(`¡${(extractedDishes || []).length} platos con precios detectados en la foto!`);
+        setTimeout(() => setCopiedNotification(null), 3500);
+      }
+    } catch (err) {
+      console.warn('Scan menu photo failed:', err);
+      setCopiedNotification('No se pudo escanear la foto en este momento.');
+      setTimeout(() => setCopiedNotification(null), 3000);
+    } finally {
+      setIsScanningPhotoId(null);
+    }
+  };
+
+  // Live search for more menu photos with prices from reviews
+  const handleFetchMoreMenuPhotos = async () => {
+    setIsSearchingReviewPhotos(true);
+    try {
+      const resp = await fetch('/api/restaurants/menu-photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurantId: restaurant.id,
+          name: restaurant.name,
+          address: restaurant.address,
+          city: restaurant.city,
+          placeId: restaurant.source === 'google_live' ? restaurant.id : undefined,
+        }),
+      });
+      const resJson = await resp.json();
+      if (resJson.success && Array.isArray(resJson.photos) && resJson.photos.length > 0) {
+        setMenuData((prev) => {
+          const seen = new Set(prev.photos.map((p) => p.url));
+          const newPhotos = resJson.photos.filter((p: RestaurantReviewPhoto) => !seen.has(p.url));
+          return {
+            ...prev,
+            photos: [...newPhotos, ...prev.photos],
+          };
+        });
+        setCopiedNotification(`¡${resJson.photos.length} fotos de reseñas encontradas!`);
+        setTimeout(() => setCopiedNotification(null), 3500);
+      } else {
+        setCopiedNotification('No se encontraron fotos adicionales en Google Reviews.');
+        setTimeout(() => setCopiedNotification(null), 3000);
+      }
+    } catch (err) {
+      console.warn('Fetch review menu photos error:', err);
+    } finally {
+      setIsSearchingReviewPhotos(false);
+    }
+  };
+
+  // Upload or analyze user provided menu photo
+  const handleAnalyzeCustomPhoto = async (photoPayload: string) => {
+    if (!photoPayload.trim()) return;
+    setIsScanningPhotoId('custom-upload');
+    try {
+      const isBase64 = photoPayload.startsWith('data:');
+      const resp = await fetch('/api/restaurants/scan-menu-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: isBase64 ? undefined : photoPayload.trim(),
+          imageBase64: isBase64 ? photoPayload.trim() : undefined,
+          restaurantName: restaurant.name,
+        }),
+      });
+      const resJson = await resp.json();
+      if (resJson.success && resJson.data) {
+        const { extractedDishes, extractedMenuText, menuTitle } = resJson.data;
+        const newPhoto: RestaurantReviewPhoto = {
+          id: `custom-photo-${Date.now()}`,
+          url: photoPayload.trim(),
+          width: 1200,
+          height: 1400,
+          caption: `📋 ${menuTitle || 'Carta con precios analizada'}`,
+          category: 'menu_board',
+          isLegibleMenu: true,
+          authorName: 'Foto aportada por viajero',
+          relativeTime: 'Ahora mismo',
+          reviewSnippet: 'Carta con precios extraída en tiempo real con IA.',
+          extractedDishes: extractedDishes || [],
+          extractedMenuText: extractedMenuText || '',
+          isAiScanned: true,
+        };
+        setMenuData((prev) => ({
+          ...prev,
+          photos: [newPhoto, ...prev.photos],
+        }));
+        setShowUploadModal(false);
+        setCustomPhotoInput('');
+        setActiveTab('photos');
+        setPhotoCategory('menu_board');
+        setCopiedNotification(`¡Carta analizada! ${(extractedDishes || []).length} platos con precios extraídos.`);
+        setTimeout(() => setCopiedNotification(null), 3500);
+      }
+    } catch (err) {
+      console.warn('Custom photo scan error:', err);
+    } finally {
+      setIsScanningPhotoId(null);
+    }
+  };
+
+  const menuPhotosCount = useMemo(() => {
+    return menuData.photos.filter((p) => p.category === 'menu_board' || p.category === 'bill' || p.isLegibleMenu).length;
+  }, [menuData.photos]);
+
+  const billPhotosCount = useMemo(() => {
+    return menuData.photos.filter((p) => p.category === 'bill').length;
+  }, [menuData.photos]);
+
   // Keyboard navigation for photo lightbox
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -304,6 +471,19 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
               <span className="px-2.5 py-0.5 rounded-full bg-stone-900 text-amber-300 text-[10px] font-bold flex items-center gap-1 border border-stone-700 font-mono">
                 <span className="text-amber-400">★</span> {(menuData.googleRating || restaurant.rating).toFixed(1)} ({(menuData.googleReviewsCount || restaurant.reviewsCount).toLocaleString('es-ES')} reseñas)
               </span>
+              {menuPhotosCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('photos');
+                    setPhotoCategory('menu_board');
+                  }}
+                  className="px-2.5 py-0.5 rounded-full bg-amber-500 text-stone-950 hover:bg-amber-400 font-black text-[10px] flex items-center gap-1 cursor-pointer transition shadow-xs font-mono uppercase tracking-wider active:scale-95"
+                  title="Ver fotos reales de la carta con precios de las reseñas"
+                >
+                  <span>📋 {menuPhotosCount} cartas con precios</span>
+                </button>
+              )}
               {menuData.source === 'google_places_live' && (
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 text-[10px] font-bold flex items-center gap-1 border border-emerald-500/30 font-mono uppercase tracking-wider">
                   <ShieldCheck className="w-3 h-3 text-emerald-400" />
@@ -435,13 +615,51 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                 ))}
               </div>
 
-              {/* Notice Banner */}
-              <div className="p-3 bg-amber-950/30 border border-amber-500/20 rounded-xl flex items-center justify-between gap-3 text-xs text-amber-200/90">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+              {/* Quick Access Banner to Official Menu Board (Bảng Giá) & Receipt (Hóa Đơn) + Waiter Helper */}
+              <div className="p-3.5 bg-gradient-to-r from-amber-950/35 via-stone-900/90 to-stone-900 border border-amber-500/25 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start sm:items-center gap-2.5 text-xs text-amber-200/90">
+                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
                   <span>
-                    Pulsa en <strong className="text-amber-300">"Mostrar al camarero"</strong> para ver el plato en pantalla gigante en vietnamita, o el altavoz para escuchar su pronunciación.
+                    Carta verificada de <strong className="text-white">{restaurant.name}</strong>. Pulsa <strong className="text-amber-300">"Mostrar"</strong> para enseñar el plato en vietnamita al camarero o el altavoz para su pronunciación.
                   </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const boardIdx = menuData.photos.findIndex((p) => p.category === 'menu_board');
+                      if (boardIdx !== -1) {
+                        setSelectedPhotoIndex(boardIdx);
+                        setZoomLevel(1);
+                        setPanPosition({ x: 0, y: 0 });
+                      } else {
+                        setActiveTab('photos');
+                        setPhotoCategory('menu_board');
+                      }
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <span>📋 Ver Tablero Bảng Giá</span>
+                  </button>
+                  {billPhotosCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const billIdx = menuData.photos.findIndex((p) => p.category === 'bill');
+                        if (billIdx !== -1) {
+                          setSelectedPhotoIndex(billIdx);
+                          setZoomLevel(1);
+                          setPanPosition({ x: 0, y: 0 });
+                        } else {
+                          setActiveTab('photos');
+                          setPhotoCategory('bill');
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <span>🧾 Ver Cuenta Real</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -472,7 +690,7 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                                 </span>
                               )}
                             </div>
-                            <h4 className="text-xs font-semibold text-stone-300 mt-0.5">
+                            <h4 className="text-xs font-semibold text-stone-200 mt-0.5">
                               {dish.nameEs}
                             </h4>
                           </div>
@@ -581,15 +799,57 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
           {/* TAB 2: FOTOS DE REVIEWS & CARTA */}
           {activeTab === 'photos' && (
             <div className="space-y-4">
+              {/* Review Photos Action Bar: Live search & Custom Upload */}
+              <div className="p-3.5 bg-gradient-to-r from-amber-950/30 via-stone-900 to-stone-900 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold shrink-0 border border-amber-500/30">
+                    📸
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-stone-100 flex items-center gap-2">
+                      <span>Tableros de Precios (Bảng Giá), Cuentas y Fotos Reales</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 font-mono text-[10px] font-bold border border-emerald-500/30">
+                        {menuPhotosCount} con precios
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-stone-400">
+                      Cartas completas en alta definición, tickets de caja (hóa đơn) y fotos reales de comensales.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleFetchMoreMenuPhotos}
+                    disabled={isSearchingReviewPhotos}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${isSearchingReviewPhotos ? 'animate-spin' : ''}`} />
+                    <span>{isSearchingReviewPhotos ? 'Buscando en Google Maps...' : 'Buscar más fotos en Google Maps'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowUploadModal(true)}
+                    className="px-2.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-stone-700"
+                    title="Analizar mi propia foto de la carta o recibo con IA"
+                  >
+                    <span>📷 Analizar mi foto</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Photo Filter Pills */}
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
                   {(
                     [
-                      { id: 'all', label: `Todas las fotos (${menuData.photos.length})` },
-                      { id: 'menu_board', label: '📋 Cartas & Menús físicos' },
-                      { id: 'dish', label: '🍜 Platos servidos' },
-                      { id: 'atmosphere', label: '🏪 Local & Fachada' },
+                      { id: 'all', label: `⭐ Todas las fotos (${menuData.photos.length})` },
+                      { id: 'menu_board', label: `📋 Cartas con Precios (${menuData.photos.filter(p => p.category === 'menu_board').length})` },
+                      { id: 'bill', label: `🧾 Cuentas & Facturas (${billPhotosCount})` },
+                      { id: 'dish', label: `🍜 Platos servidos (${menuData.photos.filter(p => p.category === 'dish').length})` },
+                      { id: 'atmosphere', label: `🏪 Local & Fachada (${menuData.photos.filter(p => p.category === 'atmosphere').length})` },
                     ] as const
                   ).map((cat) => (
                     <button
@@ -609,54 +869,81 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
 
                 <span className="text-xs text-stone-400 flex items-center gap-1">
                   <ZoomIn className="w-3.5 h-3.5 text-amber-400" />
-                  Pulsa en cualquier foto para abrir el visor con zoom legible
+                  Pulsa en la imagen para abrir visor con lupa
                 </span>
               </div>
 
               {/* Photos Grid */}
               {filteredPhotos.length === 0 ? (
-                <div className="p-8 text-center text-stone-400 bg-stone-950/40 rounded-xl border border-stone-800">
+                <div className="p-8 text-center text-stone-400 bg-stone-950/40 rounded-xl border border-stone-800 space-y-2">
                   <p className="text-sm">No hay fotos en esta categoría.</p>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoCategory('all')}
+                    className="px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-300 text-xs font-semibold cursor-pointer"
+                  >
+                    Ver todas las fotos ({menuData.photos.length})
+                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
                   {filteredPhotos.map((photo, index) => {
                     const originalIndex = menuData.photos.findIndex((p) => p.id === photo.id);
+                    const isScanning = isScanningPhotoId === photo.id;
+                    const hasExtractedDishes = Array.isArray(photo.extractedDishes) && photo.extractedDishes.length > 0;
+                    const isSvgDocument = photo.url.startsWith('data:image/svg+xml');
+                    const isLiveGooglePhoto = photo.url.includes('/api/restaurants/photo');
+
                     return (
                       <div
                         key={photo.id}
-                        onClick={() => {
-                          setSelectedPhotoIndex(originalIndex !== -1 ? originalIndex : index);
-                          setZoomLevel(1);
-                          setPanPosition({ x: 0, y: 0 });
-                        }}
-                        className="group relative bg-stone-800 rounded-xl overflow-hidden border border-stone-700/60 hover:border-amber-500/60 transition cursor-pointer shadow-md flex flex-col justify-between"
+                        className="group relative bg-stone-800 rounded-xl overflow-hidden border border-stone-700/60 hover:border-amber-500/60 transition shadow-md flex flex-col justify-between"
                       >
                         {/* Image Box */}
-                        <div className="relative aspect-4/3 w-full bg-stone-950 overflow-hidden">
+                        <div
+                          onClick={() => {
+                            setSelectedPhotoIndex(originalIndex !== -1 ? originalIndex : index);
+                            setZoomLevel(1);
+                            setPanPosition({ x: 0, y: 0 });
+                          }}
+                          className="relative aspect-4/3 w-full bg-stone-950 overflow-hidden cursor-pointer flex items-center justify-center"
+                        >
                           <img
                             src={photo.url}
                             alt={photo.caption}
                             loading="lazy"
-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                            className={`w-full h-full transition duration-300 ${
+                              isSvgDocument
+                                ? 'object-contain p-1.5 group-hover:scale-102'
+                                : 'object-cover group-hover:scale-105'
+                            }`}
                             onError={(e) => {
-                              // Graceful fallback to food photography if proxy fails
                               (e.target as HTMLImageElement).src =
                                 'https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43?auto=format&fit=crop&w=800&q=80';
                             }}
                           />
 
                           {/* Badges on top */}
-                          <div className="absolute top-2 left-2 flex flex-col gap-1">
-                            {photo.isLegibleMenu && (
-                              <span className="px-2 py-0.5 rounded bg-emerald-600 text-white font-bold text-[10px] shadow-md flex items-center gap-1">
-                                <Check className="w-3 h-3" />
-                                Carta Legible
+                          <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
+                            {photo.category === 'bill' && (
+                              <span className="px-2 py-0.5 rounded bg-sky-600 text-white font-bold text-[10px] shadow-md flex items-center gap-1 font-mono uppercase tracking-wider">
+                                🧾 Cuenta / Hóa Đơn
                               </span>
                             )}
-                            {photo.category === 'menu_board' && !photo.isLegibleMenu && (
-                              <span className="px-2 py-0.5 rounded bg-amber-500 text-stone-950 font-bold text-[10px] shadow-md">
-                                📋 Menú
+                            {(photo.category === 'menu_board' || photo.isLegibleMenu) && photo.category !== 'bill' && (
+                              <span className="px-2 py-0.5 rounded bg-emerald-600 text-white font-bold text-[10px] shadow-md flex items-center gap-1 font-mono uppercase tracking-wider">
+                                <Check className="w-3 h-3" />
+                                Carta Bảng Giá
+                              </span>
+                            )}
+                            {isLiveGooglePhoto && (
+                              <span className="px-2 py-0.5 rounded bg-stone-900/90 text-amber-300 border border-amber-500/40 font-bold text-[10px] shadow-md font-mono">
+                                📍 Google Maps
+                              </span>
+                            )}
+                            {photo.isAiScanned && (
+                              <span className="px-2 py-0.5 rounded bg-amber-500 text-stone-950 font-bold text-[10px] shadow-md font-mono">
+                                ⚡ OCR IA
                               </span>
                             )}
                           </div>
@@ -665,7 +952,7 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                           <div className="absolute inset-0 bg-stone-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                             <div className="px-3 py-1.5 rounded-lg bg-stone-900/90 text-amber-400 font-bold text-xs flex items-center gap-1.5 border border-amber-500/40 shadow-lg">
                               <ZoomIn className="w-4 h-4" />
-                              <span>Ampliar con zoom</span>
+                              <span>Ampliar con lupa</span>
                             </div>
                           </div>
                         </div>
@@ -690,47 +977,82 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                           )}
 
                           {/* Extracted Legible Dishes from Photo */}
-                          {photo.extractedDishes && photo.extractedDishes.length > 0 && (
+                          {hasExtractedDishes ? (
                             <div className="pt-2 border-t border-stone-800 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
-                                <FileText className="w-3.5 h-3.5" />
-                                <span>Carta extraída de la foto (Legible):</span>
+                              <div className="flex items-center justify-between gap-1 text-[11px] font-bold text-emerald-400">
+                                <div className="flex items-center gap-1">
+                                  <FileText className="w-3.5 h-3.5" />
+                                  <span>Precios extraídos ({photo.extractedDishes!.length}):</span>
+                                </div>
+                                <span className="text-[10px] text-stone-400 font-normal">Pulsa para pedir</span>
                               </div>
                               <div className="space-y-1 max-h-36 overflow-y-auto no-scrollbar">
-                                {photo.extractedDishes.map((dish, dIdx) => (
+                                {photo.extractedDishes!.map((dish, dIdx) => (
                                   <div
                                     key={dIdx}
                                     className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-stone-950/70 border border-stone-800 text-[11px]"
                                   >
                                     <div className="min-w-0">
-                                      <div className="font-semibold text-stone-200 truncate">{dish.nameVi}</div>
+                                      <div className="font-semibold text-stone-200 truncate flex items-center gap-1">
+                                        <span>{dish.nameVi}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => speakVietnamese(dish.nameVi)}
+                                          className="text-stone-400 hover:text-amber-300 cursor-pointer"
+                                          title={`Pronunciar ${dish.nameVi}`}
+                                        >
+                                          <Volume2 className="w-3 h-3" />
+                                        </button>
+                                      </div>
                                       {dish.nameEs && (
                                         <div className="text-[10px] text-stone-400 truncate">{dish.nameEs}</div>
                                       )}
                                     </div>
-                                    <div className="text-right shrink-0">
+                                    <div className="text-right shrink-0 flex items-center gap-1">
                                       <span className="font-mono font-bold text-amber-400">
                                         {(dish.priceVnd / 1000).toLocaleString('es-ES')}k ₫
                                       </span>
                                       <button
                                         type="button"
-                                        onClick={() => setWaiterDish({
-                                          id: `photo-dish-${dIdx}`,
-                                          nameVi: dish.nameVi,
-                                          nameEs: dish.nameEs || dish.nameVi,
-                                          description: dish.notes || dish.nameEs || dish.nameVi,
-                                          priceVnd: dish.priceVnd,
-                                          category: 'Platos Principales',
-                                        })}
-                                        className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[10px] cursor-pointer"
-                                        title="Mostrar al camarero"
+                                        onClick={() => {
+                                          const matched = menuData.items.find((it) => it.nameVi.toLowerCase() === dish.nameVi.toLowerCase());
+                                          if (matched) {
+                                            updateQuantity(matched.id, 1);
+                                          } else {
+                                            setWaiterDish({
+                                              id: `photo-dish-${dIdx}`,
+                                              nameVi: dish.nameVi,
+                                              nameEs: dish.nameEs || dish.nameVi,
+                                              description: dish.notes || dish.nameEs || dish.nameVi,
+                                              priceVnd: dish.priceVnd,
+                                              category: 'Platos Principales',
+                                            });
+                                          }
+                                        }}
+                                        className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[10px] cursor-pointer"
+                                        title="Añadir al pedido o mostrar al camarero"
                                       >
-                                        Pedir
+                                        + Pedir
                                       </button>
                                     </div>
                                   </div>
                                 ))}
                               </div>
+                            </div>
+                          ) : (
+                            <div className="pt-2 border-t border-stone-800">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleScanPhoto(photo);
+                                }}
+                                disabled={isScanning}
+                                className="w-full py-1.5 px-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                              >
+                                <Sparkles className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+                                <span>{isScanning ? 'Escaneando precios...' : 'Escanear precios con IA (OCR)'}</span>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -936,6 +1258,18 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
             <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
+                onClick={() => setHighContrastMode((m) => !m)}
+                className={`px-2 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${
+                  highContrastMode
+                    ? 'bg-amber-500 text-stone-950 font-bold shadow'
+                    : 'bg-stone-800 hover:bg-stone-700 text-stone-300'
+                }`}
+                title="Modo Lupa de Alto Contraste (para leer pizarras tenues o precios)"
+              >
+                <span>{highContrastMode ? '🔆 Lupa ON' : '🔆 Lupa Precios'}</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setZoomLevel((z) => Math.min(3.5, z + 0.5))}
                 className="p-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 transition cursor-pointer"
                 title="Acercar (Zoom In)"
@@ -1024,6 +1358,7 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
               className="max-h-[82vh] max-w-[92vw] object-contain rounded-lg shadow-2xl transition-transform duration-150 ease-out"
               style={{
                 transform: `scale(${zoomLevel}) translate(${panPosition.x / zoomLevel}px, ${panPosition.y / zoomLevel}px)`,
+                filter: highContrastMode ? 'contrast(1.45) brightness(1.15) saturate(1.1)' : 'none',
               }}
               draggable={false}
             />
@@ -1083,6 +1418,17 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                   Texto y precios transcritos legibles
                 </span>
               )}
+              {selectedPhotoIndex !== null && !menuData.photos[selectedPhotoIndex]?.extractedDishes && (
+                <button
+                  type="button"
+                  onClick={() => handleScanPhoto(menuData.photos[selectedPhotoIndex])}
+                  disabled={isScanningPhotoId === menuData.photos[selectedPhotoIndex].id}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-1 cursor-pointer transition shadow disabled:opacity-50"
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${isScanningPhotoId === menuData.photos[selectedPhotoIndex].id ? 'animate-spin' : ''}`} />
+                  <span>{isScanningPhotoId === menuData.photos[selectedPhotoIndex].id ? 'Escaneando...' : 'Escanear precios con IA (OCR)'}</span>
+                </button>
+              )}
             </div>
 
             {selectedPhotoIndex !== null && menuData.photos[selectedPhotoIndex]?.extractedDishes && (
@@ -1109,6 +1455,91 @@ export const RestaurantMenuModal: React.FC<RestaurantMenuModalProps> = ({
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* UPLOAD / PASTE MENU PHOTO MODAL */}
+      {showUploadModal && (
+        <div
+          className="fixed inset-0 z-70 bg-stone-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setShowUploadModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-stone-900 border border-amber-500/40 rounded-2xl p-5 shadow-2xl space-y-4 text-stone-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm text-amber-300 flex items-center gap-2">
+                <span>📷 Analizar Foto de Carta o Recibo con IA</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowUploadModal(false)}
+                className="p-1 rounded-lg text-stone-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-stone-300">
+              Sube una foto que hayas tomado tú mismo de la carta en el restaurante o pega el enlace URL de una foto de Google Maps para extraer automáticamente todos los platos y precios con IA.
+            </p>
+
+            <div className="space-y-3">
+              <div className="p-3 bg-stone-950 rounded-xl border border-stone-800 space-y-1.5">
+                <label className="text-[11px] font-bold text-amber-400 block">
+                  Opción 1: Subir imagen de tu galería o cámara
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        const base64 = ev.target?.result as string;
+                        if (base64) {
+                          handleAnalyzeCustomPhoto(base64);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="w-full text-xs text-stone-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-500 file:text-stone-950 hover:file:bg-amber-400 cursor-pointer"
+                />
+              </div>
+
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-stone-800"></div>
+                <span className="shrink mx-2 text-[10px] text-stone-500 uppercase font-mono">o también</span>
+                <div className="flex-grow border-t border-stone-800"></div>
+              </div>
+
+              <div className="p-3 bg-stone-950 rounded-xl border border-stone-800 space-y-1.5">
+                <label className="text-[11px] font-bold text-amber-400 block">
+                  Opción 2: Pegar enlace URL de una foto de reseña
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://...foto-menu.jpg"
+                    value={customPhotoInput}
+                    onChange={(e) => setCustomPhotoInput(e.target.value)}
+                    className="flex-1 bg-stone-900 border border-stone-750 rounded-xl px-3 py-1.5 text-xs text-stone-100 placeholder:text-stone-600 focus:outline-none focus:border-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAnalyzeCustomPhoto(customPhotoInput)}
+                    disabled={!customPhotoInput.trim() || isScanningPhotoId === 'custom-upload'}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    {isScanningPhotoId === 'custom-upload' ? 'Escaneando...' : 'Escanear'}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

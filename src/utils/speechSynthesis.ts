@@ -296,6 +296,7 @@ export function findBestNaturalVoice(lang: string, gender: VoiceGender = 'female
 export function stopAllSpeech(): void {
   // Invalidate any in-flight async request
   currentPlaybackSession++;
+  clearBrowserTimer();
   if (currentAbortController) {
     try {
       currentAbortController.abort();
@@ -391,6 +392,19 @@ export function setSpeechPlaybackRate(speed: number, lang?: string): void {
 /**
  * Seeks playback to a specific timestamp in seconds
  */
+let browserProgressTimer: ReturnType<typeof setInterval> | null = null;
+let browserOriginalFullText: string = '';
+
+function clearBrowserTimer() {
+  if (browserProgressTimer) {
+    clearInterval(browserProgressTimer);
+    browserProgressTimer = null;
+  }
+}
+
+/**
+ * Seeks playback to a specific timestamp in seconds (works for both HTML5 Neural Audio and Browser Speech fallback)
+ */
 export function seekSpeech(timeInSeconds: number): void {
   if (currentHtmlAudio && currentHtmlAudio.duration) {
     try {
@@ -399,6 +413,37 @@ export function seekSpeech(timeInSeconds: number): void {
       globalSpeakingState.currentTime = safeTime;
       globalSpeakingState.progress = currentHtmlAudio.duration > 0 ? safeTime / currentHtmlAudio.duration : 0;
       notifyStateChanged();
+    } catch {}
+  } else if (
+    globalSpeakingState.source === 'browser' &&
+    globalSpeakingState.duration > 0 &&
+    browserOriginalFullText &&
+    typeof window !== 'undefined' &&
+    window.speechSynthesis
+  ) {
+    try {
+      const dur = globalSpeakingState.duration;
+      const safeTime = Math.max(0, Math.min(dur - 0.5, timeInSeconds));
+      const ratio = dur > 0 ? safeTime / dur : 0;
+      const words = browserOriginalFullText.split(/\s+/);
+      const startWordIdx = Math.min(words.length - 1, Math.floor(ratio * words.length));
+      const remainingText = words.slice(startWordIdx).join(' ');
+
+      globalSpeakingState.currentTime = safeTime;
+      globalSpeakingState.progress = ratio;
+      notifyStateChanged();
+
+      if (remainingText.trim()) {
+        const activeId = globalSpeakingState.speakingId || `speech-${Date.now()}`;
+        const activeLang = (globalSpeakingState.lang as VoiceLanguage) || 'es-ES';
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(remainingText);
+        utterance.lang = activeLang;
+        const bestVoice = findBestNaturalVoice(activeLang, getSavedSpeechSettings().gender);
+        if (bestVoice) utterance.voice = bestVoice;
+        currentUtterance = utterance;
+        window.speechSynthesis.speak(utterance);
+      }
     } catch {}
   }
 }
@@ -460,7 +505,12 @@ export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Prom
 
   // Atomically cancel any ongoing or pending speech and start new session token
   stopAllSpeech();
+  clearBrowserTimer();
   const thisSessionId = ++currentPlaybackSession;
+
+  // Estimate baseline duration from word count (~2.7 words per second)
+  const wordCount = cleanText.split(/\s+/).filter(Boolean).length;
+  const estimatedDuration = Math.max(3, Math.round(wordCount / (2.7 * effectiveSpeed)));
 
   // Immediate visual feedback: mark as loading right away
   globalSpeakingState = {
@@ -472,7 +522,7 @@ export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Prom
     lang,
     source: null,
     currentTime: 0,
-    duration: 0,
+    duration: estimatedDuration,
     progress: 0,
   };
   notifyStateChanged();
@@ -496,7 +546,7 @@ export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Prom
 
       if (!blobUrl) {
         currentAbortController = new AbortController();
-        const timeoutId = setTimeout(() => currentAbortController?.abort(), 3500);
+        const timeoutId = setTimeout(() => currentAbortController?.abort(), 4500);
 
         const res = await fetch('/api/tts', {
           method: 'POST',
@@ -559,7 +609,7 @@ export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Prom
           lang,
           source: 'neural',
           currentTime: 0,
-          duration: 0,
+          duration: estimatedDuration,
           progress: 0,
         };
         notifyStateChanged();
@@ -567,8 +617,15 @@ export async function playNaturalSpeech(options: PlayNaturalSpeechOptions): Prom
 
         currentHtmlAudio = audio;
 
+        audio.onloadedmetadata = () => {
+          if (thisSessionId === currentPlaybackSession && globalSpeakingState.speakingId === id && audio.duration && isFinite(audio.duration)) {
+            globalSpeakingState.duration = audio.duration;
+            notifyStateChanged();
+          }
+        };
+
         audio.ontimeupdate = () => {
-          if (thisSessionId === currentPlaybackSession && globalSpeakingState.speakingId === id && audio.duration) {
+          if (thisSessionId === currentPlaybackSession && globalSpeakingState.speakingId === id && audio.duration && isFinite(audio.duration)) {
             const cur = audio.currentTime;
             const dur = audio.duration;
             const prog = dur > 0 ? cur / dur : 0;
@@ -642,6 +699,7 @@ function playBrowserSpeechOptimized(options: PlayNaturalSpeechOptions): boolean 
     speed = 0.95,
     onStart,
     onEnd,
+    onTimeUpdate,
     onError,
     sessionId,
   } = options;
@@ -651,10 +709,15 @@ function playBrowserSpeechOptimized(options: PlayNaturalSpeechOptions): boolean 
   }
 
   try {
+    clearBrowserTimer();
     window.speechSynthesis.cancel();
     if (window.speechSynthesis.paused) {
       window.speechSynthesis.resume();
     }
+
+    browserOriginalFullText = text;
+    const wordCount = text.split(/\s+/).filter(Boolean).length;
+    const estDuration = Math.max(4, Math.round(wordCount / (2.7 * speed)));
 
     const utterance = new SpeechSynthesisUtterance(text);
     const isVi = lang.toLowerCase().startsWith('vi');
@@ -691,13 +754,25 @@ function playBrowserSpeechOptimized(options: PlayNaturalSpeechOptions): boolean 
       lang,
       source: 'browser',
       currentTime: 0,
-      duration: 0,
+      duration: estDuration,
       progress: 0,
     };
     notifyStateChanged();
     if (onStart) onStart();
 
+    browserProgressTimer = setInterval(() => {
+      if (globalSpeakingState.isSpeaking && !globalSpeakingState.isPaused && globalSpeakingState.speakingId === id) {
+        const nextCur = Math.min(globalSpeakingState.duration, globalSpeakingState.currentTime + 0.25);
+        const prog = globalSpeakingState.duration > 0 ? nextCur / globalSpeakingState.duration : 0;
+        globalSpeakingState.currentTime = nextCur;
+        globalSpeakingState.progress = prog;
+        notifyStateChanged();
+        if (onTimeUpdate) onTimeUpdate(nextCur, globalSpeakingState.duration, prog);
+      }
+    }, 250);
+
     utterance.onend = () => {
+      clearBrowserTimer();
       if (globalSpeakingState.speakingId === id) {
         globalSpeakingState = {
           isSpeaking: false,
@@ -718,6 +793,7 @@ function playBrowserSpeechOptimized(options: PlayNaturalSpeechOptions): boolean 
     };
 
     utterance.onerror = (e) => {
+      clearBrowserTimer();
       console.warn('Speech synthesis utterance error:', e);
       if (globalSpeakingState.speakingId === id) {
         globalSpeakingState = {
@@ -741,6 +817,7 @@ function playBrowserSpeechOptimized(options: PlayNaturalSpeechOptions): boolean 
     window.speechSynthesis.speak(utterance);
     return true;
   } catch (err) {
+    clearBrowserTimer();
     console.warn('Browser speech synthesis exception:', err);
     if (onError) onError(err);
     return false;
