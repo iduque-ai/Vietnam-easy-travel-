@@ -1,5 +1,6 @@
-import React from 'react';
-import { AlertTriangle, X, ShieldAlert, CheckCircle2, Info } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { AlertTriangle, X, ShieldAlert, Info } from 'lucide-react';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { CurrencyCode } from '../types';
 import { getCurrencyInfo } from '../utils/currencyUtils';
@@ -17,51 +18,36 @@ interface BanknoteInfo {
   colorName: string;
   landmark: string;
   material: string;
-  accentBg: string;
-  borderColor: string;
-  tagColor: string;
 }
 
 const BANKNOTES: BanknoteInfo[] = [
   {
     vnd: 500000,
-    color: '#14b8a6',
+    color: '#0d9488',
     colorName: 'Azul verdoso / Cian',
-    landmark: 'Casa natal del Presidente Ho Chi Minh (Kim Liên, Nghệ An)',
-    material: 'Polímero plástico (billete más grande)',
-    accentBg: 'bg-teal-950/20 border-teal-500/40 text-teal-800',
-    borderColor: 'border-teal-400',
-    tagColor: 'bg-teal-100 text-teal-900',
+    landmark: 'Casa natal de Ho Chi Minh (Kim Liên, Nghệ An)',
+    material: 'Polímero plástico · Billete de mayor valor y tamaño',
   },
   {
     vnd: 200000,
     color: '#e11d48',
     colorName: 'Rojo teja / Terracota',
-    landmark: 'Bahía de Ha Long (Barco tradicional de juncos)',
+    landmark: 'Bahía de Hạ Long (Islote Đỉnh Hương)',
     material: 'Polímero plástico',
-    accentBg: 'bg-rose-950/20 border-rose-500/40 text-rose-800',
-    borderColor: 'border-rose-400',
-    tagColor: 'bg-rose-100 text-rose-900',
   },
   {
     vnd: 100000,
     color: '#16a34a',
     colorName: 'Verde hoja / Oliva',
-    landmark: 'Pabellón Khue Van Cac (Templo de la Literatura, Hanói)',
+    landmark: 'Pabellón Khuê Văn Các (Templo de la Literatura, Hanói)',
     material: 'Polímero plástico',
-    accentBg: 'bg-emerald-950/20 border-emerald-500/40 text-emerald-800',
-    borderColor: 'border-emerald-400',
-    tagColor: 'bg-emerald-100 text-emerald-900',
   },
   {
     vnd: 50000,
-    color: '#ea580c',
+    color: '#db2777',
     colorName: 'Rosa magenta / Violeta suave',
     landmark: 'Pabellón Nghênh Lương Đình y Phu Văn Lâu (Huế)',
     material: 'Polímero plástico',
-    accentBg: 'bg-orange-950/20 border-orange-500/40 text-orange-800',
-    borderColor: 'border-orange-400',
-    tagColor: 'bg-orange-100 text-orange-900',
   },
   {
     vnd: 20000,
@@ -69,19 +55,13 @@ const BANKNOTES: BanknoteInfo[] = [
     colorName: 'Azul marino / Añil',
     landmark: 'Puente Cubierto Japonés Chùa Cầu (Hội An)',
     material: 'Polímero plástico',
-    accentBg: 'bg-blue-950/20 border-blue-500/40 text-blue-800',
-    borderColor: 'border-blue-400',
-    tagColor: 'bg-blue-100 text-blue-900',
   },
   {
     vnd: 10000,
     color: '#ca8a04',
     colorName: 'Marrón amarillento / Ocre dorado',
     landmark: 'Plataforma petrolífera marina Bạch Hổ',
-    material: 'Polímero plástico (billete más pequeño)',
-    accentBg: 'bg-yellow-950/20 border-yellow-500/40 text-yellow-800',
-    borderColor: 'border-yellow-400',
-    tagColor: 'bg-yellow-100 text-yellow-900',
+    material: 'Polímero plástico · Billete de polímero más pequeño',
   },
 ];
 
@@ -93,7 +73,16 @@ export const BanknoteGuideModal: React.FC<BanknoteGuideModalProps> = ({
 }) => {
   useScrollLock(isOpen);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || typeof document === 'undefined') return null;
 
   const currInfo = getCurrencyInfo(currencyCode);
   const formatApprox = (vnd: number) => {
@@ -101,30 +90,43 @@ export const BanknoteGuideModal: React.FC<BanknoteGuideModalProps> = ({
     if (currencyCode === 'JPY') {
       return `≈ ${Math.round(val).toLocaleString('es-ES')} ${currInfo.symbol}`;
     }
-    return `≈ ${val.toFixed(val < 1 ? 2 : 1)} ${currInfo.symbol}`;
+    return `≈ ${val.toFixed(val < 1 ? 2 : 1).replace('.', ',')} ${currInfo.symbol}`;
   };
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <div className="bg-[#FAF8F5] rounded-3xl border border-stone-200/90 max-w-2xl w-full shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden my-6">
-        {/* Header */}
-        <div className="bg-[#141210] text-white px-6 py-4.5 flex items-center justify-between border-b border-stone-800">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30 shadow-inner">
-              <AlertTriangle className="w-4.5 h-4.5 text-amber-400" />
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-5 bg-stone-950/75 backdrop-blur-sm animate-fade-overlay"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="banknote-guide-title"
+    >
+      <div
+        className="bg-[#FAF8F5] rounded-3xl border border-stone-200/90 max-w-2xl w-full max-h-[88dvh] flex flex-col shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Fixed Header */}
+        <div className="bg-[#141210] text-white px-5 py-4 sm:px-6 flex items-center justify-between border-b border-stone-800 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/30 shrink-0">
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
             </div>
-            <div>
-              <h3 className="font-serif font-bold text-base text-white tracking-wide">
+            <div className="min-w-0">
+              <h3
+                id="banknote-guide-title"
+                className="font-serif font-bold text-base sm:text-lg text-white tracking-wide truncate"
+              >
                 Guía Visual de Billetes de Vietnam
               </h3>
-              <p className="text-xs text-stone-400 font-light">
+              <p className="text-xs text-stone-400 truncate">
                 Evita confusiones habituales entre billetes de color similar
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-stone-400 hover:text-white p-2 rounded-xl hover:bg-stone-800 transition cursor-pointer"
+            className="text-stone-400 hover:text-white p-2 rounded-xl hover:bg-stone-800 transition cursor-pointer shrink-0"
             title="Cerrar guía"
             aria-label="Cerrar guía visual de billetes"
           >
@@ -132,90 +134,100 @@ export const BanknoteGuideModal: React.FC<BanknoteGuideModalProps> = ({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-5 sm:p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-          {/* Critical Warning Box */}
-          <div className="bg-rose-50 border-2 border-rose-300/80 rounded-2xl p-4 sm:p-5 space-y-3 shadow-xs">
-            <div className="flex items-center gap-2 text-rose-900 font-bold text-sm">
-              <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
-              <span>¡Alerta Máxima de Confusión: 20.000 ₫ vs 500.000 ₫!</span>
+        {/* Scrollable Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-5">
+          {/* Critical Warning Box: 20k vs 500k */}
+          <div className="bg-white border border-rose-200/90 rounded-2xl overflow-hidden shadow-2xs">
+            <div className="px-4 py-3 bg-rose-50/90 border-b border-rose-200/70 flex items-center gap-2 text-rose-900 font-bold text-xs sm:text-sm">
+              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>¡Alerta de Confusión: 20.000 ₫ vs 500.000 ₫!</span>
             </div>
 
-            <p className="text-xs text-rose-900 leading-relaxed font-light">
-              Ambos billetes son de <strong>polímero plástico y tonos azulados</strong>. De noche en un taxi o mercado con poca luz, es muy fácil entregar un billete de <strong>500.000 ₫ ({formatApprox(500000)})</strong> creyendo que es de <strong>20.000 ₫ ({formatApprox(20000)})</strong>. ¡Una diferencia de <strong>25 veces su valor</strong>!
-            </p>
+            <div className="p-4 space-y-3.5">
+              <p className="text-xs text-stone-700 leading-relaxed">
+                Ambos billetes son de <strong>polímero plástico y tonos azulados</strong>. Con poca luz en un taxi o mercado nocturno es fácil entregar un billete de{' '}
+                <strong className="font-mono text-stone-900">500.000 ₫ ({formatApprox(500000)})</strong> creyendo que es de{' '}
+                <strong className="font-mono text-stone-900">20.000 ₫ ({formatApprox(20000)})</strong>: una diferencia de <strong>25 veces su valor</strong>.
+              </p>
 
-            {/* Comparison Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <div className="p-3.5 bg-white rounded-2xl border border-blue-200 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-black text-blue-700 text-lg tracking-tight">20.000 ₫</span>
-                  <span className="text-xs font-semibold text-stone-500 font-mono">
-                    {formatApprox(20000)}
-                  </span>
+              {/* Side-by-side comparison */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-stone-200 border border-stone-200 rounded-xl overflow-hidden bg-stone-50/50">
+                <div className="p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-extrabold text-blue-700 text-base sm:text-lg tabular-nums">
+                      20.000 ₫
+                    </span>
+                    <span className="text-xs font-mono text-stone-500 tabular-nums">
+                      {formatApprox(20000)}
+                    </span>
+                  </div>
+                  <div className="text-xs font-semibold text-stone-800">
+                    Azul marino intenso · Tamaño corto
+                  </div>
+                  <p className="text-[11px] text-stone-600 leading-relaxed">
+                    Reverso con el <strong>Puente Japonés de Hội An</strong> y ventana transparente con el número «20000».
+                  </p>
                 </div>
-                <div className="text-xs font-bold text-stone-800 mt-1">Azul marino oscuro</div>
-                <p className="text-[11px] text-stone-600 mt-1 font-light leading-relaxed">
-                  • Reverso: <strong>Puente Japonés (Hội An)</strong>
-                  <br />• Tamaño mediano / pequeño
-                  <br />• Ventana transparente con "20000"
-                </p>
+
+                <div className="p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-extrabold text-teal-700 text-base sm:text-lg tabular-nums">
+                      500.000 ₫
+                    </span>
+                    <span className="text-xs font-mono text-stone-500 tabular-nums">
+                      {formatApprox(500000)}
+                    </span>
+                  </div>
+                  <div className="text-xs font-semibold text-stone-800">
+                    Azul cian verdoso · Más largo
+                  </div>
+                  <p className="text-[11px] text-stone-600 leading-relaxed">
+                    Reverso con la <strong>Casa natal de Ho Chi Minh</strong> y ventana transparente con «500000».
+                  </p>
+                </div>
               </div>
 
-              <div className="p-3.5 bg-white rounded-2xl border border-teal-300 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-black text-teal-700 text-lg tracking-tight">500.000 ₫</span>
-                  <span className="text-xs font-semibold text-stone-500 font-mono">
-                    {formatApprox(500000)}
-                  </span>
-                </div>
-                <div className="text-xs font-bold text-stone-800 mt-1">Azul verdoso / Cian claro</div>
-                <p className="text-[11px] text-stone-600 mt-1 font-light leading-relaxed">
-                  • Reverso: <strong>Casa de Ho Chi Minh en Kim Liên</strong>
-                  <br />• Billete de <strong>máximo valor</strong> y mayor tamaño
-                  <br />• Ventana transparente con "500000"
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white/90 p-3 rounded-xl text-xs text-rose-950 font-medium border border-rose-200/60 shadow-2xs">
-              💡 <strong>Regla de oro:</strong> Guarda los billetes de 500.000 ₫ en un compartimento separado o bolsillo interior y nunca los mezcles con el dinero suelto diario de 10k/20k.
+              <p className="text-xs text-rose-900 bg-rose-50/60 px-3.5 py-2.5 rounded-xl border border-rose-200/60">
+                <strong>Regla de oro:</strong> Guarda siempre los billetes de 500.000 ₫ en un compartimento separado de la cartera y no los mezcles con los billetes pequeños de 10k o 20k.
+              </p>
             </div>
           </div>
 
           {/* Complete Banknote Catalog */}
-          <div className="space-y-3">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-stone-500 font-mono">
-              Catálogo de Billetes de Vietnam (Polímero)
+          <div className="space-y-2.5">
+            <h4 className="font-serif font-bold text-sm sm:text-base text-stone-900">
+              Catálogo de Billetes de Polímero en Circulación
             </h4>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {BANKNOTES.map((note) => (
                 <div
                   key={note.vnd}
-                  className={`p-4 rounded-2xl border ${note.borderColor} ${note.accentBg} space-y-1.5 transition shadow-2xs`}
+                  className="p-3.5 rounded-2xl bg-white border border-stone-200/90 space-y-1.5 shadow-2xs"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono font-black text-lg text-stone-900 tabular-nums tracking-tight">
-                      {note.vnd.toLocaleString('es-ES')} ₫
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-lg text-xs font-mono font-bold ${note.tagColor}`}>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: note.color }}
+                      />
+                      <span className="font-mono font-extrabold text-base text-stone-900 tabular-nums tracking-tight">
+                        {note.vnd.toLocaleString('es-ES')} ₫
+                      </span>
+                    </div>
+                    <span className="text-xs font-mono font-semibold text-stone-600 tabular-nums">
                       {formatApprox(note.vnd)}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-stone-800">
-                    <span
-                      className="w-3.5 h-3.5 rounded-full shrink-0 border border-stone-400/80 shadow-2xs"
-                      style={{ backgroundColor: note.color }}
-                    />
-                    <span>{note.colorName}</span>
+                  <div className="text-xs font-semibold text-stone-700">
+                    {note.colorName}
                   </div>
 
-                  <p className="text-[11px] text-stone-600 font-light leading-relaxed">
-                    🏛️ <strong>Ilustración:</strong> {note.landmark}
+                  <p className="text-[11px] text-stone-600 leading-relaxed">
+                    Reverso: {note.landmark}
                   </p>
-                  <p className="text-[10px] text-stone-500 font-mono">
+                  <p className="text-[10px] text-stone-400">
                     {note.material}
                   </p>
                 </div>
@@ -224,28 +236,29 @@ export const BanknoteGuideModal: React.FC<BanknoteGuideModalProps> = ({
           </div>
 
           {/* Tips for Foreign Travelers */}
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 space-y-2 text-stone-800">
-            <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
+          <div className="bg-white border border-stone-200/90 rounded-2xl p-4 space-y-2 text-stone-800">
+            <div className="flex items-center gap-2 text-xs font-bold text-stone-900">
               <Info className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Consejos prácticos para pagar en efectivo en Vietnam:</span>
+              <span>Consejos prácticos al pagar en efectivo</span>
             </div>
-            <ul className="text-xs text-stone-700 space-y-1.5 font-light list-disc list-inside">
+            <ul className="text-xs text-stone-600 space-y-1.5 list-disc list-inside leading-relaxed">
               <li>
-                <strong>Billetes de papel antiguos (1.000, 2.000, 5.000 ₫):</strong> Apenas valen unos céntimos de {currInfo.symbol}. Suelen usarse para vueltas exactas o propinas simbólicas en templos.
+                <strong>Billetes de papel (1.000, 2.000 y 5.000 ₫):</strong> Valen pocos céntimos ({currInfo.symbol}) y se usan para vueltas exactas o aparcamiento de motos.
               </li>
               <li>
-                <strong>Comprueba siempre los ceros:</strong> En puestos callejeros y menús a menudo se abrevia "50" por 50.000 ₫ o "100k" por 100.000 ₫.
+                <strong>Precios abreviados en «k»:</strong> En cartas y mercados «50» o «50k» significa siempre 50.000 ₫.
               </li>
               <li>
-                <strong>No dobles ni rompas billetes de polímero:</strong> Los billetes rotos o muy deteriorados suelen ser rechazados en tiendas y cajeros automáticos.
+                <strong>Revisa el estado del billete:</strong> Los comercios suelen rechazar billetes con roturas o cortes visibles.
               </li>
             </ul>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="bg-stone-50 px-6 py-3.5 border-t border-stone-200/80 flex items-center justify-end">
+        {/* Fixed Footer */}
+        <div className="bg-white px-5 py-3.5 sm:px-6 border-t border-stone-200/80 flex items-center justify-end shrink-0">
           <button
+            type="button"
             onClick={onClose}
             className="px-5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold cursor-pointer transition shadow-xs"
           >
@@ -253,6 +266,7 @@ export const BanknoteGuideModal: React.FC<BanknoteGuideModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
