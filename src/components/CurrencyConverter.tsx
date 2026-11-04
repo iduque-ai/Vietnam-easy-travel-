@@ -276,7 +276,7 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 sm:gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {BANKNOTE_DENOMINATIONS.map((item) => {
               const eqForeign = (item.k * 1000) / foreignToVndRate;
               return (
@@ -284,55 +284,79 @@ export const CurrencyConverter: React.FC<CurrencyConverterProps> = ({
                   key={item.k}
                   type="button"
                   onClick={() => addVndK(item.k)}
-                  className="group relative py-2 px-2.5 rounded-xl bg-white hover:bg-amber-50/60 border border-stone-200/90 hover:border-amber-400/80 text-left transition cursor-pointer active:scale-95 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+                  className="group relative py-2.5 px-3 rounded-xl bg-white hover:bg-amber-50/60 border border-stone-200/90 hover:border-amber-400/80 text-left transition cursor-pointer active:scale-95 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
                   title={`Sumar ${item.full} (${item.note})`}
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="font-mono font-bold text-xs sm:text-sm text-stone-900 tabular-nums">
-                      +{item.label}
+                      +{item.full}
                     </span>
-                    <span className={`w-2 h-2 rounded-full ${item.dot} shrink-0`} />
+                    <span className={`w-2.5 h-2.5 rounded-full ${item.dot} shrink-0`} />
                   </div>
-                  <div className="font-mono text-[11px] text-stone-500 group-hover:text-stone-700 tabular-nums mt-0.5 truncate">
-                    {eqForeign < 10
-                      ? eqForeign.toFixed(2).replace('.', ',')
-                      : Math.round(eqForeign)}{' '}
-                    {currSymbol}
+                  <div className="flex items-center justify-between gap-1 mt-0.5">
+                    <span className="text-[11px] text-stone-500 font-medium">
+                      {item.note}
+                    </span>
+                    <span className="font-mono text-[11px] font-semibold text-stone-700 tabular-nums shrink-0">
+                      ≈ {eqForeign < 10
+                        ? eqForeign.toFixed(2).replace('.', ',')
+                        : Math.round(eqForeign)}{' '}
+                      {currSymbol}
+                    </span>
                   </div>
                 </button>
               );
             })}
           </div>
 
-          {/* Street Price Quick References */}
-          <div className="pt-2 border-t border-stone-200/60 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            <span className="text-[11px] font-semibold text-stone-400 shrink-0 mr-1">
-              Referencias:
-            </span>
-            {STREET_PRICE_REFERENCES.map((ref) => {
-              const isSelected = vndKAmount === ref.k.toString();
-              return (
-                <button
-                  key={ref.label}
-                  type="button"
-                  onClick={() => setExactVndK(ref.k)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                    isSelected
-                      ? 'bg-stone-900 text-white font-semibold'
-                      : 'bg-stone-200/60 hover:bg-stone-200 text-stone-700'
-                  }`}
-                >
-                  <span>{ref.label}</span>
-                  <span
-                    className={`font-mono tabular-nums ${
-                      isSelected ? 'text-amber-300' : 'text-stone-500'
+          {/* Street Price Quick References (2 rows on mobile and desktop) */}
+          <div className="pt-3 border-t border-stone-200/60 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-stone-700">
+                Referencias rápidas de precios callejeros
+              </span>
+              <span className="text-[11px] text-stone-400">
+                Toca para convertir
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {STREET_PRICE_REFERENCES.map((ref) => {
+                const isSelected = vndKAmount === ref.k.toString();
+                const eqVal = (ref.k * 1000) / foreignToVndRate;
+                return (
+                  <button
+                    key={ref.label}
+                    type="button"
+                    onClick={() => setExactVndK(ref.k)}
+                    className={`px-3 py-2.5 rounded-xl text-left transition cursor-pointer flex flex-col justify-between gap-1 border ${
+                      isSelected
+                        ? 'bg-stone-900 text-white border-stone-900 shadow-2xs'
+                        : 'bg-white hover:bg-stone-100/80 text-stone-800 border-stone-200/90'
                     }`}
                   >
-                    {ref.k}k
-                  </span>
-                </button>
-              );
-            })}
+                    <span className="text-xs font-semibold leading-snug">
+                      {ref.label}
+                    </span>
+                    <div className="flex items-center justify-between gap-1 w-full pt-0.5">
+                      <span
+                        className={`font-mono text-[11px] font-bold tabular-nums ${
+                          isSelected ? 'text-amber-300' : 'text-amber-800'
+                        }`}
+                      >
+                        {ref.k}.000 ₫
+                      </span>
+                      <span
+                        className={`font-mono text-[11px] tabular-nums ${
+                          isSelected ? 'text-stone-300' : 'text-stone-500'
+                        }`}
+                      >
+                        ≈ {eqVal.toFixed(2).replace('.', ',')} {currSymbol}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
